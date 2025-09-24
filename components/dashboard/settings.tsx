@@ -226,7 +226,8 @@ export function Settings() {
                 {isSaving ? "Guardando..." : "Guardar Preferencias"}
               </Button>
             </CardContent>
-          </Card>
+            </Card>
+          </ScrollFadeIn>
         </TabsContent>
 
         <TabsContent value="billing" className="space-y-6">
