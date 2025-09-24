@@ -1,0 +1,585 @@
+"use client"
+
+import type React from "react"
+
+import { useState } from "react"
+import { createClient } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
+import { toast } from "sonner"
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Users, Gift, Calendar, Phone, Mail, Instagram } from "lucide-react"
+import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
+import { motion } from "framer-motion"
+
+interface Client {
+  id: string
+  name: string
+  phone?: string
+  email?: string
+  instagram?: string
+  birthday?: string
+  points: number
+  total_purchases: number
+  last_purchase_date?: string
+  created_at: string
+}
+
+interface ClientsManagementProps {
+  initialClients: Client[]
+  userId: string
+}
+
+export function ClientsManagement({ initialClients, userId }: ClientsManagementProps) {
+  const [clients, setClients] = useState<Client[]>(initialClients)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const supabase = createClient()
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    instagram: "",
+    birthday: "",
+    points: 0,
+  })
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      phone: "",
+      email: "",
+      instagram: "",
+      birthday: "",
+      points: 0,
+    })
+  }
+
+  const handleAddClient = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
+    try {
+      const { data, error } = await supabase
+        .from("clients")
+        .insert([
+          {
+            ...formData,
+            user_id: userId,
+            total_purchases: 0,
+          },
+        ])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setClients([data, ...clients])
+      setIsAddDialogOpen(false)
+      resetForm()
+      toast.success("Cliente añadido exitosamente", {
+        description: `${formData.name} ha sido añadido a tu lista de clientes.`,
+        duration: 4000,
+      })
+    } catch (error) {
+      toast.error("Error al añadir cliente", {
+        description: "No se pudo añadir el cliente. Inténtalo de nuevo.",
+        duration: 4000,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleEditClient = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedClient) return
+
+    setIsLoading(true)
+
+    try {
+      const { data, error } = await supabase
+        .from("clients")
+        .update(formData)
+        .eq("id", selectedClient.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setClients(clients.map((client) => (client.id === selectedClient.id ? data : client)))
+      setIsEditDialogOpen(false)
+      setSelectedClient(null)
+      resetForm()
+      toast.success("Cliente actualizado", {
+        description: `Los datos de ${data.name} han sido actualizados exitosamente.`,
+        duration: 4000,
+      })
+    } catch (error) {
+      toast.error("Error al actualizar cliente", {
+        description: "No se pudo actualizar el cliente. Inténtalo de nuevo.",
+        duration: 4000,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeleteClient = async (clientId: string) => {
+    try {
+      const { error } = await supabase.from("clients").delete().eq("id", clientId)
+
+      if (error) throw error
+
+      const clientName = clients.find(c => c.id === clientId)?.name || "Cliente"
+      setClients(clients.filter((client) => client.id !== clientId))
+      toast.success("Cliente eliminado", {
+        description: `${clientName} ha sido eliminado exitosamente.`,
+        duration: 4000,
+      })
+    } catch (error) {
+      toast.error("Error al eliminar cliente", {
+        description: "No se pudo eliminar el cliente. Inténtalo de nuevo.",
+        duration: 4000,
+      })
+    }
+  }
+
+  const openEditDialog = (client: Client) => {
+    setSelectedClient(client)
+    setFormData({
+      name: client.name,
+      phone: client.phone || "",
+      email: client.email || "",
+      instagram: client.instagram || "",
+      birthday: client.birthday || "",
+      points: client.points,
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const filteredClients = clients.filter(
+    (client) =>
+      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.phone?.includes(searchTerm),
+  )
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "-"
+    return new Date(dateString).toLocaleDateString("es-ES")
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("es-ES", {
+      style: "currency",
+      currency: "EUR",
+    }).format(amount)
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <ScrollSlideUp>
+          <div>
+            <h1 className="text-3xl font-bold">Gestión de Clientes</h1>
+            <p className="text-muted-foreground">Administra tu base de clientes y sistema de puntos</p>
+          </div>
+        </ScrollSlideUp>
+        <ScrollFadeIn delay={0.2}>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Añadir Cliente
+                </Button>
+              </motion.div>
+            </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Añadir Nuevo Cliente</DialogTitle>
+              <DialogDescription>
+                Completa la información del cliente. Los campos marcados son opcionales.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddClient}>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Nombre *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="phone">Teléfono</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="instagram">Instagram</Label>
+                  <Input
+                    id="instagram"
+                    value={formData.instagram}
+                    onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                    placeholder="@usuario"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="birthday">Cumpleaños</Label>
+                  <Input
+                    id="birthday"
+                    type="date"
+                    value={formData.birthday}
+                    onChange={(e) => setFormData({ ...formData, birthday: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="points">Puntos Iniciales</Label>
+                  <Input
+                    id="points"
+                    type="number"
+                    min="0"
+                    value={formData.points}
+                    onChange={(e) => setFormData({ ...formData, points: Number.parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button type="submit" disabled={isLoading}>
+                    {isLoading ? "Añadiendo..." : "Añadir Cliente"}
+                  </Button>
+                </motion.div>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+        </ScrollFadeIn>
+      </div>
+
+      {/* Stats Cards */}
+      <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-3">
+        <ScrollStaggerChild>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Clientes</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <ScrollScaleIn delay={0.3}>
+                <div className="text-2xl font-bold">{clients.length}</div>
+              </ScrollScaleIn>
+              <p className="text-xs text-muted-foreground">Clientes registrados</p>
+            </CardContent>
+          </Card>
+        </ScrollStaggerChild>
+
+        <ScrollStaggerChild>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Puntos Totales</CardTitle>
+              <Gift className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <ScrollScaleIn delay={0.4}>
+                <div className="text-2xl font-bold">{clients.reduce((sum, client) => sum + client.points, 0)}</div>
+              </ScrollScaleIn>
+              <p className="text-xs text-muted-foreground">Puntos acumulados</p>
+            </CardContent>
+          </Card>
+        </ScrollStaggerChild>
+
+        <ScrollStaggerChild>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Ventas Totales</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <ScrollScaleIn delay={0.5}>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(clients.reduce((sum, client) => sum + client.total_purchases, 0))}
+                </div>
+              </ScrollScaleIn>
+              <p className="text-xs text-muted-foreground">Ingresos generados</p>
+            </CardContent>
+          </Card>
+        </ScrollStaggerChild>
+      </ScrollStaggeredChildren>
+
+      {/* Search and Filters */}
+      <ScrollFadeIn delay={0.4}>
+        <Card>
+        <CardHeader>
+          <CardTitle>Lista de Clientes</CardTitle>
+          <CardDescription>Busca y gestiona todos tus clientes</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre, email o teléfono..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          </div>
+
+          {/* Clients Table */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Contacto</TableHead>
+                  <TableHead>Puntos</TableHead>
+                  <TableHead>Compras</TableHead>
+                  <TableHead>Última Compra</TableHead>
+                  <TableHead>Cumpleaños</TableHead>
+                  <TableHead className="w-[70px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredClients.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex flex-col items-center space-y-2">
+                        <Users className="h-8 w-8 text-muted-foreground" />
+                        <p className="text-muted-foreground">
+                          {searchTerm ? "No se encontraron clientes" : "No tienes clientes aún"}
+                        </p>
+                        {!searchTerm && (
+                          <motion.div
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                          >
+                            <Button onClick={() => setIsAddDialogOpen(true)}>Añadir tu primer cliente</Button>
+                          </motion.div>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredClients.map((client, index) => (
+                    <motion.tr
+                      key={client.id}
+                      className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05, duration: 0.3 }}
+                      whileHover={{ backgroundColor: "rgba(0,0,0,0.02)" }}
+                    >
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{client.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            Cliente desde {formatDate(client.created_at)}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          {client.phone && (
+                            <div className="flex items-center text-sm">
+                              <Phone className="h-3 w-3 mr-1" />
+                              {client.phone}
+                            </div>
+                          )}
+                          {client.email && (
+                            <div className="flex items-center text-sm">
+                              <Mail className="h-3 w-3 mr-1" />
+                              {client.email}
+                            </div>
+                          )}
+                          {client.instagram && (
+                            <div className="flex items-center text-sm">
+                              <Instagram className="h-3 w-3 mr-1" />
+                              {client.instagram}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{client.points} pts</Badge>
+                      </TableCell>
+                      <TableCell>{formatCurrency(client.total_purchases)}</TableCell>
+                      <TableCell>{formatDate(client.last_purchase_date)}</TableCell>
+                      <TableCell>{formatDate(client.birthday)}</TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <motion.div
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                            >
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </motion.div>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteClient(client.id)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </motion.tr>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+        </Card>
+      </ScrollFadeIn>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Editar Cliente</DialogTitle>
+            <DialogDescription>Actualiza la información del cliente.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditClient}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-name">Nombre *</Label>
+                <Input
+                  id="edit-name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Teléfono</Label>
+                <Input
+                  id="edit-phone"
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-instagram">Instagram</Label>
+                <Input
+                  id="edit-instagram"
+                  value={formData.instagram}
+                  onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                  placeholder="@usuario"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-birthday">Cumpleaños</Label>
+                <Input
+                  id="edit-birthday"
+                  type="date"
+                  value={formData.birthday}
+                  onChange={(e) => setFormData({ ...formData, birthday: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-points">Puntos</Label>
+                <Input
+                  id="edit-points"
+                  type="number"
+                  min="0"
+                  value={formData.points}
+                  onChange={(e) => setFormData({ ...formData, points: Number.parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? "Actualizando..." : "Actualizar Cliente"}
+                </Button>
+              </motion.div>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
