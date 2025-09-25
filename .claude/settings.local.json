@@ -6,7 +6,11 @@
       "Bash(npm run dev:*)",
       "Bash(taskkill:*)",
       "Bash(pkill:*)",
-      "Bash(pnpm run:*)"
+      "Bash(pnpm run:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm list:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,6 +27,8 @@ import {
   Sparkles,
   Crown,
   TestTube,
+  Check,
+  Loader2,
 } from "lucide-react"
 
 interface BotFormData {
@@ -31,7 +36,7 @@ interface BotFormData {
   platform: "whatsapp" | "instagram" | "email" | ""
   personality_prompt: string
   features: string[]
-  openai_api_key: string
+  gemini_api_key: string
   facebook_page_access_token?: string
   facebook_page_id?: string
   facebook_app_id?: string
@@ -78,6 +83,24 @@ const availableFeatures = [
   { id: "product_catalog", label: "Catálogo de productos" },
 ]
 
+const steps = [
+  { id: "platform", title: "Plataforma" },
+  { id: "config", title: "Configuración" },
+  { id: "ai", title: "IA" },
+  { id: "tokens", title: "Tokens" },
+]
+
+const fadeInUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+}
+
+const contentVariants = {
+  hidden: { opacity: 0, x: 50 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.3 } },
+  exit: { opacity: 0, x: -50, transition: { duration: 0.2 } },
+}
+
 export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: MultiStepBotCreationProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
@@ -92,7 +115,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     platform: "",
     personality_prompt: "",
     features: [],
-    openai_api_key: "",
+    gemini_api_key: "",
     facebook_page_access_token: "",
     facebook_page_id: "",
     facebook_app_id: "",
@@ -191,7 +214,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
       platform: "",
       personality_prompt: "",
       features: [],
-      openai_api_key: "",
+      gemini_api_key: "",
       facebook_page_access_token: "",
       facebook_page_id: "",
       facebook_app_id: "",
@@ -248,7 +271,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         platform: formData.platform,
         personality_prompt: formData.personality_prompt,
         features: formData.features,
-        openai_api_key: formData.openai_api_key,
+        gemini_api_key: formData.gemini_api_key,
         user_id: userId,
         is_active: true,
         automations: [], // Por defecto vacío
@@ -282,9 +305,22 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     }
   }
 
+  const isStepValid = () => {
+    switch (currentStep) {
+      case 1:
+        return formData.platform !== ""
+      case 2:
+        return formData.name.trim() !== "" && formData.personality_prompt.trim() !== ""
+      case 3:
+        return formData.gemini_api_key.trim() !== ""
+      default:
+        return true
+    }
+  }
+
   const canProceedStep1 = formData.platform !== ""
   const canProceedStep2 = formData.name.trim() !== "" && formData.personality_prompt.trim() !== ""
-  const canProceedStep3 = formData.openai_api_key.trim() !== ""
+  const canProceedStep3 = formData.gemini_api_key.trim() !== ""
 
   if (showSuccess) {
     return (
@@ -339,12 +375,12 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
           </DialogTitle>
           <DialogDescription>
             Configura tu chatbot paso a paso para obtener los mejores resultados
-            {userSubscription && (
-              <div className="mt-2 text-sm">
-                Bots: {currentBotCount}/{userSubscription.max_bots || 1} utilizados
-              </div>
-            )}
           </DialogDescription>
+          {userSubscription && (
+            <div className="mt-2 text-sm text-muted-foreground">
+              Bots: {currentBotCount}/{userSubscription.max_bots || 1} utilizados
+            </div>
+          )}
         </DialogHeader>
 
         {!canCreateBot && (
@@ -367,388 +403,583 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
           </Card>
         )}
 
-        <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
-          <div
-            className="bg-primary h-2 rounded-full transition-all duration-300"
-            style={{ width: `${(currentStep / totalSteps) * 100}%` }}
-          ></div>
-        </div>
-
-        {currentStep === 1 && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold mb-2">Selecciona la Plataforma</h3>
-              <p className="text-muted-foreground">¿En qué plataforma quieres que funcione tu bot?</p>
-            </div>
-
-            <div className="grid gap-4">
-              {Object.entries(platformLabels).map(([key, label]) => {
-                const Icon = platformIcons[key as keyof typeof platformIcons]
-                return (
-                  <Card
-                    key={key}
-                    className={`cursor-pointer transition-all hover:shadow-md ${
-                      formData.platform === key ? "ring-2 ring-primary bg-primary/5" : ""
-                    }`}
-                    onClick={() => setFormData({ ...formData, platform: key as any })}
-                  >
-                    <CardContent className="flex items-center gap-4 p-4">
-                      <Icon className="h-8 w-8 text-primary" />
-                      <div className="flex-1">
-                        <h4 className="font-medium">{label}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {key === "whatsapp" && "Ideal para atención al cliente directa"}
-                          {key === "instagram" && "Perfecto para engagement en redes sociales"}
-                          {key === "email" && "Excelente para respuestas automáticas"}
-                        </p>
-                      </div>
-                      {!hasPaidSubscription() && (
-                        <Badge variant="outline" className="text-xs">
-                          Solo prueba
-                        </Badge>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-
-            {!hasPaidSubscription() && (
-              <Card className="border-blue-200 bg-blue-50">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <TestTube className="h-5 w-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-blue-800">Modo Prueba</h4>
-                      <p className="text-sm text-blue-700 mt-1">
-                        En tu plan gratuito, los bots se crean para prueba interna. Para conectar a plataformas reales,
-                        actualiza tu plan.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {currentStep === 2 && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold mb-2">Configura tu Bot</h3>
-              <p className="text-muted-foreground">Dale personalidad y nombre a tu asistente virtual</p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="bot-name">Nombre del Bot *</Label>
-                <Input
-                  id="bot-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Asistente Virtual de Mi Negocio"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="personality">Personalidad y Prompt *</Label>
-                <Textarea
-                  id="personality"
-                  value={formData.personality_prompt}
-                  onChange={(e) => setFormData({ ...formData, personality_prompt: e.target.value })}
-                  placeholder="Eres un asistente amigable y profesional que ayuda a los clientes de [tu negocio]. Siempre respondes de manera cortés y útil..."
-                  rows={6}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Define cómo debe comportarse tu bot, su tono de voz y estilo de comunicación
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <Label>Funcionalidades del Bot</Label>
-                <div className="grid gap-3">
-                  {availableFeatures.map((feature) => (
-                    <div key={feature.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={feature.id}
-                        checked={formData.features.includes(feature.id)}
-                        onCheckedChange={(checked) => handleFeatureChange(feature.id, checked as boolean)}
-                      />
-                      <Label htmlFor={feature.id} className="text-sm">
-                        {feature.label}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {currentStep === 3 && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold mb-2">Configuración de IA</h3>
-              <p className="text-muted-foreground">Conecta tu API de OpenAI para que el bot funcione</p>
-            </div>
-
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Key className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-amber-800">¿Cómo obtener tu API Key?</h4>
-                    <ol className="text-sm text-amber-700 mt-2 space-y-1">
-                      <li>
-                        1. Ve a{" "}
-                        <a
-                          href="https://platform.openai.com/api-keys"
-                          target="_blank"
-                          className="underline"
-                          rel="noreferrer"
-                        >
-                          platform.openai.com
-                        </a>
-                      </li>
-                      <li>2. Inicia sesión o crea una cuenta</li>
-                      <li>3. Ve a "API Keys" y crea una nueva clave</li>
-                      <li>4. Copia la clave y pégala aquí abajo</li>
-                    </ol>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-2">
-              <Label htmlFor="openai-key">API Key de OpenAI *</Label>
-              <Input
-                id="openai-key"
-                type="password"
-                value={formData.openai_api_key}
-                onChange={(e) => setFormData({ ...formData, openai_api_key: e.target.value })}
-                placeholder="sk-..."
-              />
-              <p className="text-xs text-muted-foreground">
-                Tu clave API se almacena de forma segura y solo se usa para tu bot
-              </p>
-            </div>
-
-            {!hasPaidSubscription() && (
-              <Card className="border-green-200 bg-green-50">
-                <CardContent className="p-4">
-                  <div className="text-center">
-                    <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                    <h4 className="font-medium text-green-800">¡Casi listo!</h4>
-                    <p className="text-sm text-green-700">
-                      Tu bot se creará para pruebas internas. Podrás probarlo desde la sección de prueba.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {currentStep === 4 && shouldShowStep4() && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold mb-2">
-                Configuración de {platformLabels[formData.platform as keyof typeof platformLabels]}
-              </h3>
-              <p className="text-muted-foreground">
-                {formData.platform === "whatsapp" && "Configura los tokens de WhatsApp Business API"}
-                {formData.platform === "instagram" && "Conecta tu cuenta de Instagram Business"}
-              </p>
-            </div>
-
-            {formData.platform === "whatsapp" && (
-              <div className="space-y-6">
-                <Card className="border-green-200 bg-green-50">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <Facebook className="h-5 w-5 text-green-600 mt-0.5" />
-                      <div>
-                        <h4 className="font-medium text-green-800">Configuración de WhatsApp Business</h4>
-                        <p className="text-sm text-green-700 mt-1">
-                          Para conectar WhatsApp, necesitas configurar la API de Meta (Facebook)
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="wa-access-token">WhatsApp Access Token *</Label>
-                    <Input
-                      id="wa-access-token"
-                      type="password"
-                      value={formData.whatsapp_access_token}
-                      onChange={(e) => setFormData({ ...formData, whatsapp_access_token: e.target.value })}
-                      placeholder="EAAxxxxx..."
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="wa-phone-id">Phone Number ID *</Label>
-                    <Input
-                      id="wa-phone-id"
-                      value={formData.whatsapp_phone_number_id}
-                      onChange={(e) => setFormData({ ...formData, whatsapp_phone_number_id: e.target.value })}
-                      placeholder="123456789..."
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="wa-verify-token">Webhook Verify Token</Label>
-                    <Input
-                      id="wa-verify-token"
-                      value={formData.whatsapp_webhook_verify_token}
-                      onChange={(e) => setFormData({ ...formData, whatsapp_webhook_verify_token: e.target.value })}
-                      placeholder="mi_token_secreto"
-                    />
-                  </div>
-                </div>
-
-                <Card className="border-blue-200 bg-blue-50">
-                  <CardContent className="p-4">
-                    <div className="text-center">
-                      <TestTube className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                      <h4 className="font-medium text-blue-800">¿No tienes los tokens aún?</h4>
-                      <p className="text-sm text-blue-700 mb-3">
-                        Puedes crear el bot sin tokens y configurarlos después desde la sección de prueba.
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            whatsapp_access_token: "",
-                            whatsapp_phone_number_id: "",
-                            whatsapp_webhook_verify_token: "",
-                          })
-                          handleCreateBot()
-                        }}
-                        disabled={isLoading}
-                      >
-                        Crear Bot para Prueba
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {formData.platform === "instagram" && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fb-page-token">Page Access Token *</Label>
-                  <Input
-                    id="fb-page-token"
-                    type="password"
-                    value={formData.facebook_page_access_token}
-                    onChange={(e) => setFormData({ ...formData, facebook_page_access_token: e.target.value })}
-                    placeholder="EAAxxxxx..."
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="fb-page-id">Page ID *</Label>
-                  <Input
-                    id="fb-page-id"
-                    value={formData.facebook_page_id}
-                    onChange={(e) => setFormData({ ...formData, facebook_page_id: e.target.value })}
-                    placeholder="123456789..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="fb-app-id">App ID</Label>
-                    <Input
-                      id="fb-app-id"
-                      value={formData.facebook_app_id}
-                      onChange={(e) => setFormData({ ...formData, facebook_app_id: e.target.value })}
-                      placeholder="123456789"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="fb-app-secret">App Secret</Label>
-                    <Input
-                      id="fb-app-secret"
-                      type="password"
-                      value={formData.facebook_app_secret}
-                      onChange={(e) => setFormData({ ...formData, facebook_app_secret: e.target.value })}
-                      placeholder="abc123..."
-                    />
-                  </div>
-                </div>
-
-                <Card className="border-blue-200 bg-blue-50">
-                  <CardContent className="p-4">
-                    <div className="text-center">
-                      <TestTube className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                      <h4 className="font-medium text-blue-800">¿No tienes los tokens aún?</h4>
-                      <p className="text-sm text-blue-700 mb-3">
-                        Puedes crear el bot sin tokens y configurarlos después desde la sección de prueba.
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            facebook_page_access_token: "",
-                            facebook_page_id: "",
-                            facebook_app_id: "",
-                            facebook_app_secret: "",
-                          })
-                          handleCreateBot()
-                        }}
-                        disabled={isLoading}
-                      >
-                        Crear Bot para Prueba
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex justify-between pt-6">
-          <Button type="button" variant="outline" onClick={prevStep} disabled={currentStep === 1}>
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Anterior
-          </Button>
-
-          <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={handleClose}>
-              Cancelar
-            </Button>
-
-            {currentStep < totalSteps ? (
-              <Button
-                onClick={nextStep}
-                disabled={
-                  !canCreateBot ||
-                  (currentStep === 1 && !canProceedStep1) ||
-                  (currentStep === 2 && !canProceedStep2) ||
-                  (currentStep === 3 && !canProceedStep3)
-                }
+        {/* Progress indicator */}
+        <motion.div
+          className="mb-8"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="flex justify-between mb-2">
+            {steps.slice(0, getTotalSteps()).map((step, index) => (
+              <motion.div
+                key={index}
+                className="flex flex-col items-center"
+                whileHover={{ scale: 1.1 }}
               >
-                Siguiente
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </Button>
-            ) : (
-              <Button onClick={handleCreateBot} disabled={isLoading || !canCreateBot}>
-                {isLoading ? "Creando Bot..." : "Crear Bot"}
-              </Button>
-            )}
+                <motion.div
+                  className={cn(
+                    "w-4 h-4 rounded-full cursor-pointer transition-colors duration-300",
+                    index < currentStep - 1
+                      ? "bg-primary"
+                      : index === currentStep - 1
+                        ? "bg-primary ring-4 ring-primary/20"
+                        : "bg-muted",
+                  )}
+                  onClick={() => {
+                    if (index <= currentStep - 1) {
+                      setCurrentStep(index + 1)
+                    }
+                  }}
+                  whileTap={{ scale: 0.95 }}
+                />
+                <motion.span
+                  className={cn(
+                    "text-xs mt-1.5 hidden sm:block",
+                    index === currentStep - 1
+                      ? "text-primary font-medium"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {step.title}
+                </motion.span>
+              </motion.div>
+            ))}
           </div>
-        </div>
+          <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden mt-2">
+            <motion.div
+              className="h-full bg-primary"
+              initial={{ width: 0 }}
+              animate={{ width: `${((currentStep - 1) / (getTotalSteps() - 1)) * 100}%` }}
+              transition={{ duration: 0.3 }}
+            />
+          </div>
+        </motion.div>
+
+        {/* Form card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
+          <Card className="border shadow-md rounded-3xl overflow-hidden">
+            <div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  variants={contentVariants}
+                >
+                  {/* Step 1: Platform Selection */}
+                  {currentStep === 1 && (
+                    <>
+                      <CardHeader>
+                        <CardTitle>Selecciona la Plataforma</CardTitle>
+                        <CardDescription>
+                          ¿En qué plataforma quieres que funcione tu bot?
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <motion.div variants={fadeInUp} className="space-y-4">
+                          <Label>Selecciona una plataforma</Label>
+                          <RadioGroup
+                            value={formData.platform}
+                            onValueChange={(value) => setFormData({ ...formData, platform: value as any })}
+                            className="space-y-2"
+                          >
+                            {Object.entries(platformLabels).map(([key, label], index) => {
+                              const Icon = platformIcons[key as keyof typeof platformIcons]
+                              return (
+                                <motion.div
+                                  key={key}
+                                  className={cn(
+                                    "flex items-center space-x-2 rounded-md border p-4 cursor-pointer transition-colors group",
+                                    formData.platform === key ? "bg-accent" : "hover:bg-accent"
+                                  )}
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  transition={{ duration: 0.2 }}
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{
+                                    opacity: 1,
+                                    y: 0,
+                                    transition: {
+                                      delay: 0.1 * index,
+                                      duration: 0.3,
+                                    },
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.classList.add('hovered')
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.classList.remove('hovered')
+                                  }}
+                                  onClick={() => setFormData({ ...formData, platform: key as any })}
+                                >
+                                  <RadioGroupItem value={key} id={`platform-${key}`} />
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <Icon className={cn("h-6 w-6 transition-colors", formData.platform === key ? "text-white" : "text-primary group-hover:text-white")} />
+                                    <div className={cn("flex-1", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
+                                      <Label htmlFor={`platform-${key}`} className={cn("cursor-pointer font-medium transition-colors", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
+                                        {label}
+                                      </Label>
+                                      <p className={cn("text-sm mt-1 transition-colors", formData.platform === key ? "text-white" : "text-muted-foreground group-hover:text-white")}> 
+                                        {key === "whatsapp" && "Ideal para atención al cliente directa"}
+                                        {key === "instagram" && "Perfecto para engagement en redes sociales"}
+                                        {key === "email" && "Excelente para respuestas automáticas"}
+                                      </p>
+                                    </div>
+                                    {!hasPaidSubscription() && (
+                                      <Badge variant="outline" className={cn("text-xs transition-colors", formData.platform === key ? "text-white border-white" : "group-hover:text-white group-hover:border-white")}> 
+                                        Solo prueba
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )
+                            })}
+                          </RadioGroup>
+                        </motion.div>
+
+                        {!hasPaidSubscription() && (
+                          <motion.div variants={fadeInUp}>
+                            <Card className="border-blue-200 bg-blue-50">
+                              <CardContent className="p-4">
+                                <div className="flex items-start gap-3">
+                                  <TestTube className="h-5 w-5 text-blue-600 mt-0.5" />
+                                  <div>
+                                    <h4 className="font-medium text-blue-800">Modo Prueba</h4>
+                                    <p className="text-sm text-blue-700 mt-1">
+                                      En tu plan gratuito, los bots se crean para prueba interna. Para conectar a plataformas reales,
+                                      actualiza tu plan.
+                                    </p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        )}
+                      </CardContent>
+                    </>
+                  )}
+
+                  {/* Step 2: Bot Configuration */}
+                  {currentStep === 2 && (
+                    <>
+                      <CardHeader>
+                        <CardTitle>Configura tu Bot</CardTitle>
+                        <CardDescription>
+                          Dale personalidad y nombre a tu asistente virtual
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <motion.div variants={fadeInUp} className="space-y-2">
+                          <Label htmlFor="bot-name">Nombre del Bot *</Label>
+                          <Input
+                            id="bot-name"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            placeholder="Asistente Virtual de Mi Negocio"
+                            className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          />
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp} className="space-y-2">
+                          <Label htmlFor="personality">Personalidad y Prompt *</Label>
+                          <Textarea
+                            id="personality"
+                            value={formData.personality_prompt}
+                            onChange={(e) => setFormData({ ...formData, personality_prompt: e.target.value })}
+                            placeholder="Eres un asistente amigable y profesional que ayuda a los clientes de [tu negocio]. Siempre respondes de manera cortés y útil..."
+                            rows={6}
+                            className="min-h-[120px] transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Define cómo debe comportarse tu bot, su tono de voz y estilo de comunicación
+                          </p>
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp} className="space-y-2">
+                          <Label>Funcionalidades del Bot</Label>
+                          <div className="grid grid-cols-1 gap-2">
+                            {availableFeatures.map((feature, index) => (
+                              <motion.div
+                                key={feature.id}
+                                className="flex items-center space-x-2 rounded-md border p-3 cursor-pointer hover:bg-accent transition-colors"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                transition={{ duration: 0.2 }}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{
+                                  opacity: 1,
+                                  y: 0,
+                                  transition: {
+                                    delay: 0.05 * index,
+                                    duration: 0.3,
+                                  },
+                                }}
+                                onClick={() =>
+                                  handleFeatureChange(feature.id, !formData.features.includes(feature.id))
+                                }
+                              >
+                                <Checkbox
+                                  id={feature.id}
+                                  checked={formData.features.includes(feature.id)}
+                                  onCheckedChange={(checked) => handleFeatureChange(feature.id, checked as boolean)}
+                                />
+                                <Label htmlFor={feature.id} className="cursor-pointer w-full text-sm">
+                                  {feature.label}
+                                </Label>
+                              </motion.div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      </CardContent>
+                    </>
+                  )}
+
+                  {/* Step 3: AI Configuration */}
+                  {currentStep === 3 && (
+                    <>
+                      <CardHeader>
+                        <CardTitle>Configuración de IA</CardTitle>
+                        <CardDescription>
+                          Conecta tu API de Gemini para que el bot funcione
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <motion.div variants={fadeInUp}>
+                          <Card className="border-amber-200 bg-amber-50">
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <Key className="h-5 w-5 text-amber-600 mt-0.5" />
+                                <div>
+                                  <h4 className="font-medium text-amber-800">¿Cómo obtener tu API Key?</h4>
+                                  <ol className="text-sm text-amber-700 mt-2 space-y-1">
+                                    <li>
+                                      1. Ve a{" "}
+                                      <a
+                                        href="https://aistudio.google.com/"
+                                        target="_blank"
+                                        className="underline"
+                                        rel="noreferrer"
+                                      >
+                                        aistudio.google.com
+                                      </a>
+                                    </li>
+                                    <li>2. Inicia sesión o crea una cuenta</li>
+                                    <li>3. Ve a "API Keys" y crea una nueva clave</li>
+                                    <li>4. Copia la clave y pégala aquí abajo</li>
+                                  </ol>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp} className="space-y-2">
+                          <Label htmlFor="gemini-key">API Key de Gemini *</Label>
+                          <Input
+                            id="gemini-key"
+                            type="password"
+                            value={formData.gemini_api_key}
+                            onChange={(e) => setFormData({ ...formData, gemini_api_key: e.target.value })}
+                            placeholder="AIza..."
+                            className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Tu clave API se almacena de forma segura y solo se usa para tu bot
+                          </p>
+                        </motion.div>
+
+                        {!hasPaidSubscription() && (
+                          <motion.div variants={fadeInUp}>
+                            <Card className="border-green-200 bg-green-50">
+                              <CardContent className="p-4">
+                                <div className="text-center">
+                                  <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                                  <h4 className="font-medium text-green-800">¡Casi listo!</h4>
+                                  <p className="text-sm text-green-700">
+                                    Tu bot se creará para pruebas internas. Podrás probarlo desde la sección de prueba.
+                                  </p>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        )}
+                      </CardContent>
+                    </>
+                  )}
+
+                  {/* Step 4: Token Configuration */}
+                  {currentStep === 4 && shouldShowStep4() && (
+                    <>
+                      <CardHeader>
+                        <CardTitle>
+                          Configuración de {platformLabels[formData.platform as keyof typeof platformLabels]}
+                        </CardTitle>
+                        <CardDescription>
+                          {formData.platform === "whatsapp" && "Configura los tokens de WhatsApp Business API"}
+                          {formData.platform === "instagram" && "Conecta tu cuenta de Instagram Business"}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {formData.platform === "whatsapp" && (
+                          <div className="space-y-6">
+                            <motion.div variants={fadeInUp}>
+                              <Card className="border-green-200 bg-green-50">
+                                <CardContent className="p-4">
+                                  <div className="flex items-start gap-3">
+                                    <Facebook className="h-5 w-5 text-green-600 mt-0.5" />
+                                    <div>
+                                      <h4 className="font-medium text-green-800">Configuración de WhatsApp Business</h4>
+                                      <p className="text-sm text-green-700 mt-1">
+                                        Para conectar WhatsApp, necesitas configurar la API de Meta (Facebook)
+                                      </p>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+
+                            <div className="space-y-4">
+                              <motion.div variants={fadeInUp} className="space-y-2">
+                                <Label htmlFor="wa-access-token">WhatsApp Access Token *</Label>
+                                <Input
+                                  id="wa-access-token"
+                                  type="password"
+                                  value={formData.whatsapp_access_token}
+                                  onChange={(e) => setFormData({ ...formData, whatsapp_access_token: e.target.value })}
+                                  placeholder="EAAxxxxx..."
+                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                />
+                              </motion.div>
+
+                              <motion.div variants={fadeInUp} className="space-y-2">
+                                <Label htmlFor="wa-phone-id">Phone Number ID *</Label>
+                                <Input
+                                  id="wa-phone-id"
+                                  value={formData.whatsapp_phone_number_id}
+                                  onChange={(e) => setFormData({ ...formData, whatsapp_phone_number_id: e.target.value })}
+                                  placeholder="123456789..."
+                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                />
+                              </motion.div>
+
+                              <motion.div variants={fadeInUp} className="space-y-2">
+                                <Label htmlFor="wa-verify-token">Webhook Verify Token</Label>
+                                <Input
+                                  id="wa-verify-token"
+                                  value={formData.whatsapp_webhook_verify_token}
+                                  onChange={(e) => setFormData({ ...formData, whatsapp_webhook_verify_token: e.target.value })}
+                                  placeholder="mi_token_secreto"
+                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                />
+                              </motion.div>
+                            </div>
+
+                            <motion.div variants={fadeInUp}>
+                              <Card className="border-blue-200 bg-blue-50">
+                                <CardContent className="p-4">
+                                  <div className="text-center">
+                                    <TestTube className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                                    <h4 className="font-medium text-blue-800">¿No tienes los tokens aún?</h4>
+                                    <p className="text-sm text-blue-700 mb-3">
+                                      Puedes crear el bot sin tokens y configurarlos después desde la sección de prueba.
+                                    </p>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setFormData({
+                                          ...formData,
+                                          whatsapp_access_token: "",
+                                          whatsapp_phone_number_id: "",
+                                          whatsapp_webhook_verify_token: "",
+                                        })
+                                        handleCreateBot()
+                                      }}
+                                      disabled={isLoading}
+                                    >
+                                      Crear Bot para Prueba
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          </div>
+                        )}
+
+                        {formData.platform === "instagram" && (
+                          <div className="space-y-4">
+                            <motion.div variants={fadeInUp} className="space-y-2">
+                              <Label htmlFor="fb-page-token">Page Access Token *</Label>
+                              <Input
+                                id="fb-page-token"
+                                type="password"
+                                value={formData.facebook_page_access_token}
+                                onChange={(e) => setFormData({ ...formData, facebook_page_access_token: e.target.value })}
+                                placeholder="EAAxxxxx..."
+                                className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              />
+                            </motion.div>
+
+                            <motion.div variants={fadeInUp} className="space-y-2">
+                              <Label htmlFor="fb-page-id">Page ID *</Label>
+                              <Input
+                                id="fb-page-id"
+                                value={formData.facebook_page_id}
+                                onChange={(e) => setFormData({ ...formData, facebook_page_id: e.target.value })}
+                                placeholder="123456789..."
+                                className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              />
+                            </motion.div>
+
+                            <motion.div variants={fadeInUp} className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="fb-app-id">App ID</Label>
+                                <Input
+                                  id="fb-app-id"
+                                  value={formData.facebook_app_id}
+                                  onChange={(e) => setFormData({ ...formData, facebook_app_id: e.target.value })}
+                                  placeholder="123456789"
+                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="fb-app-secret">App Secret</Label>
+                                <Input
+                                  id="fb-app-secret"
+                                  type="password"
+                                  value={formData.facebook_app_secret}
+                                  onChange={(e) => setFormData({ ...formData, facebook_app_secret: e.target.value })}
+                                  placeholder="abc123..."
+                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                />
+                              </div>
+                            </motion.div>
+
+                            <motion.div variants={fadeInUp}>
+                              <Card className="border-blue-200 bg-blue-50">
+                                <CardContent className="p-4">
+                                  <div className="text-center">
+                                    <TestTube className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                                    <h4 className="font-medium text-blue-800">¿No tienes los tokens aún?</h4>
+                                    <p className="text-sm text-blue-700 mb-3">
+                                      Puedes crear el bot sin tokens y configurarlos después desde la sección de prueba.
+                                    </p>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setFormData({
+                                          ...formData,
+                                          facebook_page_access_token: "",
+                                          facebook_page_id: "",
+                                          facebook_app_id: "",
+                                          facebook_app_secret: "",
+                                        })
+                                        handleCreateBot()
+                                      }}
+                                      disabled={isLoading}
+                                    >
+                                      Crear Bot para Prueba
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+
+              <CardFooter className="flex justify-between pt-6 pb-4">
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={prevStep}
+                    disabled={currentStep === 1}
+                    className="flex items-center gap-1 transition-all duration-300 rounded-2xl"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Anterior
+                  </Button>
+                </motion.div>
+
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" onClick={handleClose}>
+                    Cancelar
+                  </Button>
+
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {currentStep < totalSteps ? (
+                      <Button
+                        onClick={nextStep}
+                        disabled={
+                          !canCreateBot ||
+                          (currentStep === 1 && !canProceedStep1) ||
+                          (currentStep === 2 && !canProceedStep2) ||
+                          (currentStep === 3 && !canProceedStep3)
+                        }
+                        className="flex items-center gap-1 transition-all duration-300 rounded-2xl"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
+                          </>
+                        ) : (
+                          <>
+                            Siguiente
+                            <ChevronRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleCreateBot}
+                        disabled={isLoading || !canCreateBot}
+                        className="flex items-center gap-1 transition-all duration-300 rounded-2xl"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Creando...
+                          </>
+                        ) : (
+                          <>
+                            Crear Bot
+                            <Check className="h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </motion.div>
+                </div>
+              </CardFooter>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Step indicator */}
+        <motion.div
+          className="mt-4 text-center text-sm text-muted-foreground"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+        >
+          Paso {currentStep} de {totalSteps}: {steps[currentStep - 1]?.title}
+        </motion.div>
       </DialogContent>
     </Dialog>
   )

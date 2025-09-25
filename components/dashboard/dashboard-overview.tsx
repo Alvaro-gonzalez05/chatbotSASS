@@ -9,6 +9,7 @@ import Link from "next/link"
 import type { User } from "@supabase/supabase-js"
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
+import { cn } from "@/lib/utils"
 
 interface DashboardOverviewProps {
   user: User
@@ -160,19 +161,49 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Bot className="h-5 w-5 mr-2 text-primary" />
-                  Configurar Bot
+                  Primeros pasos
                 </CardTitle>
-                <CardDescription>Crea y personaliza tu primer chatbot con IA</CardDescription>
+                <CardDescription>Guía interactiva para configurar tu app y empezar a usar el bot</CardDescription>
               </CardHeader>
               <CardContent>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button asChild className="w-full">
-                    <Link href="/dashboard/bots">Comenzar</Link>
-                  </Button>
-                </motion.div>
+                <div className="flex flex-col gap-6">
+                  {/* Multi-step onboarding visual */}
+                  {[{
+                    label: "Completar información del negocio",
+                    action: "Completar",
+                    href: "/dashboard/negocio",
+                  }, {
+                    label: "Configurar tu primer bot",
+                    action: "Configurar",
+                    href: "/dashboard/bots",
+                  }, {
+                    label: "Añadir tus primeros clientes",
+                    action: "Añadir",
+                    href: "/dashboard/clientes",
+                  }, {
+                    label: "Probar tu bot",
+                    action: "Probar",
+                    href: "/dashboard/pruebas",
+                  }].map((step, idx) => (
+                    <div key={step.label} className="flex items-center gap-4 mb-2">
+                      <motion.div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg border-2 transition-colors",
+                          "bg-primary text-white border-primary"
+                        )}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.3, delay: 0.1 * idx }}
+                      >
+                        {idx + 1}
+                      </motion.div>
+                      <span className="flex-1 text-sm font-medium">{step.label}</span>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={step.href}>{step.action}</Link>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </motion.div>
@@ -233,75 +264,6 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         </ScrollStaggerChild>
       </ScrollStaggeredChildren>
 
-      {/* Getting Started Checklist */}
-      <ScrollFadeIn delay={0.4}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Primeros Pasos</CardTitle>
-            <CardDescription>Completa estos pasos para aprovechar al máximo tu chatbot</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollStaggeredChildren className="space-y-4">
-              <ScrollStaggerChild>
-                <div className="flex items-center space-x-3">
-                  <div className="h-2 w-2 bg-muted rounded-full"></div>
-                  <span className="text-sm text-muted-foreground">Completar información del negocio</span>
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/negocio">Completar</Link>
-                    </Button>
-                  </motion.div>
-                </div>
-              </ScrollStaggerChild>
-              <ScrollStaggerChild>
-                <div className="flex items-center space-x-3">
-                  <div className="h-2 w-2 bg-muted rounded-full"></div>
-                  <span className="text-sm text-muted-foreground">Configurar tu primer bot</span>
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/bots">Configurar</Link>
-                    </Button>
-                  </motion.div>
-                </div>
-              </ScrollStaggerChild>
-              <ScrollStaggerChild>
-                <div className="flex items-center space-x-3">
-                  <div className="h-2 w-2 bg-muted rounded-full"></div>
-                  <span className="text-sm text-muted-foreground">Añadir tus primeros clientes</span>
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/clientes">Añadir</Link>
-                    </Button>
-                  </motion.div>
-                </div>
-              </ScrollStaggerChild>
-              <ScrollStaggerChild>
-                <div className="flex items-center space-x-3">
-                  <div className="h-2 w-2 bg-muted rounded-full"></div>
-                  <span className="text-sm text-muted-foreground">Probar tu bot</span>
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/prueba-bot">Probar</Link>
-                    </Button>
-                  </motion.div>
-                </div>
-              </ScrollStaggerChild>
-            </ScrollStaggeredChildren>
-          </CardContent>
-        </Card>
-      </ScrollFadeIn>
     </div>
   )
 }

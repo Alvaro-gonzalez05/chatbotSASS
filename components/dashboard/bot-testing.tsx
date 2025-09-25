@@ -17,7 +17,8 @@ interface Bot {
   platform: string
   personality_prompt: string
   is_active: boolean
-  openai_api_key?: string
+  gemini_api_key?: string
+  gemini_model?: string // Ejemplo: 'gemini-pro', 'gemini-pro-vision', 'gemini-1.5-flash', etc.
 }
 
 interface Message {
@@ -65,14 +66,70 @@ export function BotTesting() {
   const fetchBusinessData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
+      console.log('User:', user?.id)
       if (!user) return null
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('business_name, business_description, business_hours, location')
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('business_info, business_name')
         .eq('id', user.id)
         .single()
 
+      console.log('Business data fetch result:', { profile, error })
+
+      if (error) {
+        console.error('Supabase error:', error)
+        return null
+      }
+
+      // Extraer información del campo business_info si existe
+      const businessInfo = profile?.business_info
+      if (businessInfo) {
+        // Procesar horarios para separar claramente días abiertos y cerrados
+        let processedHours = null
+        if (businessInfo.opening_hours) {
+          const openDays = []
+          const closedDays = []
+
+          Object.keys(businessInfo.opening_hours).forEach(day => {
+            const dayInfo = businessInfo.opening_hours[day]
+            const dayNameSpanish = {
+              monday: 'Lunes',
+              tuesday: 'Martes',
+              wednesday: 'Miércoles',
+              thursday: 'Jueves',
+              friday: 'Viernes',
+              saturday: 'Sábado',
+              sunday: 'Domingo'
+            }[day] || day
+
+            if (dayInfo.isOpen) {
+              openDays.push(`${dayNameSpanish}: ${dayInfo.open} - ${dayInfo.close}`)
+            } else {
+              closedDays.push(dayNameSpanish)
+            }
+          })
+
+          processedHours = {
+            open_days: openDays,
+            closed_days: closedDays,
+            summary: `DÍAS ABIERTOS: ${openDays.join(' | ')}${closedDays.length > 0 ? ` | DÍAS CERRADOS: ${closedDays.join(', ')}` : ''}`
+          }
+        }
+
+        return {
+          business_name: businessInfo.business_name || profile?.business_name,
+          business_description: businessInfo.description,
+          business_hours: processedHours,
+          location: businessInfo.address,
+          phone: businessInfo.phone,
+          email: businessInfo.email,
+          website: businessInfo.website,
+          business_type: businessInfo.business_type
+        }
+      }
+
+      // Fallback a campos antiguos si no existe business_info
       return profile
     } catch (error) {
       console.error('Error fetching business data:', error)
@@ -83,28 +140,61 @@ export function BotTesting() {
   const generateAIResponse = async (userMessage: string, bot: Bot) => {
     try {
       const businessData = await fetchBusinessData()
-      // Construir el contexto para la IA
-      const systemPrompt = `Eres ${bot.name}, un asistente virtual para ${businessData?.business_name || 'un negocio'}.
+      console.log('Business data for AI:', businessData)
+
+      // Obtener historial de conversación reciente (últimos 6 mensajes)
+      const recentMessages = messages.slice(-6).map(msg =>
+        `${msg.type === 'user' ? 'Cliente' : bot.name}: ${msg.content}`
+      ).join('\n')
+
+      const conversationContext = recentMessages.length > 0
+        ? `\n\nHISTORIAL DE CONVERSACIÓN RECIENTE:\n${recentMessages}\n`
+        : ''
+
+  // Construir el contexto para la IA
+  const systemPrompt = `Eres ${bot.name}, un asistente virtual para ${businessData?.business_name || 'un negocio'}.
+
 PERSONALIDAD: ${bot.personality_prompt}
+
 INFORMACIÓN DEL NEGOCIO:
 - Nombre: ${businessData?.business_name || 'No especificado'}
+- Tipo: ${businessData?.business_type || 'No especificado'}
 - Descripción: ${businessData?.business_description || 'No especificado'}
-- Ubicación: ${businessData?.location || 'No especificado'}
-- Horarios: ${businessData?.business_hours ? JSON.stringify(businessData.business_hours) : 'No especificado'}
+- Dirección: ${businessData?.location || 'No especificado'}
+- Teléfono: ${businessData?.phone || 'No especificado'}
+- Email: ${businessData?.email || 'No especificado'}
+- Sitio web: ${businessData?.website || 'No especificado'}
+- HORARIOS: ${businessData?.business_hours?.summary || 'No especificado'}
 INSTRUCCIONES:
 - Responde como el asistente virtual del negocio
 - Usa la personalidad especificada en tus respuestas
-- Proporciona información útil sobre el negocio cuando sea relevante
-- Mantén un tono profesional pero amigable
+- Proporciona información útil y específica sobre el negocio cuando sea relevante
+- Usa los datos de contacto, horarios y ubicación cuando sea apropiado
+- Mantén un tono profesional pero amigable según tu personalidad
 - Si no tienes información específica, ofrece ayuda general
 - Responde en español
+- Ten en cuenta el historial de conversación para dar respuestas coherentes y no repetitivas
+INSTRUCCIONES ESPECIALES PARA HORARIOS:
+- SOLO menciona los días que aparecen en "DÍAS ABIERTOS" como horarios de funcionamiento
+- Los días que aparecen en "DÍAS CERRADOS" NO tienen horario - están completamente CERRADOS
+- Cuando pregunten por horarios, primero da los días abiertos, después menciona los días cerrados con una frase creativa argentina
+
+INSTRUCCIONES EXTRA:
+- Da las respuestas con un estilo creativo, divertido y argentino. Usa emojis y frases coloquiales cuando sea apropiado
+- Haz que el mensaje sea cálido y cercano, no aburrido ni robótico
+- No incluyas información innecesaria ni repitas todos los datos del negocio en cada respuesta
+- No te saludes de nuevo si ya lo hiciste en la conversación
+- Responde de manera concisa y directa${conversationContext}
+
 Mensaje del cliente: "${userMessage}"`
 
-      // Verificar si el bot tiene una API key de OpenAI configurada
+      console.log('System prompt being sent to AI:', systemPrompt)
+
+      // Verificar si el bot tiene una API key de Gemini configurada
       const selectedBotData = bots.find(b => b.id === bot.id)
-      if (selectedBotData && selectedBotData.openai_api_key) {
-        // Usar OpenAI API para generar respuesta real
-        const response = await callOpenAI(systemPrompt, userMessage, selectedBotData.openai_api_key)
+      if (selectedBotData && selectedBotData.gemini_api_key) {
+        // Usar Gemini API para generar respuesta real
+        const response = await callGemini(systemPrompt, userMessage, selectedBotData.gemini_api_key, 'gemini-1.5-flash')
         return response
       } else {
         // Fallback: simulación inteligente para testing
@@ -117,59 +207,110 @@ Mensaje del cliente: "${userMessage}"`
     }
   }
 
-  const callOpenAI = async (systemPrompt: string, userMessage: string, apiKey: string) => {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt
+  const callGemini = async (systemPrompt: string, userMessage: string, apiKey: string, model: string, retries = 3) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
             },
-            {
-              role: 'user',
-              content: userMessage
-            }
-          ],
-          max_tokens: 500,
-          temperature: 0.7
-        })
-      })
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: `${systemPrompt}\n\nUsuario: ${userMessage}` }
+                  ]
+                }
+              ],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1000
+              }
+            })
+          }
+        )
 
-      if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status}`)
+        if (response.status === 503 && attempt < retries) {
+          console.log(`Gemini sobrecargado, reintentando en ${attempt * 2}s... (intento ${attempt}/${retries})`)
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000))
+          continue
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Gemini API error details:', errorText)
+
+          if (response.status === 503) {
+            throw new Error('El servicio de IA está temporalmente sobrecargado. Por favor, inténtalo de nuevo en unos momentos.')
+          }
+
+          throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
+        }
+
+        const data = await response.json()
+        console.log('Gemini response:', data)
+
+        // Gemini responde en data.candidates[0].content.parts[0].text
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "Lo siento, no pude procesar tu mensaje en este momento."
+
+      } catch (error) {
+        if (attempt === retries) {
+          console.error('Error calling Gemini after all retries:', error)
+          throw error
+        }
+        console.log(`Error en intento ${attempt}, reintentando...`, error)
       }
-
-      const data = await response.json()
-      return data.choices[0]?.message?.content || "Lo siento, no pude procesar tu mensaje en este momento."
-    } catch (error) {
-      console.error('Error calling OpenAI:', error)
-      throw error
     }
   }
 
   const simulateAIResponse = async (systemPrompt: string, userMessage: string, bot: Bot, businessData: any) => {
-    // Simulación: el bot responde siempre usando el prompt generado, sin mensajes predefinidos
-    // En producción, esto sería reemplazado por una llamada real a OpenAI
-    return `PROMPT DEL BOT:\n${systemPrompt}`
+    // Simulación inteligente basada en el contexto y personalidad del bot
+    // Generar una respuesta basada en el prompt y la información del negocio
+    const businessName = businessData?.business_name || 'nuestro negocio'
+    const location = businessData?.location || 'nuestra ubicación'
+
+    // Respuestas más inteligentes basadas en palabras clave comunes
+    const lowerUserMessage = userMessage.toLowerCase()
+
+    if (lowerUserMessage.includes('hola') || lowerUserMessage.includes('buenos') || lowerUserMessage.includes('buenas')) {
+      return `¡Hola! Soy ${bot.name}, el asistente virtual de ${businessName}. ¿En qué puedo ayudarte hoy?`
+    }
+
+    if (lowerUserMessage.includes('horario') || lowerUserMessage.includes('hora') || lowerUserMessage.includes('abierto')) {
+      const hours = businessData?.business_hours ? JSON.stringify(businessData.business_hours) : 'información de horarios no disponible'
+      return `Te ayudo con los horarios de ${businessName}. ${hours}. ¿Hay algo más en lo que pueda asistirte?`
+    }
+
+    if (lowerUserMessage.includes('ubicación') || lowerUserMessage.includes('dirección') || lowerUserMessage.includes('donde')) {
+      return `${businessName} se encuentra en ${location}. ¿Te gustaría que te proporcione más información sobre cómo llegar?`
+    }
+
+    if (lowerUserMessage.includes('producto') || lowerUserMessage.includes('servicio') || lowerUserMessage.includes('ofre')) {
+      const description = businessData?.business_description || 'diversos productos y servicios'
+      return `En ${businessName} ofrecemos ${description}. ¿Te interesa conocer más detalles sobre algo específico?`
+    }
+
+    if (lowerUserMessage.includes('precio') || lowerUserMessage.includes('costo') || lowerUserMessage.includes('cuánto')) {
+      return `Para información sobre precios y costos, te recomiendo que contactes directamente con ${businessName}. ¿Hay algo más en lo que pueda ayudarte?`
+    }
+
+    // Respuesta general usando la personalidad del bot
+    return `Como asistente de ${businessName}, estoy aquí para ayudarte. Basándome en mi personalidad: "${bot.personality_prompt}", puedo asistirte con información sobre nuestros servicios, horarios, ubicación y más. ¿Qué te gustaría saber específicamente?`
   }
 
   const sendMessage = async () => {
-    if (!inputMessage.trim() || !selectedBot) return
+    if (!inputMessage.trim() || !selectedBot || isLoading) return
 
     const selectedBotData = bots.find((bot) => bot.id === selectedBot)
     if (!selectedBotData) return
 
+    const currentMessage = inputMessage
     const userMessage: Message = {
       id: Date.now().toString(),
       type: "user",
-      content: inputMessage,
+      content: currentMessage,
       timestamp: new Date(),
     }
 
@@ -177,21 +318,37 @@ Mensaje del cliente: "${userMessage}"`
     setInputMessage("")
     setIsLoading(true)
 
-    // Simulate bot response delay
-    setTimeout(
-      async () => {
-        const botResponse = await generateAIResponse(inputMessage, selectedBotData)
-        const botMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          type: "bot",
-          content: botResponse,
-          timestamp: new Date(),
-        }
-        setMessages((prev) => [...prev, botMessage])
-        setIsLoading(false)
-      },
-      1000 + Math.random() * 2000,
-    )
+    try {
+      // Simulate bot response delay
+      setTimeout(
+        async () => {
+          try {
+            const botResponse = await generateAIResponse(currentMessage, selectedBotData)
+            const botMessage: Message = {
+              id: (Date.now() + 1).toString(),
+              type: "bot",
+              content: botResponse,
+              timestamp: new Date(),
+            }
+            setMessages((prev) => [...prev, botMessage])
+          } catch (error) {
+            console.error('Error generating response:', error)
+            const errorMessage: Message = {
+              id: (Date.now() + 1).toString(),
+              type: "bot",
+              content: "Disculpa, tuve un problema procesando tu mensaje. ¿Podrías intentar de nuevo?",
+              timestamp: new Date(),
+            }
+            setMessages((prev) => [...prev, errorMessage])
+          } finally {
+            setIsLoading(false)
+          }
+        },
+        1000 + Math.random() * 2000,
+      )
+    } catch (error) {
+      setIsLoading(false)
+    }
   }
 
   const resetConversation = () => {
@@ -275,11 +432,11 @@ Mensaje del cliente: "${userMessage}"`
                       <strong>Estado:</strong> {bot.is_active ? '🟢 Activo' : '🔴 Inactivo'}
                     </p>
                     <p>
-                      <strong>Modo IA:</strong> {bot.openai_api_key ? '🤖 OpenAI Conectado' : '🎭 Simulación'}
+                      <strong>Modo IA:</strong> {bot.gemini_api_key ? '🤖 Gemini Conectado' : '🎭 Simulación'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      💡 <strong>Tip:</strong> {bot.openai_api_key 
-                        ? 'Este bot usa IA real de OpenAI para generar respuestas dinámicas' 
+                      💡 <strong>Tip:</strong> {bot.gemini_api_key
+                        ? 'Este bot usa IA real de Gemini para generar respuestas dinámicas'
                         : 'Este bot simula respuestas inteligentes para testing'}
                     </p>
                   </div>

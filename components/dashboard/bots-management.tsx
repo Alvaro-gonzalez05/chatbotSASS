@@ -48,7 +48,7 @@ interface BotData {
   personality_prompt?: string
   features: string[]
   automations: string[]
-  openai_api_key?: string
+  gemini_api_key?: string
   is_active: boolean
   created_at: string
 }
@@ -98,7 +98,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
     personality_prompt: "",
     features: [] as string[],
     automations: [] as string[],
-    openai_api_key: "",
+    gemini_api_key: "",
     is_active: false,
   })
 
@@ -109,7 +109,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       personality_prompt: "",
       features: [],
       automations: [],
-      openai_api_key: "",
+      gemini_api_key: "",
       is_active: false,
     })
   }
@@ -233,7 +233,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       personality_prompt: bot.personality_prompt || "",
       features: bot.features || [],
       automations: bot.automations || [],
-      openai_api_key: bot.openai_api_key || "",
+      gemini_api_key: bot.gemini_api_key || "",
       is_active: bot.is_active,
     })
     setIsEditDialogOpen(true)
@@ -534,9 +534,9 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                     <div className="text-sm">
                       <span className="font-medium">IA:</span>
                       <span
-                        className={`ml-2 text-xs ${bot.openai_api_key ? "text-green-600" : "text-muted-foreground"}`}
+                        className={`ml-2 text-xs ${bot.gemini_api_key ? "text-green-600" : "text-muted-foreground"}`}
                       >
-                        {bot.openai_api_key ? "Configurada" : "No configurada"}
+                        {bot.gemini_api_key ? "Configurada" : "No configurada"}
                       </span>
                     </div>
 
@@ -641,8 +641,8 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                     <Input
                       id="edit-openai_key"
                       type={showApiKey ? "text" : "password"}
-                      value={formData.openai_api_key}
-                      onChange={(e) => setFormData({ ...formData, openai_api_key: e.target.value })}
+                      value={formData.gemini_api_key}
+                      onChange={(e) => setFormData({ ...formData, gemini_api_key: e.target.value })}
                     />
                     <motion.div
                       whileHover={{ scale: 1.1 }}

@@ -7,7 +7,7 @@ create table if not exists public.bots (
   personality_prompt text,
   features jsonb default '[]'::jsonb, -- Array of enabled features
   automations jsonb default '[]'::jsonb, -- Array of linked automation IDs
-  openai_api_key text,
+  gemini_api_key text,
   is_active boolean default false,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
