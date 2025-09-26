@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   }
 
   // Get user profile
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single()
+  const { data: profile } = await supabase.from("user_profiles").select("*").eq("id", data.user.id).single()
 
   return (
     <PageTransition>

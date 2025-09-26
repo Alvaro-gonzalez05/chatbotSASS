@@ -4,7 +4,7 @@ import type React from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, easeOut } from 'framer-motion'
 import { MoveRight, Bot } from 'lucide-react'
 
@@ -14,6 +14,42 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      const supabase = createClient()
+      
+      // Check if user is already logged in
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Check if user has completed profile
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('business_name')
+          .eq('id', user.id)
+          .single()
+
+        if (profile && profile.business_name && profile.business_name !== 'Mi Negocio') {
+          router.push('/dashboard')
+        } else {
+          router.push('/register/complete')
+        }
+      }
+    }
+
+    // Listen for auth state changes
+    const supabase = createClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        handleAuthCallback()
+      }
+    })
+
+    // Check current auth state
+    handleAuthCallback()
+
+    return () => subscription.unsubscribe()
+  }, [router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,7 +80,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: `${window.location.origin}/login`,
         }
       })
       if (error) throw error

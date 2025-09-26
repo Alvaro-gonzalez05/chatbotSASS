@@ -54,7 +54,7 @@ export default function RegisterPage() {
     }
   }
 
-  const handleGoogleRegister = async () => {
+    const handleGoogleRegister = async () => {
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
@@ -63,13 +63,16 @@ export default function RegisterPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/register/success`,
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         }
       })
       if (error) throw error
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
-    } finally {
+      setError(error instanceof Error ? error.message : "Error al conectar con Google")
       setIsLoading(false)
     }
   }
