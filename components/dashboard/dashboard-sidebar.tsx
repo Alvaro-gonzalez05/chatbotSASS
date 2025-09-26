@@ -55,11 +55,6 @@ const navigation = [
     href: "/dashboard/pruebas",
     icon: TestTube,
   },
-  {
-    name: "Configuración",
-    href: "/dashboard/configuracion",
-    icon: Settings,
-  },
 ]
 
 export function DashboardSidebar() {
