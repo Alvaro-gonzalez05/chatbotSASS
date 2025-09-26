@@ -5,12 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Check, Bot, MessageSquare, Users, Zap, Star, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { FadeIn, SlideUp, ScaleIn, StaggeredFadeIn, StaggerChild } from "@/components/ui/page-transition"
 import { ScrollFadeIn, ScrollSlideUp, ScrollScaleIn, ScrollStaggeredChildren, ScrollStaggerChild } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
 
 export function LandingPage() {
-  const pricingPlans = [
+  const plans = [
     {
       name: "Prueba Gratuita",
       price: "Gratis",
@@ -58,43 +59,43 @@ export function LandingPage() {
         "3 bots funcionales",
         "5 automatizaciones",
         "Integraciones avanzadas",
-        "API personalizada",
-        "Gerente de cuenta dedicado",
+        "Gestión completa de promociones",
+        "Soporte dedicado",
       ],
       popular: false,
-      cta: "Escalar Negocio",
+      cta: "Comenzar Ahora",
     },
   ]
 
   const features = [
     {
-      icon: Bot,
-      title: "IA Conversacional Avanzada",
-      description: "Chatbots inteligentes que entienden y responden naturalmente a tus clientes",
-    },
-    {
       icon: MessageSquare,
-      title: "Multi-Plataforma",
-      description: "Conecta WhatsApp, Instagram y Email en una sola interfaz",
+      title: "Chatbots Inteligentes",
+      description: "IA avanzada que entiende el contexto y responde como un humano, mejorando cada día con machine learning."
     },
     {
       icon: Users,
       title: "Gestión de Clientes",
-      description: "Sistema completo de puntos, historial y segmentación automática",
+      description: "Centraliza todas las conversaciones y datos de clientes en un solo lugar con segmentación inteligente."
     },
     {
       icon: Zap,
-      title: "Automatización Inteligente",
-      description: "Campañas automáticas basadas en comportamiento y fechas especiales",
-    },
+      title: "Automatización Total",
+      description: "Workflows personalizados que se adaptan a tu negocio, desde leads hasta postventa automático."
+    }
   ]
 
   const testimonials = [
     {
+      name: "Roberto Fernández",
+      business: "Viñedo San Rafael",
+      content: "Implementamos UcoBot para nuestras catas y ventas online. En 3 meses aumentamos las conversiones un 240%.",
+      rating: 5,
+    },
+    {
       name: "María González",
-      business: "Parrilla El Quincho - Mendoza",
-      content:
-        "Desde que uso UcoBot, las reservas aumentaron 40%. Los turistas pueden reservar en cualquier horario y nosotros nunca perdemos un cliente.",
+      business: "Hotel Boutique - Luján de Cuyo",
+      content: "La automatización de reservas y consultas nos permite enfocarnos en la experiencia del huésped. Increíble herramienta.",
       rating: 5,
     },
     {
@@ -115,124 +116,88 @@ export function LandingPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <FadeIn>
-        <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container flex h-16 items-center justify-between">
-            <motion.div 
-              className="flex items-center space-x-2"
-              whileHover={{ scale: 1.05 }}
-              transition={{ type: "spring", stiffness: 400, damping: 10 }}
-            >
-              <Bot className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">UcoBot</span>
-            </motion.div>
-            <nav className="hidden md:flex items-center space-x-6">
-              <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
-                <Link href="#features" className="text-sm font-medium hover:text-primary transition-colors">
-                  Características
-                </Link>
-              </motion.div>
-              <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
-                <Link href="#pricing" className="text-sm font-medium hover:text-primary transition-colors">
-                  Precios
-                </Link>
-              </motion.div>
-              <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
-                <Link href="#testimonials" className="text-sm font-medium hover:text-primary transition-colors">
-                  Testimonios
-                </Link>
-              </motion.div>
-            </nav>
-            <div className="flex items-center space-x-4">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button variant="ghost" asChild>
-                  <Link href="/login">Iniciar Sesión</Link>
-                </Button>
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button asChild>
-                  <Link href="/register">Comenzar Gratis</Link>
-                </Button>
-              </motion.div>
-            </div>
+        <header className="flex items-center justify-between p-4 sm:p-6">
+          <div className="flex items-center space-x-2">
+            <Bot className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+            <span className="text-xl sm:text-2xl font-bold">UcoBot</span>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Button variant="ghost" asChild className="hidden sm:inline-flex">
+              <Link href="/login">Iniciar Sesión</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/register">Comenzar Gratis</Link>
+            </Button>
           </div>
         </header>
       </FadeIn>
 
       {/* Hero Section */}
-      <section className="py-20 px-4">
+      <section className="py-12 sm:py-16 lg:py-20 px-4">
         <div className="container mx-auto text-center">
-          <FadeIn delay={0.1}>
-            <Badge variant="secondary" className="mb-4">
-              🏔️ Tecnología argentina desde Mendoza
+          <SlideUp>
+            <Badge variant="secondary" className="mb-4 sm:mb-6">
+              Desde Mendoza para el mundo
             </Badge>
-          </FadeIn>
-          <SlideUp delay={0.2}>
-            <h1 className="text-4xl md:text-6xl font-bold text-balance mb-6">
-              Desde Mendoza para todo el país: <span className="text-primary">Chatbots Inteligentes</span>
-            </h1>
           </SlideUp>
-          <FadeIn delay={0.3}>
-            <p className="text-xl text-muted-foreground text-balance mb-8 max-w-3xl mx-auto">
-              UcoBot nació en el corazón de Mendoza con la misión de democratizar la automatización para los negocios argentinos.
-              Conecta WhatsApp, Instagram y Email con la calidez del servicio mendocino.
+          <FadeIn delay={0.2}>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 sm:mb-6 text-balance">
+              Automatiza tu atención al cliente con{" "}
+              <span className="text-primary">Inteligencia Artificial</span>
+            </h1>
+            <p className="text-lg sm:text-xl text-muted-foreground mb-6 sm:mb-8 text-balance max-w-3xl mx-auto px-4">
+              Convierte visitantes en clientes fieles con chatbots inteligentes que nunca duermen. 
+              Creado en Mendoza, inspirado en la excelencia vitivinícola argentina.
             </p>
           </FadeIn>
           <ScaleIn delay={0.4}>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button size="lg" className="text-lg px-8" asChild>
+                <Button size="lg" className="text-base sm:text-lg px-6 sm:px-8 w-full sm:w-auto" asChild>
                   <Link href="/register">
-                    Comenzar Prueba Gratuita
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                    Prueba Gratis por 14 Días
+                    <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
                   </Link>
                 </Button>
               </motion.div>
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent">
+                <Button size="lg" variant="outline" className="text-base sm:text-lg px-6 sm:px-8 w-full sm:w-auto">
                   Ver Demo en Vivo
                 </Button>
               </motion.div>
             </div>
           </ScaleIn>
-          <FadeIn delay={0.5}>
-            <p className="text-sm text-muted-foreground mt-4">
-              ✅ Sin tarjeta de crédito • ✅ Configuración en 5 minutos • ✅ Soporte en español
-            </p>
-          </FadeIn>
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 px-4 bg-muted/50">
+      <section className="py-12 sm:py-16 lg:py-20 px-4 bg-muted/50">
         <div className="container mx-auto">
-          <ScrollFadeIn>
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Todo lo que necesitas para automatizar tu negocio</h2>
-              <p className="text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
-                Herramientas poderosas diseñadas para aumentar tus ventas y mejorar la experiencia del cliente
+          <ScrollSlideUp>
+            <div className="text-center mb-8 sm:mb-12">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">¿Por qué UcoBot?</h2>
+              <p className="text-lg sm:text-xl text-muted-foreground text-balance max-w-2xl mx-auto px-4">
+                Desarrollado con el espíritu innovador de Mendoza, combinando tecnología de punta con la pasión argentina por la excelencia.
               </p>
             </div>
-          </ScrollFadeIn>
+          </ScrollSlideUp>
           <ScrollStaggeredChildren>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
               {features.map((feature, index) => (
-                <ScrollStaggerChild key={index}>
-                  <motion.div whileHover={{ y: -8, scale: 1.02 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                    <Card className="text-center hover:shadow-lg transition-shadow h-full">
-                      <CardHeader>
-                        <motion.div
-                          whileHover={{ rotate: 360 }}
-                          transition={{ duration: 0.6, ease: "easeInOut" }}
-                        >
-                          <feature.icon className="h-12 w-12 text-primary mx-auto mb-4" />
-                        </motion.div>
-                        <CardTitle className="text-xl">{feature.title}</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <CardDescription className="text-base">{feature.description}</CardDescription>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+                <ScrollStaggerChild key={index} index={index}>
+                  <Card className="h-full hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+                    <CardHeader className="text-center pb-4">
+                      <div className="mx-auto mb-4 p-3 rounded-full bg-primary/10 w-fit">
+                        <feature.icon className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                      </div>
+                      <CardTitle className="text-lg sm:text-xl mb-2">{feature.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-center">
+                      <CardDescription className="text-sm sm:text-base leading-relaxed">
+                        {feature.description}
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
                 </ScrollStaggerChild>
               ))}
             </div>
@@ -240,121 +205,108 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* About UcoBot Section */}
-      <section className="py-20 px-4 bg-muted/30">
+      {/* Story Section - UcoBot Origins */}
+      <section className="py-12 sm:py-16 lg:py-20 px-4">
         <div className="container mx-auto">
-          <ScrollFadeIn>
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">¿Por qué UcoBot?</h2>
-              <p className="text-xl text-muted-foreground text-balance max-w-3xl mx-auto">
-                Nuestra historia comenzó en las montañas de Mendoza, donde entendimos que cada negocio argentino 
-                merece herramientas de primer mundo sin la complejidad internacional.
-              </p>
-            </div>
-          </ScrollFadeIn>
-          
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 items-center">
             <ScrollSlideUp>
-              <div className="space-y-6">
-                <div className="flex items-start space-x-4">
-                  <div className="w-3 h-3 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">Nacido en Mendoza 🍷</h3>
-                    <p className="text-muted-foreground">
-                      Desde el corazón de Cuyo, desarrollamos UcoBot con la filosofía mendocina: 
-                      trabajo honesto, tecnología accesible y trato cercano.
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-4">
-                  <div className="w-3 h-3 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">Para Argentina y Latinoamérica 🇦🇷</h3>
-                    <p className="text-muted-foreground">
-                      Entendemos las particularidades del mercado local: horarios, modismos, 
-                      festividades y la importancia del trato personalizado.
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-4">
-                  <div className="w-3 h-3 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">Tecnología Simple y Poderosa ⚡</h3>
-                    <p className="text-muted-foreground">
-                      Porque creemos que la automatización no debería ser complicada. 
-                      UcoBot es fácil de usar pero potente en resultados.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </ScrollSlideUp>
-            
-            <ScrollSlideUp delay={0.2}>
-              <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-2xl p-8 border">
-                <div className="text-center space-y-4">
-                  <div className="text-4xl mb-4">🏔️</div>
-                  <h3 className="text-2xl font-bold text-primary">El espíritu mendocino</h3>
-                  <p className="text-lg text-muted-foreground italic">
-                    "Como el vino mendocino, UcoBot se ha desarrollado con paciencia, 
-                    dedicación y el orgullo de representar lo mejor de nuestra tierra."
+              <div className="space-y-4 sm:space-y-6">
+                <Badge variant="outline" className="w-fit">Nuestra Historia</Badge>
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-balance">
+                  Nacido en el corazón vitivinícola de Argentina
+                </h2>
+                <div className="space-y-4 text-muted-foreground">
+                  <p className="text-base sm:text-lg leading-relaxed">
+                    UcoBot surge en Mendoza, inspirado en la tradición familiar de elaborar los mejores vinos. 
+                    Como los viñateros cuidan cada cepa, nosotros cuidamos cada interacción de tus clientes.
                   </p>
-                  <div className="pt-4">
-                    <p className="text-sm text-muted-foreground">
-                      - Equipo UcoBot, Mendoza, Argentina
-                    </p>
-                  </div>
+                  <p className="text-base sm:text-lg leading-relaxed">
+                    Desde las faldas de la Cordillera de Los Andes, combinamos la pasión argentina por la excelencia 
+                    con tecnología de vanguardia para revolucionar la atención al cliente.
+                  </p>
+                  <p className="text-base sm:text-lg leading-relaxed">
+                    Cada chatbot que creamos lleva el ADN mendocino: <strong>calidad, dedicación y resultados excepcionales</strong>.
+                  </p>
                 </div>
               </div>
             </ScrollSlideUp>
+            <ScrollScaleIn delay={0.2}>
+              <div className="relative">
+                <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 p-4 sm:p-6">
+                  <div className="h-full w-full rounded-xl overflow-hidden shadow-2xl relative">
+                    <Image
+                      src="/uco.jpg"
+                      alt="Valle de Uco, Mendoza - Inspiración de UcoBot"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      priority
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                    <div className="absolute bottom-4 left-4 right-4 text-white">
+                      <div className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-1">Valle de Uco</div>
+                      <div className="text-sm sm:text-base opacity-90">Mendoza, Argentina</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ScrollScaleIn>
           </div>
         </div>
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-4">
+      <section className="py-12 sm:py-16 lg:py-20 px-4 bg-muted/50">
         <div className="container mx-auto">
           <ScrollSlideUp>
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Planes diseñados para cada etapa de tu negocio</h2>
-              <p className="text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
-                Desde startups hasta empresas establecidas, tenemos el plan perfecto para ti
+            <div className="text-center mb-8 sm:mb-12">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Planes que se adaptan a tu crecimiento</h2>
+              <p className="text-lg sm:text-xl text-muted-foreground text-balance max-w-2xl mx-auto px-4">
+                Desde emprendedores hasta grandes empresas, tenemos la solución perfecta para vos
               </p>
             </div>
           </ScrollSlideUp>
           <ScrollStaggeredChildren>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {pricingPlans.map((plan, index) => (
-                <ScrollStaggerChild key={index}>
-                  <motion.div whileHover={{ y: -5, scale: 1.02 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                    <Card className={`relative ${plan.popular ? "border-primary shadow-lg scale-105" : ""} h-full`}>
-                      {plan.popular && (
-                        <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2">Más Popular</Badge>
-                      )}
-                      <CardHeader className="text-center">
-                        <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                        <div className="text-3xl font-bold text-primary">
-                          {plan.price}
-                          <span className="text-sm text-muted-foreground font-normal">{plan.duration}</span>
-                        </div>
-                        <CardDescription>{plan.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <ul className="space-y-2">
-                          {plan.features.map((feature, featureIndex) => (
-                            <li key={featureIndex} className="flex items-center">
-                              <Check className="h-4 w-4 text-primary mr-2 flex-shrink-0" />
-                              <span className="text-sm">{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <Button className="w-full" variant={plan.popular ? "default" : "outline"} asChild>
-                          <Link href="/register">{plan.cta}</Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+              {plans.map((plan, index) => (
+                <ScrollStaggerChild key={index} index={index}>
+                  <Card className={`relative h-full hover:shadow-lg transition-all duration-300 hover:-translate-y-1 ${
+                    plan.popular ? "border-primary ring-1 ring-primary" : ""
+                  }`}>
+                    {plan.popular && (
+                      <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-primary">
+                        Más Popular
+                      </Badge>
+                    )}
+                    <CardHeader className="text-center pb-3 lg:pb-4">
+                      <CardTitle className="text-base lg:text-lg">{plan.name}</CardTitle>
+                      <div className="space-y-1">
+                        <div className="text-xl lg:text-2xl font-bold">{plan.price}</div>
+                        <div className="text-xs lg:text-sm text-muted-foreground">{plan.duration}</div>
+                      </div>
+                      <CardDescription className="text-xs lg:text-sm">{plan.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3 lg:space-y-4 pt-3 lg:pt-4">
+                      <ul className="space-y-1.5 lg:space-y-2">
+                        {plan.features.map((feature, featureIndex) => (
+                          <li key={featureIndex} className="flex items-start gap-2">
+                            <Check className="h-3 w-3 lg:h-4 lg:w-4 text-primary mt-0.5 flex-shrink-0" />
+                            <span className="text-xs lg:text-sm">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <Button 
+                        className="w-full mt-4 lg:mt-6 text-xs lg:text-sm" 
+                        size="sm"
+                        variant={plan.popular ? "default" : "outline"}
+                        asChild
+                      >
+                        <Link href="/register">
+                          {plan.cta}
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </ScrollStaggerChild>
               ))}
             </div>
@@ -363,36 +315,43 @@ export function LandingPage() {
       </section>
 
       {/* Testimonials Section */}
-      <section id="testimonials" className="py-20 px-4 bg-muted/50">
+      <section className="py-12 sm:py-16 lg:py-20 px-4">
         <div className="container mx-auto">
-          <ScrollFadeIn>
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Lo que dicen nuestros clientes</h2>
-              <p className="text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
-                Más de 1,000 negocios confían en nosotros para automatizar su atención al cliente
+          <ScrollSlideUp>
+            <div className="text-center mb-8 sm:mb-12">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Lo que dicen nuestros clientes</h2>
+              <p className="text-lg sm:text-xl text-muted-foreground text-balance max-w-2xl mx-auto px-4">
+                Empresas de toda Argentina confían en UcoBot para crecer
               </p>
             </div>
-          </ScrollFadeIn>
+          </ScrollSlideUp>
           <ScrollStaggeredChildren>
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
               {testimonials.map((testimonial, index) => (
-                <ScrollStaggerChild key={index}>
-                  <motion.div whileHover={{ y: -5 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                    <Card className="hover:shadow-lg transition-shadow h-full">
-                      <CardHeader>
-                        <div className="flex items-center space-x-1 mb-2">
-                          {[...Array(testimonial.rating)].map((_, i) => (
-                            <Star key={i} className="h-4 w-4 fill-primary text-primary" />
-                          ))}
+                <ScrollStaggerChild key={index} index={index}>
+                  <Card className="h-full hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex mb-3 sm:mb-4">
+                        {[...Array(testimonial.rating)].map((_, i) => (
+                          <Star key={i} className="h-4 w-4 sm:h-5 sm:w-5 fill-primary text-primary" />
+                        ))}
+                      </div>
+                      <blockquote className="text-sm sm:text-base mb-4 leading-relaxed italic">
+                        "{testimonial.content}"
+                      </blockquote>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-xs sm:text-sm font-semibold text-primary">
+                            {testimonial.name.split(' ').map(n => n[0]).join('')}
+                          </span>
                         </div>
-                        <CardTitle className="text-lg">{testimonial.name}</CardTitle>
-                        <CardDescription>{testimonial.business}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-muted-foreground italic">"{testimonial.content}"</p>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+                        <div>
+                          <div className="font-semibold text-sm sm:text-base">{testimonial.name}</div>
+                          <div className="text-xs sm:text-sm text-muted-foreground">{testimonial.business}</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </ScrollStaggerChild>
               ))}
             </div>
@@ -401,31 +360,31 @@ export function LandingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 bg-primary text-primary-foreground">
+      <section className="py-12 sm:py-16 lg:py-20 px-4 bg-primary text-primary-foreground">
         <div className="container mx-auto text-center">
           <ScrollSlideUp>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">¿Listo para automatizar tu negocio?</h2>
-            <p className="text-xl mb-8 text-primary-foreground/90 text-balance max-w-2xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 px-2">¿Listo para automatizar tu negocio?</h2>
+            <p className="text-lg sm:text-xl mb-6 sm:mb-8 text-primary-foreground/90 text-balance max-w-2xl mx-auto px-4">
               Únete a miles de empresas que ya están aumentando sus ventas con chatbots inteligentes
             </p>
           </ScrollSlideUp>
           <ScrollScaleIn delay={0.2}>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button size="lg" variant="secondary" className="text-lg px-8" asChild>
+                <Button size="lg" variant="secondary" className="text-base sm:text-lg px-6 sm:px-8 w-full sm:w-auto" asChild>
                   <Link href="/register">
                     Comenzar Ahora - Es Gratis
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                    <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
                   </Link>
                 </Button>
               </motion.div>
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="text-lg px-8 border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary bg-transparent"
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  className="text-base sm:text-lg px-6 sm:px-8 bg-transparent border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary w-full sm:w-auto"
                 >
-                  Hablar con Ventas
+                  Hablar con un Experto
                 </Button>
               </motion.div>
             </div>
@@ -434,95 +393,95 @@ export function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-4 border-t">
+      <footer className="py-8 sm:py-10 lg:py-12 px-4 border-t">
         <div className="container mx-auto">
-          <div className="grid md:grid-cols-4 gap-8">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+            <div className="sm:col-span-2 lg:col-span-1">
               <div className="flex items-center space-x-2 mb-4">
-                <Bot className="h-6 w-6 text-primary" />
-                <span className="text-lg font-bold">UcoBot</span>
+                <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                <span className="text-base sm:text-lg font-bold">UcoBot</span>
               </div>
-              <p className="text-muted-foreground text-sm">
+              <p className="text-muted-foreground text-sm leading-relaxed max-w-sm">
                 La plataforma líder en automatización de chatbots con IA para fidelización de clientes.
               </p>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Producto</h4>
+              <h4 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Producto</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Características
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Precios
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Integraciones
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     API
                   </Link>
                 </li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Soporte</h4>
+              <h4 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Soporte</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Centro de Ayuda
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Documentación
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Contacto
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Estado del Sistema
                   </Link>
                 </li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Empresa</h4>
+              <h4 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Empresa</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Acerca de
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Blog
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Carreras
                   </Link>
                 </li>
                 <li>
-                  <Link href="#" className="hover:text-primary">
+                  <Link href="#" className="hover:text-primary transition-colors">
                     Privacidad
                   </Link>
                 </li>
               </ul>
             </div>
           </div>
-          <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
+          <div className="border-t mt-6 sm:mt-8 pt-6 sm:pt-8 text-center text-xs sm:text-sm text-muted-foreground">
             <p>&copy; 2024 UcoBot. Todos los derechos reservados.</p>
           </div>
         </div>
