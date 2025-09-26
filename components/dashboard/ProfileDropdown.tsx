@@ -362,7 +362,7 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
                     </svg>
                   </motion.div>
                   <span className="text-neutral-900 dark:text-white font-medium">
-                    BotSASS
+                    UcoBot
                   </span>
                 </div>
                 <div className="text-neutral-500 dark:text-neutral-400 text-sm">

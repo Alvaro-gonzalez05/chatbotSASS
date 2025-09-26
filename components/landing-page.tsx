@@ -92,21 +92,21 @@ export function LandingPage() {
   const testimonials = [
     {
       name: "María González",
-      business: "Restaurante La Cocina",
+      business: "Parrilla El Quincho - Mendoza",
       content:
-        "Nuestras reservas aumentaron 40% desde que implementamos el chatbot. Los clientes aman la atención 24/7.",
+        "Desde que uso UcoBot, las reservas aumentaron 40%. Los turistas pueden reservar en cualquier horario y nosotros nunca perdemos un cliente.",
       rating: 5,
     },
     {
       name: "Carlos Ruiz",
-      business: "Tienda Fashion Style",
-      content: "El sistema de puntos ha mejorado increíblemente la fidelidad de nuestros clientes. ROI del 300%.",
+      business: "Bodega Familiar - Maipú",
+      content: "El sistema automatiza las visitas a la bodega y el programa de puntos para nuestros vinos. ROI increíble del 300%.",
       rating: 5,
     },
     {
       name: "Ana Martínez",
-      business: "Spa Wellness",
-      content: "La automatización de citas y recordatorios nos ahorra 10 horas semanales. Imprescindible.",
+      business: "Spa Termas - Las Leñas",
+      content: "UcoBot maneja nuestras reservas de temporada alta automáticamente. Nos ahorra 15 horas semanales en atención.",
       rating: 5,
     },
   ]
@@ -123,7 +123,7 @@ export function LandingPage() {
               transition={{ type: "spring", stiffness: 400, damping: 10 }}
             >
               <Bot className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">BotSaaS</span>
+              <span className="text-xl font-bold">UcoBot</span>
             </motion.div>
             <nav className="hidden md:flex items-center space-x-6">
               <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
@@ -163,18 +163,18 @@ export function LandingPage() {
         <div className="container mx-auto text-center">
           <FadeIn delay={0.1}>
             <Badge variant="secondary" className="mb-4">
-              🚀 Automatización con IA para tu negocio
+              🏔️ Tecnología argentina desde Mendoza
             </Badge>
           </FadeIn>
           <SlideUp delay={0.2}>
             <h1 className="text-4xl md:text-6xl font-bold text-balance mb-6">
-              Transforma tu atención al cliente con <span className="text-primary">Chatbots Inteligentes</span>
+              Desde Mendoza para todo el país: <span className="text-primary">Chatbots Inteligentes</span>
             </h1>
           </SlideUp>
           <FadeIn delay={0.3}>
             <p className="text-xl text-muted-foreground text-balance mb-8 max-w-3xl mx-auto">
-              Automatiza conversaciones, fideliza clientes y aumenta ventas con nuestra plataforma de chatbots con IA.
-              Conecta WhatsApp, Instagram y Email en minutos.
+              UcoBot nació en el corazón de Mendoza con la misión de democratizar la automatización para los negocios argentinos.
+              Conecta WhatsApp, Instagram y Email con la calidez del servicio mendocino.
             </p>
           </FadeIn>
           <ScaleIn delay={0.4}>
@@ -237,6 +237,78 @@ export function LandingPage() {
               ))}
             </div>
           </ScrollStaggeredChildren>
+        </div>
+      </section>
+
+      {/* About UcoBot Section */}
+      <section className="py-20 px-4 bg-muted/30">
+        <div className="container mx-auto">
+          <ScrollFadeIn>
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">¿Por qué UcoBot?</h2>
+              <p className="text-xl text-muted-foreground text-balance max-w-3xl mx-auto">
+                Nuestra historia comenzó en las montañas de Mendoza, donde entendimos que cada negocio argentino 
+                merece herramientas de primer mundo sin la complejidad internacional.
+              </p>
+            </div>
+          </ScrollFadeIn>
+          
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <ScrollSlideUp>
+              <div className="space-y-6">
+                <div className="flex items-start space-x-4">
+                  <div className="w-3 h-3 bg-primary rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2">Nacido en Mendoza 🍷</h3>
+                    <p className="text-muted-foreground">
+                      Desde el corazón de Cuyo, desarrollamos UcoBot con la filosofía mendocina: 
+                      trabajo honesto, tecnología accesible y trato cercano.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-4">
+                  <div className="w-3 h-3 bg-primary rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2">Para Argentina y Latinoamérica 🇦🇷</h3>
+                    <p className="text-muted-foreground">
+                      Entendemos las particularidades del mercado local: horarios, modismos, 
+                      festividades y la importancia del trato personalizado.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-4">
+                  <div className="w-3 h-3 bg-primary rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <h3 className="text-xl font-semibold mb-2">Tecnología Simple y Poderosa ⚡</h3>
+                    <p className="text-muted-foreground">
+                      Porque creemos que la automatización no debería ser complicada. 
+                      UcoBot es fácil de usar pero potente en resultados.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </ScrollSlideUp>
+            
+            <ScrollSlideUp delay={0.2}>
+              <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-2xl p-8 border">
+                <div className="text-center space-y-4">
+                  <div className="text-4xl mb-4">🏔️</div>
+                  <h3 className="text-2xl font-bold text-primary">El espíritu mendocino</h3>
+                  <p className="text-lg text-muted-foreground italic">
+                    "Como el vino mendocino, UcoBot se ha desarrollado con paciencia, 
+                    dedicación y el orgullo de representar lo mejor de nuestra tierra."
+                  </p>
+                  <div className="pt-4">
+                    <p className="text-sm text-muted-foreground">
+                      - Equipo UcoBot, Mendoza, Argentina
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </ScrollSlideUp>
+          </div>
         </div>
       </section>
 
@@ -368,7 +440,7 @@ export function LandingPage() {
             <div>
               <div className="flex items-center space-x-2 mb-4">
                 <Bot className="h-6 w-6 text-primary" />
-                <span className="text-lg font-bold">ChatBot Pro</span>
+                <span className="text-lg font-bold">UcoBot</span>
               </div>
               <p className="text-muted-foreground text-sm">
                 La plataforma líder en automatización de chatbots con IA para fidelización de clientes.
@@ -451,7 +523,7 @@ export function LandingPage() {
             </div>
           </div>
           <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; 2024 ChatBot Pro. Todos los derechos reservados.</p>
+            <p>&copy; 2024 UcoBot. Todos los derechos reservados.</p>
           </div>
         </div>
       </footer>

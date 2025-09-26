@@ -6,7 +6,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { motion, easeOut } from 'framer-motion'
-import { MoveRight, Bot, Check } from 'lucide-react'
+import { MoveRight, Check } from 'lucide-react'
+import Image from 'next/image'
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("")
@@ -116,8 +117,8 @@ export default function RegisterPage() {
         >
           <motion.div variants={itemVariants} className="text-center mb-6">
             <div className="flex items-center justify-center space-x-2 mb-4">
-              <Bot className="h-8 w-8 text-primary" />
-              <span className="text-2xl font-bold">BotSASS</span>
+              <Image src="/ucobot-logo.png" alt="UcoBot" width={32} height={32} />
+              <span className="text-2xl font-bold">UcoBot</span>
             </div>
           </motion.div>
 

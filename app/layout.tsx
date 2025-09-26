@@ -7,8 +7,8 @@ import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BotSaaS - Chatbots para tu Negocio',
-  description: 'Plataforma SaaS para crear chatbots inteligentes para WhatsApp, Instagram y Email',
+  title: 'UcoBot - ChatBot Para Negocios',
+  description: 'Plataforma argentina para crear chatbots inteligentes. Desde Mendoza para todo el país.',
   generator: 'Next.js',
 }
 
@@ -19,6 +19,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/favicon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/favicon.png" />
+      </head>
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"

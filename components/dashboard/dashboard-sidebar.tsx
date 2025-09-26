@@ -6,8 +6,8 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import Image from "next/image"
 import {
-  Bot,
   Users,
   Gift,
   Settings,
@@ -33,7 +33,7 @@ const navigation = [
   {
     name: "Bots",
     href: "/dashboard/bots",
-    icon: Bot,
+    icon: Users, // Temporalmente uso Users, luego lo cambiaré por el logo
   },
   {
     name: "Promociones",
@@ -72,8 +72,8 @@ export function DashboardSidebar() {
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
         {!collapsed && (
           <div className="flex items-center space-x-2">
-            <Bot className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold text-sidebar-foreground">ChatBot Pro</span>
+            <Image src="/ucobot-logo.png" alt="UcoBot" width={24} height={24} className="text-primary" />
+            <span className="text-lg font-bold text-sidebar-foreground">UcoBot</span>
           </div>
         )}
         <Button
@@ -114,7 +114,7 @@ export function DashboardSidebar() {
       {/* Footer */}
       {!collapsed && (
         <div className="p-4 border-t border-sidebar-border">
-          <div className="text-xs text-sidebar-foreground/60 text-center">ChatBot Pro v1.0</div>
+          <div className="text-xs text-sidebar-foreground/60 text-center">UcoBot v1.0</div>
         </div>
       )}
     </div>

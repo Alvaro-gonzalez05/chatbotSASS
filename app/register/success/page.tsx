@@ -10,7 +10,7 @@ export default function RegisterSuccessPage() {
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center space-x-2 mb-4">
             <Bot className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold">ChatBot Pro</span>
+            <span className="text-2xl font-bold">UcoBot</span>
           </div>
         </div>
 
