@@ -78,10 +78,16 @@ export default function LoginPage() {
     setError(null)
 
     try {
+      // Detectar si estamos en producción o desarrollo
+      const currentOrigin = window.location.origin
+      const redirectUrl = currentOrigin.includes('localhost') 
+        ? `${currentOrigin}/login` 
+        : `${currentOrigin}/auth/callback`
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/login`,
+          redirectTo: redirectUrl,
         }
       })
       if (error) throw error
