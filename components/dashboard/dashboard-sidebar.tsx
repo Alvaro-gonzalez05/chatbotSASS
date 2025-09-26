@@ -64,7 +64,7 @@ export function DashboardSidebar() {
   return (
     <div
       className={cn(
-        "flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300",
+        "flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 h-screen",
         collapsed ? "w-16" : "w-64",
       )}
     >
