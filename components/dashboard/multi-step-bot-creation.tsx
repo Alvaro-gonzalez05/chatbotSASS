@@ -352,55 +352,62 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5" />
-            Crear Nuevo Bot - Paso {currentStep} de {totalSteps}
-            {userSubscription && (
-              <Badge variant={hasPaidSubscription() ? "default" : "secondary"} className="ml-2">
-                {hasPaidSubscription() ? (
-                  <>
-                    <Crown className="h-3 w-3 mr-1" />
-                    Premium
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="h-3 w-3 mr-1" />
-                    Prueba
-                  </>
-                )}
-              </Badge>
-            )}
+      <DialogContent className="sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mx-4 sm:mx-0">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+          <DialogTitle className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="text-base sm:text-lg">Crear Nuevo Bot</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm sm:text-base">Paso {currentStep} de {totalSteps}</span>
+              {userSubscription && (
+                <Badge variant={hasPaidSubscription() ? "default" : "secondary"} className="text-xs">
+                  {hasPaidSubscription() ? (
+                    <>
+                      <Crown className="h-3 w-3 mr-1" />
+                      Premium
+                    </>
+                  ) : (
+                    <>
+                      <TestTube className="h-3 w-3 mr-1" />
+                      Prueba
+                    </>
+                  )}
+                </Badge>
+              )}
+            </div>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm sm:text-base">
             Configura tu chatbot paso a paso para obtener los mejores resultados
           </DialogDescription>
           {userSubscription && (
-            <div className="mt-2 text-sm text-muted-foreground">
+            <div className="mt-2 text-xs sm:text-sm text-muted-foreground">
               Bots: {currentBotCount}/{userSubscription.max_bots || 1} utilizados
             </div>
           )}
         </DialogHeader>
 
         {!canCreateBot && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <Bot className="h-5 w-5 text-red-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-red-800">Límite de bots alcanzado</h4>
-                  <p className="text-sm text-red-700 mt-1">
-                    Has alcanzado el límite de {userSubscription?.max_bots || 1} bot(s) para tu plan actual. Actualiza
-                    tu suscripción para crear más bots.
-                  </p>
-                  <Button variant="outline" size="sm" className="mt-2 bg-transparent" onClick={handleClose}>
-                    Ver Planes
-                  </Button>
+          <div className="px-4 sm:px-6">
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <h4 className="text-sm sm:text-base font-medium text-red-800">Límite de bots alcanzado</h4>
+                    <p className="text-xs sm:text-sm text-red-700 mt-1">
+                      Has alcanzado el límite de {userSubscription?.max_bots || 1} bot(s) para tu plan actual. Actualiza
+                      tu suscripción para crear más bots.
+                    </p>
+                    <Button variant="outline" size="sm" className="mt-2 bg-transparent w-full sm:w-auto text-xs sm:text-sm" onClick={handleClose}>
+                      Ver Planes
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Progress indicator */}
@@ -475,19 +482,19 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                   {/* Step 1: Platform Selection */}
                   {currentStep === 1 && (
                     <>
-                      <CardHeader>
-                        <CardTitle>Selecciona la Plataforma</CardTitle>
-                        <CardDescription>
+                      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                        <CardTitle className="text-lg sm:text-xl">Selecciona la Plataforma</CardTitle>
+                        <CardDescription className="text-sm sm:text-base">
                           ¿En qué plataforma quieres que funcione tu bot?
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <motion.div variants={fadeInUp} className="space-y-4">
-                          <Label>Selecciona una plataforma</Label>
+                      <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
+                        <motion.div variants={fadeInUp} className="space-y-3 sm:space-y-4">
+                          <Label className="text-sm sm:text-base font-medium">Selecciona una plataforma</Label>
                           <RadioGroup
                             value={formData.platform}
                             onValueChange={(value) => setFormData({ ...formData, platform: value as any })}
-                            className="space-y-2"
+                            className="space-y-2 sm:space-y-3"
                           >
                             {Object.entries(platformLabels).map(([key, label], index) => {
                               const Icon = platformIcons[key as keyof typeof platformIcons]
@@ -495,7 +502,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                                 <motion.div
                                   key={key}
                                   className={cn(
-                                    "flex items-center space-x-2 rounded-md border p-4 cursor-pointer transition-colors group",
+                                    "flex items-center space-x-2 sm:space-x-3 rounded-md border p-3 sm:p-4 cursor-pointer transition-colors group",
                                     formData.platform === key ? "bg-accent" : "hover:bg-accent"
                                   )}
                                   whileHover={{ scale: 1.02 }}
@@ -518,22 +525,23 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                                   }}
                                   onClick={() => setFormData({ ...formData, platform: key as any })}
                                 >
-                                  <RadioGroupItem value={key} id={`platform-${key}`} />
-                                  <div className="flex items-center gap-3 flex-1">
-                                    <Icon className={cn("h-6 w-6 transition-colors", formData.platform === key ? "text-white" : "text-primary group-hover:text-white")} />
-                                    <div className={cn("flex-1", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
-                                      <Label htmlFor={`platform-${key}`} className={cn("cursor-pointer font-medium transition-colors", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
+                                  <RadioGroupItem value={key} id={`platform-${key}`} className="flex-shrink-0" />
+                                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                                    <Icon className={cn("h-5 w-5 sm:h-6 sm:w-6 transition-colors flex-shrink-0", formData.platform === key ? "text-white" : "text-primary group-hover:text-white")} />
+                                    <div className={cn("flex-1 min-w-0", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
+                                      <Label htmlFor={`platform-${key}`} className={cn("cursor-pointer text-sm sm:text-base font-medium transition-colors", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
                                         {label}
                                       </Label>
-                                      <p className={cn("text-sm mt-1 transition-colors", formData.platform === key ? "text-white" : "text-muted-foreground group-hover:text-white")}> 
+                                      <p className={cn("text-xs sm:text-sm mt-1 transition-colors", formData.platform === key ? "text-white" : "text-muted-foreground group-hover:text-white")}> 
                                         {key === "whatsapp" && "Ideal para atención al cliente directa"}
                                         {key === "instagram" && "Perfecto para engagement en redes sociales"}
                                         {key === "email" && "Excelente para respuestas automáticas"}
                                       </p>
                                     </div>
                                     {!hasPaidSubscription() && (
-                                      <Badge variant="outline" className={cn("text-xs transition-colors", formData.platform === key ? "text-white border-white" : "group-hover:text-white group-hover:border-white")}> 
-                                        Solo prueba
+                                      <Badge variant="outline" className={cn("text-xs transition-colors flex-shrink-0", formData.platform === key ? "text-white border-white" : "group-hover:text-white group-hover:border-white")}> 
+                                        <span className="hidden sm:inline">Solo prueba</span>
+                                        <span className="sm:hidden">Prueba</span>
                                       </Badge>
                                     )}
                                   </div>
@@ -568,33 +576,33 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                   {/* Step 2: Bot Configuration */}
                   {currentStep === 2 && (
                     <>
-                      <CardHeader>
-                        <CardTitle>Configura tu Bot</CardTitle>
-                        <CardDescription>
+                      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                        <CardTitle className="text-lg sm:text-xl">Configura tu Bot</CardTitle>
+                        <CardDescription className="text-sm sm:text-base">
                           Dale personalidad y nombre a tu asistente virtual
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-4">
+                      <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
                         <motion.div variants={fadeInUp} className="space-y-2">
-                          <Label htmlFor="bot-name">Nombre del Bot *</Label>
+                          <Label htmlFor="bot-name" className="text-sm sm:text-base font-medium">Nombre del Bot *</Label>
                           <Input
                             id="bot-name"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             placeholder="Asistente Virtual de Mi Negocio"
-                            className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            className="text-sm sm:text-base transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
                           />
                         </motion.div>
 
                         <motion.div variants={fadeInUp} className="space-y-2">
-                          <Label htmlFor="personality">Personalidad y Prompt *</Label>
+                          <Label htmlFor="personality" className="text-sm sm:text-base font-medium">Personalidad y Prompt *</Label>
                           <Textarea
                             id="personality"
                             value={formData.personality_prompt}
                             onChange={(e) => setFormData({ ...formData, personality_prompt: e.target.value })}
                             placeholder="Eres un asistente amigable y profesional que ayuda a los clientes de [tu negocio]. Siempre respondes de manera cortés y útil..."
-                            rows={6}
-                            className="min-h-[120px] transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            rows={4}
+                            className="min-h-[100px] sm:min-h-[120px] text-sm sm:text-base transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
                           />
                           <p className="text-xs text-muted-foreground">
                             Define cómo debe comportarse tu bot, su tono de voz y estilo de comunicación
@@ -602,12 +610,12 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                         </motion.div>
 
                         <motion.div variants={fadeInUp} className="space-y-2">
-                          <Label>Funcionalidades del Bot</Label>
-                          <div className="grid grid-cols-1 gap-2">
+                          <Label className="text-sm sm:text-base font-medium">Funcionalidades del Bot</Label>
+                          <div className="grid grid-cols-1 gap-2 sm:gap-3">
                             {availableFeatures.map((feature, index) => (
                               <motion.div
                                 key={feature.id}
-                                className="flex items-center space-x-2 rounded-md border p-3 cursor-pointer hover:bg-accent transition-colors"
+                                className="flex items-center space-x-2 sm:space-x-3 rounded-md border p-2 sm:p-3 cursor-pointer hover:bg-accent transition-colors"
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 transition={{ duration: 0.2 }}
@@ -644,20 +652,20 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                   {currentStep === 3 && (
                     <>
                       <CardHeader>
-                        <CardTitle>Configuración de IA</CardTitle>
-                        <CardDescription>
+                        <CardTitle className="text-lg sm:text-xl">Configuración de IA</CardTitle>
+                        <CardDescription className="text-sm sm:text-base">
                           Conecta tu API de Gemini para que el bot funcione
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-4">
+                      <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
                         <motion.div variants={fadeInUp}>
                           <Card className="border-amber-200 bg-amber-50">
-                            <CardContent className="p-4">
-                              <div className="flex items-start gap-3">
-                                <Key className="h-5 w-5 text-amber-600 mt-0.5" />
-                                <div>
-                                  <h4 className="font-medium text-amber-800">¿Cómo obtener tu API Key?</h4>
-                                  <ol className="text-sm text-amber-700 mt-2 space-y-1">
+                            <CardContent className="p-3 sm:p-4">
+                              <div className="flex items-start gap-2 sm:gap-3">
+                                <Key className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <h4 className="text-sm sm:text-base font-medium text-amber-800">¿Cómo obtener tu API Key?</h4>
+                                  <ol className="text-xs sm:text-sm text-amber-700 mt-2 space-y-1">
                                     <li>
                                       1. Ve a{" "}
                                       <a
@@ -680,7 +688,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                         </motion.div>
 
                         <motion.div variants={fadeInUp} className="space-y-2">
-                          <Label htmlFor="gemini-key">API Key de Gemini *</Label>
+                          <Label htmlFor="gemini-key" className="text-sm sm:text-base font-medium">API Key de Gemini *</Label>
                           <Input
                             id="gemini-key"
                             type="password"
@@ -899,30 +907,39 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                 </motion.div>
               </AnimatePresence>
 
-              <CardFooter className="flex justify-between pt-6 pb-4">
+              <CardFooter className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 sm:pt-6 pb-4 px-4 sm:px-6">
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  className="w-full sm:w-auto"
                 >
                   <Button
                     type="button"
                     variant="outline"
                     onClick={prevStep}
                     disabled={currentStep === 1}
-                    className="flex items-center gap-1 transition-all duration-300 rounded-2xl"
+                    className="flex items-center justify-center gap-1 transition-all duration-300 rounded-2xl w-full sm:w-auto text-sm sm:text-base"
                   >
-                    <ChevronLeft className="h-4 w-4" /> Anterior
+                    <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" /> 
+                    <span className="hidden sm:inline">Anterior</span>
+                    <span className="sm:hidden">Atrás</span>
                   </Button>
                 </motion.div>
 
-                <div className="flex gap-2">
-                  <Button type="button" variant="ghost" onClick={handleClose}>
+                <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-2 w-full sm:w-auto">
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    onClick={handleClose}
+                    className="w-full sm:w-auto text-sm sm:text-base"
+                  >
                     Cancelar
                   </Button>
 
                   <motion.div
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    className="w-full sm:w-auto"
                   >
                     {currentStep < totalSteps ? (
                       <Button
@@ -933,16 +950,19 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                           (currentStep === 2 && !canProceedStep2) ||
                           (currentStep === 3 && !canProceedStep3)
                         }
-                        className="flex items-center gap-1 transition-all duration-300 rounded-2xl"
+                        className="flex items-center justify-center gap-1 transition-all duration-300 rounded-2xl w-full sm:w-auto text-sm sm:text-base"
                       >
                         {isLoading ? (
                           <>
-                            <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
+                            <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> 
+                            <span className="hidden sm:inline">Cargando...</span>
+                            <span className="sm:hidden">...</span>
                           </>
                         ) : (
                           <>
-                            Siguiente
-                            <ChevronRight className="h-4 w-4" />
+                            <span className="hidden sm:inline">Siguiente</span>
+                            <span className="sm:hidden">Continuar</span>
+                            <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
                           </>
                         )}
                       </Button>
@@ -950,16 +970,19 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                       <Button
                         onClick={handleCreateBot}
                         disabled={isLoading || !canCreateBot}
-                        className="flex items-center gap-1 transition-all duration-300 rounded-2xl"
+                        className="flex items-center justify-center gap-1 transition-all duration-300 rounded-2xl w-full sm:w-auto text-sm sm:text-base"
                       >
                         {isLoading ? (
                           <>
-                            <Loader2 className="h-4 w-4 animate-spin" /> Creando...
+                            <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> 
+                            <span className="hidden sm:inline">Creando...</span>
+                            <span className="sm:hidden">...</span>
                           </>
                         ) : (
                           <>
-                            Crear Bot
-                            <Check className="h-4 w-4" />
+                            <span className="hidden sm:inline">Crear Bot</span>
+                            <span className="sm:hidden">Crear</span>
+                            <Check className="h-3 w-3 sm:h-4 sm:w-4" />
                           </>
                         )}
                       </Button>

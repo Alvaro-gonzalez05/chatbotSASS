@@ -314,34 +314,36 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <ScrollSlideUp>
           <div>
-            <h1 className="text-3xl font-bold">Configuración de Bots</h1>
-            <p className="text-muted-foreground">Crea y gestiona tus chatbots con IA</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Configuración de Bots</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Crea y gestiona tus chatbots con IA</p>
             {userSubscription && (
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 {bots.length}/{userSubscription.max_bots} bots utilizados en tu plan
               </p>
             )}
           </div>
         </ScrollSlideUp>
         <ScrollFadeIn delay={0.2}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             {!canCreateBot && (
-              <Badge variant="outline" className="text-amber-600 border-amber-600">
+              <Badge variant="outline" className="text-amber-600 border-amber-600 text-xs">
                 Límite alcanzado
               </Badge>
             )}
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              className="flex-1 sm:flex-initial"
             >
-              <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!canCreateBot}>
+              <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!canCreateBot} className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
-                Crear Bot
+                <span className="hidden sm:inline">Crear Bot</span>
+                <span className="sm:hidden">Nuevo Bot</span>
               </Button>
             </motion.div>
           </div>
@@ -351,12 +353,12 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       {!canCreateBot && (
         <ScrollFadeIn delay={0.3}>
           <Card className="border-amber-200 bg-amber-50">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <Bot className="h-5 w-5 text-amber-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-amber-800">Límite de bots alcanzado</h4>
-                  <p className="text-sm text-amber-700 mt-1">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex items-start gap-2 sm:gap-3">
+                <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-base font-medium text-amber-800">Límite de bots alcanzado</h4>
+                  <p className="text-xs sm:text-sm text-amber-700 mt-1">
                     Has alcanzado el límite de {userSubscription?.max_bots || 1} bot(s) para tu plan actual. Actualiza tu
                     suscripción para crear más bots.
                   </p>
@@ -364,7 +366,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    <Button variant="outline" size="sm" className="mt-2 bg-transparent">
+                    <Button variant="outline" size="sm" className="mt-2 bg-transparent w-full sm:w-auto text-xs sm:text-sm">
                       Ver Planes
                     </Button>
                   </motion.div>
@@ -376,16 +378,16 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       )}
 
       {/* Stats */}
-      <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-3">
+      <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
         <ScrollStaggerChild>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Bots</CardTitle>
-              <Bot className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Total Bots</CardTitle>
+              <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.3}>
-                <div className="text-2xl font-bold">{bots.length}</div>
+                <div className="text-xl sm:text-2xl font-bold">{bots.length}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">Bots configurados</p>
             </CardContent>
@@ -394,13 +396,13 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
 
         <ScrollStaggerChild>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Bots Activos</CardTitle>
-              <Play className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Bots Activos</CardTitle>
+              <Play className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.4}>
-                <div className="text-2xl font-bold">{bots.filter((bot) => bot.is_active).length}</div>
+                <div className="text-xl sm:text-2xl font-bold">{bots.filter((bot) => bot.is_active).length}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">En funcionamiento</p>
             </CardContent>
@@ -409,13 +411,13 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
 
         <ScrollStaggerChild>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Plataformas</CardTitle>
-              <Zap className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Plataformas</CardTitle>
+              <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.5}>
-                <div className="text-2xl font-bold">{new Set(bots.map((bot) => bot.platform)).size}</div>
+                <div className="text-xl sm:text-2xl font-bold">{new Set(bots.map((bot) => bot.platform)).size}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">Conectadas</p>
             </CardContent>
@@ -424,23 +426,24 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       </ScrollStaggeredChildren>
 
       {/* Bots Grid */}
-      <ScrollStaggeredChildren className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <ScrollStaggeredChildren className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {bots.length === 0 ? (
           <ScrollStaggerChild>
             <Card className="col-span-full">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Bot className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">No tienes bots aún</h3>
-                <p className="text-muted-foreground text-center mb-4">
+              <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12 px-4 sm:px-6">
+                <Bot className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-4" />
+                <h3 className="text-base sm:text-lg font-medium mb-2 text-center">No tienes bots aún</h3>
+                <p className="text-sm sm:text-base text-muted-foreground text-center mb-4">
                   Crea tu primer chatbot para comenzar a automatizar la atención al cliente
                 </p>
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:w-auto">
                     <Plus className="h-4 w-4 mr-2" />
-                    Crear mi primer bot
+                    <span className="hidden sm:inline">Crear mi primer bot</span>
+                    <span className="sm:hidden">Crear bot</span>
                   </Button>
                 </motion.div>
               </CardContent>
@@ -456,10 +459,10 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                   transition={{ duration: 0.2 }}
                 >
                   <Card className="hover:shadow-md transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <div className="flex items-center space-x-2">
-                    <PlatformIcon className="h-5 w-5 text-primary" />
-                    <CardTitle className="text-lg">{bot.name}</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    <PlatformIcon className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                    <CardTitle className="text-sm sm:text-lg truncate">{bot.name}</CardTitle>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -497,16 +500,16 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Badge variant={bot.is_active ? "default" : "secondary"}>
+                <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge variant={bot.is_active ? "default" : "secondary"} className="text-xs">
                       {bot.is_active ? "Activo" : "Inactivo"}
                     </Badge>
-                    <Badge variant="outline">{platformLabels[bot.platform]}</Badge>
+                    <Badge variant="outline" className="text-xs">{platformLabels[bot.platform]}</Badge>
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-sm">
+                    <div className="text-xs sm:text-sm">
                       <span className="font-medium">Funcionalidades:</span>
                       <div className="mt-1">
                         {bot.features.length > 0 ? (
@@ -561,35 +564,36 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Bot</DialogTitle>
-            <DialogDescription>Actualiza la configuración de tu chatbot</DialogDescription>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] sm:max-h-[80vh] overflow-y-auto mx-4 sm:mx-0">
+          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+            <DialogTitle className="text-lg sm:text-xl">Editar Bot</DialogTitle>
+            <DialogDescription className="text-sm sm:text-base">Actualiza la configuración de tu chatbot</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditBot}>
-            <div className="grid gap-6 py-4">
+            <div className="grid gap-4 sm:gap-6 py-4 px-4 sm:px-6">
               {/* Same form fields as create dialog */}
-              <div className="space-y-4">
-                <h4 className="font-medium">Información Básica</h4>
-                <div className="grid gap-4">
+              <div className="space-y-3 sm:space-y-4">
+                <h4 className="text-sm sm:text-base font-medium">Información Básica</h4>
+                <div className="grid gap-3 sm:gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="edit-name">Nombre del Bot *</Label>
+                    <Label htmlFor="edit-name" className="text-sm font-medium">Nombre del Bot *</Label>
                     <Input
                       id="edit-name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
+                      className="text-sm sm:text-base"
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="edit-platform">Plataforma *</Label>
+                    <Label htmlFor="edit-platform" className="text-sm font-medium">Plataforma *</Label>
                     <Select
                       value={formData.platform}
                       onValueChange={(value: "whatsapp" | "instagram" | "email") =>
                         setFormData({ ...formData, platform: value })
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="text-sm sm:text-base">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -602,30 +606,32 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h4 className="font-medium">Personalidad del Bot</h4>
+              <div className="space-y-3 sm:space-y-4">
+                <h4 className="text-sm sm:text-base font-medium">Personalidad del Bot</h4>
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-personality">Prompt de Personalidad</Label>
+                  <Label htmlFor="edit-personality" className="text-sm font-medium">Prompt de Personalidad</Label>
                   <Textarea
                     id="edit-personality"
                     value={formData.personality_prompt}
                     onChange={(e) => setFormData({ ...formData, personality_prompt: e.target.value })}
-                    rows={4}
+                    rows={3}
+                    className="text-sm sm:text-base min-h-[80px] sm:min-h-[100px]"
                   />
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h4 className="font-medium">Funcionalidades</h4>
-                <div className="grid gap-3">
+              <div className="space-y-3 sm:space-y-4">
+                <h4 className="text-sm sm:text-base font-medium">Funcionalidades</h4>
+                <div className="grid gap-2 sm:gap-3">
                   {availableFeatures.map((feature) => (
-                    <div key={feature.id} className="flex items-center space-x-2">
+                    <div key={feature.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50">
                       <Checkbox
                         id={`edit-${feature.id}`}
                         checked={formData.features.includes(feature.id)}
                         onCheckedChange={(checked) => handleFeatureChange(feature.id, checked as boolean)}
+                        className="flex-shrink-0"
                       />
-                      <Label htmlFor={`edit-${feature.id}`} className="text-sm">
+                      <Label htmlFor={`edit-${feature.id}`} className="text-sm sm:text-base cursor-pointer">
                         {feature.label}
                       </Label>
                     </div>
@@ -633,16 +639,17 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h4 className="font-medium">Configuración de IA</h4>
+              <div className="space-y-3 sm:space-y-4">
+                <h4 className="text-sm sm:text-base font-medium">Configuración de IA</h4>
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-openai_key">API Key de OpenAI</Label>
+                  <Label htmlFor="edit-openai_key" className="text-sm font-medium">API Key de OpenAI</Label>
                   <div className="relative">
                     <Input
                       id="edit-openai_key"
                       type={showApiKey ? "text" : "password"}
                       value={formData.gemini_api_key}
                       onChange={(e) => setFormData({ ...formData, gemini_api_key: e.target.value })}
+                      className="text-sm sm:text-base pr-12"
                     />
                     <motion.div
                       whileHover={{ scale: 1.1 }}
@@ -653,39 +660,41 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-full px-3"
+                        className="h-full px-2 sm:px-3"
                         onClick={() => setShowApiKey(!showApiKey)}
                       >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showApiKey ? <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" /> : <Eye className="h-3 w-3 sm:h-4 sm:w-4" />}
                       </Button>
                     </motion.div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3 p-3 rounded-lg bg-muted/50">
                 <Switch
                   id="edit-is_active"
                   checked={formData.is_active}
                   onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
                 />
-                <Label htmlFor="edit-is_active">Bot activo</Label>
+                <Label htmlFor="edit-is_active" className="text-sm sm:text-base font-medium cursor-pointer">Bot activo</Label>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="px-4 sm:px-6 pb-4 sm:pb-6 flex-col sm:flex-row gap-2 sm:gap-0">
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                className="w-full sm:w-auto"
               >
-                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto text-sm sm:text-base">
                   Cancelar
                 </Button>
               </motion.div>
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                className="w-full sm:w-auto"
               >
-                <Button type="submit" disabled={isLoading}>
+                <Button type="submit" disabled={isLoading} className="w-full sm:w-auto text-sm sm:text-base">
                   {isLoading ? "Actualizando..." : "Actualizar Bot"}
                 </Button>
               </motion.div>

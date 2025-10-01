@@ -312,29 +312,29 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <ScrollSlideUp>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Sistema de Puntos y Promociones</h1>
-            <p className="text-muted-foreground">Gestiona promociones y recompensas para fidelizar clientes</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Sistema de Puntos y Promociones</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Gestiona promociones y recompensas para fidelizar clientes</p>
           </div>
         </div>
       </ScrollSlideUp>
 
       {/* Stats */}
       <ScrollStaggeredChildren>
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
           <ScrollStaggerChild>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Promociones Activas</CardTitle>
-                <Percent className="h-4 w-4 text-muted-foreground" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">Promociones Activas</CardTitle>
+                <Percent className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
                 <ScrollScaleIn>
-                  <div className="text-2xl font-bold">{promotions.filter((p) => isPromotionActive(p)).length}</div>
+                  <div className="text-xl sm:text-2xl font-bold">{promotions.filter((p) => isPromotionActive(p)).length}</div>
                 </ScrollScaleIn>
                 <p className="text-xs text-muted-foreground">En vigencia</p>
               </CardContent>
@@ -343,13 +343,13 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
           <ScrollStaggerChild>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Recompensas</CardTitle>
-                <Gift className="h-4 w-4 text-muted-foreground" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">Recompensas</CardTitle>
+                <Gift className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
                 <ScrollScaleIn>
-                  <div className="text-2xl font-bold">{rewards.filter((r) => r.is_active).length}</div>
+                  <div className="text-xl sm:text-2xl font-bold">{rewards.filter((r) => r.is_active).length}</div>
                 </ScrollScaleIn>
                 <p className="text-xs text-muted-foreground">Disponibles</p>
               </CardContent>
@@ -358,13 +358,13 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
           <ScrollStaggerChild>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Usos Totales</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">Usos Totales</CardTitle>
+                <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
                 <ScrollScaleIn>
-                  <div className="text-2xl font-bold">{promotions.reduce((sum, p) => sum + p.current_uses, 0)}</div>
+                  <div className="text-xl sm:text-2xl font-bold">{promotions.reduce((sum, p) => sum + p.current_uses, 0)}</div>
                 </ScrollScaleIn>
                 <p className="text-xs text-muted-foreground">Promociones usadas</p>
               </CardContent>
@@ -373,13 +373,13 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
           <ScrollStaggerChild>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Puntos en Circulación</CardTitle>
-                <Star className="h-4 w-4 text-muted-foreground" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">Puntos en Circulación</CardTitle>
+                <Star className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
                 <ScrollScaleIn>
-                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-xl sm:text-2xl font-bold">0</div>
                 </ScrollScaleIn>
                 <p className="text-xs text-muted-foreground">Puntos activos</p>
               </CardContent>
@@ -389,22 +389,23 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
       </ScrollStaggeredChildren>
 
       {/* Tabs */}
-      <Tabs defaultValue="promotions" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="promotions">Promociones</TabsTrigger>
-          <TabsTrigger value="rewards">Catálogo de Recompensas</TabsTrigger>
-          <TabsTrigger value="settings">Configuración de Puntos</TabsTrigger>
+      <Tabs defaultValue="promotions" className="space-y-4 sm:space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="promotions" className="text-xs sm:text-sm">Promociones</TabsTrigger>
+          <TabsTrigger value="rewards" className="text-xs sm:text-sm">Recompensas</TabsTrigger>
+          <TabsTrigger value="settings" className="text-xs sm:text-sm">Configuración</TabsTrigger>
         </TabsList>
 
         {/* Promotions Tab */}
-        <TabsContent value="promotions" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Promociones</h2>
+        <TabsContent value="promotions" className="space-y-4 sm:space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <h2 className="text-lg sm:text-xl font-semibold">Promociones</h2>
             <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button className="w-full sm:w-auto">
                   <Plus className="h-4 w-4 mr-2" />
-                  Crear Promoción
+                  <span className="hidden sm:inline">Crear Promoción</span>
+                  <span className="sm:hidden">Nueva Promoción</span>
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
@@ -575,37 +576,38 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
             </Dialog>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {promotions.length === 0 ? (
               <Card className="col-span-full">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Percent className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No tienes promociones aún</h3>
-                  <p className="text-muted-foreground text-center mb-4">
+                <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12 px-4 sm:px-6">
+                  <Percent className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-base sm:text-lg font-medium mb-2 text-center">No tienes promociones aún</h3>
+                  <p className="text-sm sm:text-base text-muted-foreground text-center mb-4">
                     Crea tu primera promoción para atraer y fidelizar clientes
                   </p>
-                  <Button onClick={() => setIsPromotionDialogOpen(true)}>
+                  <Button onClick={() => setIsPromotionDialogOpen(true)} className="w-full sm:w-auto">
                     <Plus className="h-4 w-4 mr-2" />
-                    Crear mi primera promoción
+                    <span className="hidden sm:inline">Crear mi primera promoción</span>
+                    <span className="sm:hidden">Crear promoción</span>
                   </Button>
                 </CardContent>
               </Card>
             ) : (
               promotions.map((promotion) => (
                 <Card key={promotion.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 rounded-md bg-primary/10">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                    <div className="flex items-center space-x-2 min-w-0 flex-1">
+                      <div className="p-1.5 sm:p-2 rounded-md bg-primary/10 flex-shrink-0">
                         {promotion.discount_type === "percentage" ? (
-                          <Percent className="h-4 w-4 text-primary" />
+                          <Percent className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                         ) : promotion.discount_type === "fixed_amount" ? (
-                          <DollarSign className="h-4 w-4 text-primary" />
+                          <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                         ) : (
-                          <Star className="h-4 w-4 text-primary" />
+                          <Star className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                         )}
                       </div>
-                      <div>
-                        <CardTitle className="text-lg">{promotion.name}</CardTitle>
+                      <div className="min-w-0">
+                        <CardTitle className="text-sm sm:text-lg truncate">{promotion.name}</CardTitle>
                       </div>
                     </div>
                     <DropdownMenu>
@@ -638,16 +640,16 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Badge variant={isPromotionActive(promotion) ? "default" : "secondary"}>
+                  <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant={isPromotionActive(promotion) ? "default" : "secondary"} className="text-xs">
                         {isPromotionActive(promotion) ? "Activa" : "Inactiva"}
                       </Badge>
-                      <Badge variant="outline">{discountTypeLabels[promotion.discount_type]}</Badge>
+                      <Badge variant="outline" className="text-xs">{discountTypeLabels[promotion.discount_type]}</Badge>
                     </div>
 
                     <div className="space-y-2">
-                      <div className="text-sm">
+                      <div className="text-xs sm:text-sm">
                         <span className="font-medium">Descuento:</span>
                         <span className="ml-2">
                           {promotion.discount_type === "percentage"
@@ -659,20 +661,20 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                       </div>
 
                       {promotion.points_required > 0 && (
-                        <div className="text-sm">
+                        <div className="text-xs sm:text-sm">
                           <span className="font-medium">Puntos requeridos:</span>
                           <span className="ml-2">{promotion.points_required}</span>
                         </div>
                       )}
 
                       {promotion.min_purchase_amount > 0 && (
-                        <div className="text-sm">
+                        <div className="text-xs sm:text-sm">
                           <span className="font-medium">Compra mínima:</span>
                           <span className="ml-2">{formatCurrency(promotion.min_purchase_amount)}</span>
                         </div>
                       )}
 
-                      <div className="text-sm">
+                      <div className="text-xs sm:text-sm">
                         <span className="font-medium">Vigencia:</span>
                         <div className="text-xs text-muted-foreground">
                           {formatDate(promotion.start_date)} - {formatDate(promotion.end_date)}

@@ -73,19 +73,19 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
   ];
 
   return (
-    <div className="relative mr-4">
-      {/* Trigger Button - Horizontal Layout like Spectrum */}
+    <div className="relative">
+      {/* Trigger Button - Responsive Layout */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-3 px-4 py-2 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors duration-200 shadow-sm"
+        className="flex items-center space-x-0 sm:space-x-3 px-2 sm:px-4 py-2 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors duration-200 shadow-sm"
       >
         {/* Profile Avatar */}
         <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
           {getInitials(profile?.business_name || user.email || "U")}
         </div>
         
-        {/* User Info */}
-        <div className="flex flex-col items-start text-left">
+        {/* User Info - Hidden on mobile */}
+        <div className="hidden sm:flex flex-col items-start text-left">
           <span className="text-sm font-medium text-neutral-900 dark:text-white">
             {profile?.business_name || "Mi Negocio"}
           </span>
@@ -94,15 +94,16 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
           </span>
         </div>
 
-        {/* Verified Badge */}
-        <div className="flex items-center justify-center w-5 h-5 bg-blue-500 rounded-full">
+        {/* Verified Badge - Hidden on mobile */}
+        <div className="hidden sm:flex items-center justify-center w-5 h-5 bg-blue-500 rounded-full">
           <Check className="w-3 h-3 text-white" />
         </div>
 
-        {/* Dropdown Arrow */}
+        {/* Dropdown Arrow - Hidden on mobile */}
         <motion.div
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.3 }}
+          className="hidden sm:block"
         >
           <ChevronUp className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
         </motion.div>
@@ -122,29 +123,29 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="absolute right-4 top-full mt-2 z-50 w-96 max-h-[80vh] overflow-y-auto rounded-3xl bg-white shadow-lg dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
+              className="absolute right-0 sm:right-4 top-full mt-2 z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-lg dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {/* Profile Header */}
               <motion.div
-                className="p-6 border-b border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-200"
+                className="p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-200"
                 transition={{ duration: 0.2 }}
               >
                 <div className="flex items-center">
                   <motion.div
-                    className="relative w-12 h-12 mr-4"
+                    className="relative w-10 h-10 sm:w-12 sm:h-12 mr-3 sm:mr-4"
                     whileHover={{ scale: 1.05 }}
                     transition={{ type: "spring", stiffness: 400, damping: 10 }}
                   >
                     <div className="absolute inset-1 rounded-full overflow-hidden">
-                      <div className="w-full h-full bg-primary text-primary-foreground flex items-center justify-center rounded-full text-lg font-medium">
+                      <div className="w-full h-full bg-primary text-primary-foreground flex items-center justify-center rounded-full text-sm sm:text-lg font-medium">
                         {getInitials(profile?.business_name || user.email || "U")}
                       </div>
                     </div>
                   </motion.div>
                   <div className="flex-1">
                     <div className="flex items-center">
-                      <h2 className="text-xl font-bold text-neutral-900 dark:text-white">
+                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 dark:text-white">
                         {profile?.business_name || "Mi Negocio"}
                       </h2>
                       <motion.div
@@ -176,7 +177,7 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
               </motion.div>
 
               {/* Card Section */}
-              <div className="p-6 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700">
                 <motion.div
                   className="rounded-xl p-5 overflow-hidden relative transition-transform duration-300 hover:scale-[1.02]"
                   style={{

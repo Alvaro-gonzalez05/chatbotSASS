@@ -28,18 +28,18 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
   const trialDaysLeft = 15 // This would be calculated based on user creation date
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Welcome Section */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <ScrollSlideUp>
           <div>
-            <h1 className="text-3xl font-bold text-balance">¡Bienvenido, {profile?.business_name || "emprendedor"}!</h1>
-            <p className="text-muted-foreground mt-2">Aquí tienes un resumen de tu negocio y chatbots</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-balance">¡Bienvenido, {profile?.business_name || "emprendedor"}!</h1>
+            <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">Aquí tienes un resumen de tu negocio y chatbots</p>
           </div>
         </ScrollSlideUp>
         <ScrollFadeIn delay={0.2}>
-          <div className="flex items-center space-x-3">
-            <Badge variant="secondary" className="bg-primary/10 text-primary">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <Badge variant="secondary" className="bg-primary/10 text-primary text-xs sm:text-sm w-fit">
               <Calendar className="h-3 w-3 mr-1" />
               {trialDaysLeft} días de prueba
             </Badge>
@@ -47,10 +47,11 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Button asChild>
+              <Button asChild size="sm" className="w-full sm:w-auto">
                 <Link href="/dashboard/bots">
                   <Plus className="h-4 w-4 mr-2" />
-                  Crear Bot
+                  <span className="hidden sm:inline">Crear Bot</span>
+                  <span className="sm:hidden">Bot</span>
                 </Link>
               </Button>
             </motion.div>
@@ -61,23 +62,23 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       {/* Trial Progress */}
       <ScrollFadeIn delay={0.3}>
         <Card className="border-primary/20 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Gift className="h-5 w-5 mr-2 text-primary" />
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center text-base sm:text-lg">
+              <Gift className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
               Prueba Gratuita Activa
             </CardTitle>
-            <CardDescription>Aprovecha al máximo tus {trialDaysLeft} días restantes</CardDescription>
+            <CardDescription className="text-xs sm:text-sm">Aprovecha al máximo tus {trialDaysLeft} días restantes</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               <Progress value={((15 - trialDaysLeft) / 15) * 100} className="h-2" />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Día {15 - trialDaysLeft} de 15</span>
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+                <span className="text-muted-foreground text-xs sm:text-sm">Día {15 - trialDaysLeft} de 15</span>
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Button variant="outline" size="sm" asChild>
+                  <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
                     <Link href="/dashboard/configuracion">Ver Planes</Link>
                   </Button>
                 </motion.div>
@@ -88,16 +89,16 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       </ScrollFadeIn>
 
       {/* Stats Grid */}
-      <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <ScrollStaggerChild>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Clientes</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Total Clientes</CardTitle>
+              <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.5}>
-                <div className="text-2xl font-bold">{stats.totalClients}</div>
+                <div className="text-xl sm:text-2xl font-bold">{stats.totalClientes}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">+0% desde el mes pasado</p>
             </CardContent>
@@ -106,13 +107,13 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
 
         <ScrollStaggerChild>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Bots Activos</CardTitle>
-              <Bot className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Bots Activos</CardTitle>
+              <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.6}>
-                <div className="text-2xl font-bold">{stats.activeBots}</div>
+                <div className="text-xl sm:text-2xl font-bold">{stats.activeBots}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">de 1 disponible en tu plan</p>
             </CardContent>
@@ -121,13 +122,13 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
 
         <ScrollStaggerChild>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Mensajes del Mes</CardTitle>
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Mensajes del Mes</CardTitle>
+              <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.7}>
-                <div className="text-2xl font-bold">{stats.monthlyMessages}</div>
+                <div className="text-xl sm:text-2xl font-bold">{stats.monthlyMessages}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">+0% desde el mes pasado</p>
             </CardContent>
@@ -136,13 +137,13 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
 
         <ScrollStaggerChild>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tasa de Conversión</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Tasa de Conversión</CardTitle>
+              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.8}>
-                <div className="text-2xl font-bold">{stats.conversionRate}%</div>
+                <div className="text-xl sm:text-2xl font-bold">{stats.conversionRate}%</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">+0% desde el mes pasado</p>
             </CardContent>
@@ -151,22 +152,22 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       </ScrollStaggeredChildren>
 
       {/* Quick Actions */}
-      <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         <ScrollStaggerChild>
           <motion.div
             whileHover={{ scale: 1.02, y: -4 }}
             transition={{ duration: 0.2 }}
           >
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Bot className="h-5 w-5 mr-2 text-primary" />
+              <CardHeader className="px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="flex items-center text-base sm:text-lg">
+                  <Bot className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
                   Primeros pasos
                 </CardTitle>
-                <CardDescription>Guía interactiva para configurar tu app y empezar a usar el bot</CardDescription>
+                <CardDescription className="text-xs sm:text-sm">Guía interactiva para configurar tu app y empezar a usar el bot</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="flex flex-col gap-6">
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                <div className="flex flex-col gap-4 sm:gap-6">
                   {/* Multi-step onboarding visual */}
                   {[{
                     label: "Completar información del negocio",
@@ -185,10 +186,10 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                     action: "Probar",
                     href: "/dashboard/pruebas",
                   }].map((step, idx) => (
-                    <div key={step.label} className="flex items-center gap-4 mb-2">
+                    <div key={step.label} className="flex items-center gap-2 sm:gap-4 mb-2">
                       <motion.div
                         className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg border-2 transition-colors",
+                          "w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-sm sm:text-lg border-2 transition-colors",
                           "bg-primary text-white border-primary"
                         )}
                         initial={{ scale: 0.8, opacity: 0 }}
@@ -197,8 +198,8 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                       >
                         {idx + 1}
                       </motion.div>
-                      <span className="flex-1 text-sm font-medium">{step.label}</span>
-                      <Button asChild size="sm" variant="outline">
+                      <span className="flex-1 text-xs sm:text-sm font-medium">{step.label}</span>
+                      <Button asChild size="sm" variant="outline" className="text-xs sm:text-sm">
                         <Link href={step.href}>{step.action}</Link>
                       </Button>
                     </div>
@@ -215,20 +216,23 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
             transition={{ duration: 0.2 }}
           >
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Users className="h-5 w-5 mr-2 text-primary" />
+              <CardHeader className="px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="flex items-center text-base sm:text-lg">
+                  <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
                   Gestionar Clientes
                 </CardTitle>
-                <CardDescription>Añade y organiza tu base de clientes</CardDescription>
+                <CardDescription className="text-xs sm:text-sm">Añade y organiza tu base de clientes</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/dashboard/clientes">Ver Clientes</Link>
+                  <Button asChild variant="outline" className="w-full bg-transparent text-sm sm:text-base">
+                    <Link href="/dashboard/clientes">
+                      <span className="hidden sm:inline">Ver Clientes</span>
+                      <span className="sm:hidden">Clientes</span>
+                    </Link>
                   </Button>
                 </motion.div>
               </CardContent>
@@ -242,20 +246,23 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
             transition={{ duration: 0.2 }}
           >
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Zap className="h-5 w-5 mr-2 text-primary" />
+              <CardHeader className="px-3 sm:px-6 pt-3 sm:pt-6">
+                <CardTitle className="flex items-center text-base sm:text-lg">
+                  <Zap className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
                   Automatizaciones
                 </CardTitle>
-                <CardDescription>Configura campañas automáticas de marketing</CardDescription>
+                <CardDescription className="text-xs sm:text-sm">Configura campañas automáticas de marketing</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/dashboard/automatizaciones">Configurar</Link>
+                  <Button asChild variant="outline" className="w-full bg-transparent text-sm sm:text-base">
+                    <Link href="/dashboard/automatizaciones">
+                      <span className="hidden sm:inline">Configurar</span>
+                      <span className="sm:hidden">Configurar</span>
+                    </Link>
                   </Button>
                 </motion.div>
               </CardContent>

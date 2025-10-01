@@ -18,7 +18,7 @@ interface Bot {
   personality_prompt: string
   is_active: boolean
   gemini_api_key?: string
-  gemini_model?: string // Ejemplo: 'gemini-pro', 'gemini-pro-vision', 'gemini-1.5-flash', etc.
+  gemini_model?: string // Ejemplo: 'gemini-1.5-flash', 'gemini-1.5-pro', etc.
 }
 
 interface Message {
@@ -50,7 +50,7 @@ export function BotTesting() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data, error } = await supabase.from("bots").select("*").eq("user_id", user.id).eq("is_active", true)
+      const { data, error } = await supabase.from("bots").select("*, gemini_api_key").eq("user_id", user.id).eq("is_active", true)
 
       if (error) throw error
       setBots(data || [])
@@ -207,61 +207,94 @@ Mensaje del cliente: "${userMessage}"`
     }
   }
 
-  const callGemini = async (systemPrompt: string, userMessage: string, apiKey: string, model: string, retries = 3) => {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: `${systemPrompt}\n\nUsuario: ${userMessage}` }
-                  ]
-                }
-              ],
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 1000
-              }
-            })
-          }
-        )
-
-        if (response.status === 503 && attempt < retries) {
-          console.log(`Gemini sobrecargado, reintentando en ${attempt * 2}s... (intento ${attempt}/${retries})`)
-          await new Promise(resolve => setTimeout(resolve, attempt * 2000))
-          continue
+  const listModels = async (apiKey: string) => {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error('Gemini API error details:', errorText)
-
-          if (response.status === 503) {
-            throw new Error('El servicio de IA está temporalmente sobrecargado. Por favor, inténtalo de nuevo en unos momentos.')
-          }
-
-          throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
-        }
-
+      )
+      
+      if (response.ok) {
         const data = await response.json()
-        console.log('Gemini response:', data)
-
-        // Gemini responde en data.candidates[0].content.parts[0].text
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || "Lo siento, no pude procesar tu mensaje en este momento."
-
-      } catch (error) {
-        if (attempt === retries) {
-          console.error('Error calling Gemini after all retries:', error)
-          throw error
-        }
-        console.log(`Error en intento ${attempt}, reintentando...`, error)
+        return data.models || []
       }
+      return []
+    } catch (error) {
+      console.error('Error listing models:', error)
+      return []
+    }
+  }
+
+  const callGemini = async (systemPrompt: string, userMessage: string, apiKey: string, model: string) => {
+    try {
+      if (!apiKey) {
+        throw new Error('API key not found')
+      }
+
+      // Primero listar los modelos disponibles
+      const availableModels = await listModels(apiKey)
+
+      const fullPrompt = `${systemPrompt}\n\nUsuario: ${userMessage}`
+
+      // Forzar uso del modelo gratuito gemini-1.5-flash
+      let actualModel = 'gemini-1.5-flash'
+      
+      if (availableModels.length > 0) {
+        // Buscar específicamente gemini-1.5-flash (modelo gratuito)
+        const flashModel = availableModels.find((m: any) => 
+          m.name.includes('gemini-1.5-flash') && 
+          m.supportedGenerationMethods?.includes('generateContent')
+        )
+        
+        if (flashModel) {
+          actualModel = flashModel.name.split('/').pop()
+          console.log('✅ Using FREE model:', actualModel)
+        } else {
+          // Fallback a cualquier modelo gratuito que contenga "flash"
+          const freeModel = availableModels.find((m: any) => 
+            m.name.includes('flash') && 
+            m.supportedGenerationMethods?.includes('generateContent')
+          )
+          if (freeModel) {
+            actualModel = freeModel.name.split('/').pop()
+          }
+        }
+      }
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${actualModel}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: fullPrompt }]
+            }]
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Gemini API error details:', errorText)
+        throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+
+      // Gemini responde en data.candidates[0].content.parts[0].text
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "Lo siento, no pude procesar tu mensaje en este momento."
+
+    } catch (error) {
+      console.error('Error calling Gemini:', error)
+      throw error
     }
   }
 
