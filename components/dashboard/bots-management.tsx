@@ -75,8 +75,6 @@ const availableFeatures = [
   { id: "take_reservations", label: "Tomar reservas" },
   { id: "register_clients", label: "Registro de clientes" },
   { id: "loyalty_points", label: "Consulta de puntos de fidelización" },
-  { id: "customer_support", label: "Soporte al cliente" },
-  { id: "product_catalog", label: "Catálogo de productos" },
 ]
 
 export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
@@ -135,6 +133,10 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       setBots([data, ...bots])
       setIsCreateDialogOpen(false)
       resetForm()
+      
+      // Emit custom event to update sidebar navigation
+      window.dispatchEvent(new CustomEvent('botCreated', { detail: data }))
+      
       toast.success("Bot creado exitosamente", {
         description: `${formData.name} ha sido configurado y está listo para usar.`,
         duration: 4000,
@@ -164,6 +166,10 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       setIsEditDialogOpen(false)
       setSelectedBot(null)
       resetForm()
+      
+      // Emit custom event to update sidebar navigation
+      window.dispatchEvent(new CustomEvent('botUpdated', { detail: data }))
+      
       toast.success("Bot actualizado", {
         description: `La configuración de ${data.name} ha sido actualizada exitosamente.`,
         duration: 4000,

@@ -44,6 +44,7 @@ interface BotFormData {
   whatsapp_phone_number_id?: string
   whatsapp_access_token?: string
   whatsapp_webhook_verify_token?: string
+  whatsapp_business_account_id?: string
 }
 
 interface UserSubscription {
@@ -79,8 +80,6 @@ const availableFeatures = [
   { id: "take_reservations", label: "Tomar reservas" },
   { id: "register_clients", label: "Registro de clientes" },
   { id: "loyalty_points", label: "Consulta de puntos de fidelización" },
-  { id: "customer_support", label: "Soporte al cliente" },
-  { id: "product_catalog", label: "Catálogo de productos" },
 ]
 
 const steps = [
@@ -105,6 +104,8 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [metaBusinessSetupCompleted, setMetaBusinessSetupCompleted] = useState(false)
+  const [tokensConfigured, setTokensConfigured] = useState(false)
   const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null)
   const [currentBotCount, setCurrentBotCount] = useState(0)
   const [canCreateBot, setCanCreateBot] = useState(true)
@@ -200,12 +201,12 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     return userSubscription?.plan_type !== "trial" && userSubscription?.subscription_status === "active"
   }
 
-  const shouldShowStep4 = () => {
+  const shouldShowPlatformSteps = () => {
     return hasPaidSubscription() && (formData.platform === "whatsapp" || formData.platform === "instagram")
   }
 
   const getTotalSteps = () => {
-    return shouldShowStep4() ? 4 : 3
+    return shouldShowPlatformSteps() ? 6 : 3
   }
 
   const resetForm = () => {
@@ -225,6 +226,8 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     })
     setCurrentStep(1)
     setShowSuccess(false)
+    setMetaBusinessSetupCompleted(false)
+    setTokensConfigured(false)
   }
 
   const handleClose = () => {
@@ -277,7 +280,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         automations: [], // Por defecto vacío
       }
 
-      const { data, error } = await supabase
+      const { data: bot, error } = await supabase
         .from("bots")
         .insert([botData])
         .select()
@@ -285,17 +288,56 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
 
       if (error) throw error
 
+      // Si el usuario configuró WhatsApp y tiene tokens, guardar la integración
+      if (formData.platform === "whatsapp" && 
+          formData.whatsapp_access_token && 
+          formData.whatsapp_phone_number_id &&
+          hasPaidSubscription()) {
+        
+        const whatsappData = {
+          user_id: userId,
+          bot_id: bot.id,
+          phone_number_id: formData.whatsapp_phone_number_id,
+          access_token: formData.whatsapp_access_token,
+          webhook_verify_token: formData.whatsapp_webhook_verify_token || `verify_${bot.id}_${Date.now()}`,
+          business_account_id: formData.whatsapp_phone_number_id, // Temporal, se puede actualizar después
+          webhook_url: `${window.location.origin}/api/whatsapp/webhook`,
+          is_active: true,
+          is_verified: false
+        }
+
+        const { error: whatsappError } = await supabase
+          .from("whatsapp_integrations")
+          .insert([whatsappData])
+
+        if (whatsappError) {
+          console.error("Error creating WhatsApp integration:", whatsappError)
+          // No fallar la creación del bot por esto, solo mostrar advertencia
+          toast.error("Bot creado pero hubo un error con la configuración de WhatsApp", {
+            description: "Podrás configurar WhatsApp más tarde desde la configuración del bot.",
+            duration: 6000,
+          })
+        }
+      }
+
       setShowSuccess(true)
 
       setTimeout(() => {
-        onBotCreated(data)
+        onBotCreated(bot)
         handleClose()
-        toast.success(`Bot "${data.name}" creado exitosamente`, {
-          description: "Tu bot está listo para comenzar a atender clientes.",
+        
+        // Emit custom event to update sidebar navigation
+        window.dispatchEvent(new CustomEvent('botCreated', { detail: bot }))
+        
+        toast.success(`Bot "${bot.name}" creado exitosamente`, {
+          description: formData.platform === "whatsapp" && formData.whatsapp_access_token && hasPaidSubscription()
+            ? "Tu bot está configurado con WhatsApp y listo para recibir mensajes."
+            : "Tu bot está listo. Puedes probarlo en la sección de pruebas.",
           duration: 4000,
         })
       }, 3000)
     } catch (error) {
+      console.error("Error creating bot:", error)
       toast.error("Error al crear el bot", {
         description: "No se pudo crear el bot. Inténtalo de nuevo.",
         duration: 4000,
@@ -313,6 +355,12 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         return formData.name.trim() !== "" && formData.personality_prompt.trim() !== ""
       case 3:
         return formData.gemini_api_key.trim() !== ""
+      case 4:
+        return shouldShowPlatformSteps() ? metaBusinessSetupCompleted : true
+      case 5:
+        return true // Los tokens son opcionales
+      case 6:
+        return shouldShowPlatformSteps() ? tokensConfigured : true
       default:
         return true
     }
@@ -721,8 +769,135 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                     </>
                   )}
 
-                  {/* Step 4: Token Configuration */}
-                  {currentStep === 4 && shouldShowStep4() && (
+                  {/* Step 4: Meta Business Suite Setup Instructions */}
+                  {currentStep === 4 && shouldShowPlatformSteps() && (
+                    <>
+                      <CardHeader>
+                        <CardTitle>
+                          Configurar Meta Business Suite
+                        </CardTitle>
+                        <CardDescription>
+                          Antes de configurar los tokens, necesitas crear tu aplicación en Meta Business Suite
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <motion.div variants={fadeInUp}>
+                          <Card className="border-blue-200 bg-blue-50">
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <Facebook className="h-5 w-5 text-blue-600 mt-0.5" />
+                                <div>
+                                  <h4 className="font-medium text-blue-800">Paso 1: Accede a Meta Business Suite</h4>
+                                  <p className="text-sm text-blue-700 mt-1">
+                                    Si no tienes una cuenta comercial, necesitarás crearla primero
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp} className="space-y-4">
+                          <div className="bg-white border rounded-lg p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-medium">Instrucciones paso a paso:</h3>
+                              <Badge variant="outline">Requerido</Badge>
+                            </div>
+                            
+                            <div className="space-y-3 text-sm">
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">1</div>
+                                <div>
+                                  <p className="font-medium">Ir a Meta Business Suite</p>
+                                  <p className="text-gray-600">Visita <code className="bg-gray-100 px-2 py-1 rounded text-xs">creators.facebook.com/tools/meta-business-suite</code></p>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">2</div>
+                                <div>
+                                  <p className="font-medium">Crear Portfolio Comercial</p>
+                                  <p className="text-gray-600">Si ya tienes uno, puedes saltarte este paso</p>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">3</div>
+                                <div>
+                                  <p className="font-medium">Ir a Configuraciones → Apps</p>
+                                  <p className="text-gray-600">En el panel del portfolio comercial</p>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">4</div>
+                                <div>
+                                  <p className="font-medium">Crear Nueva App</p>
+                                  <p className="text-gray-600">Seleccionar "Crear un nuevo identificador de la app"</p>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-orange-100 text-orange-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">⚠️</div>
+                                <div>
+                                  <p className="font-medium text-orange-800">IMPORTANTE: Configuración de la App</p>
+                                  <ul className="text-gray-600 ml-4 list-disc space-y-1">
+                                    <li><strong>Caso de uso:</strong> Seleccionar "OTRO"</li>
+                                    <li><strong>Tipo de app:</strong> Seleccionar "NEGOCIOS"</li>
+                                  </ul>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">5</div>
+                                <div>
+                                  <p className="font-medium">Agregar Productos</p>
+                                  <p className="text-gray-600">
+                                    Una vez creada la app, agregar{" "}
+                                    {formData.platform === "whatsapp" 
+                                      ? "WhatsApp Business Platform para obtener Phone Number ID y Access Token"
+                                      : "Instagram Basic Display API para obtener tokens de acceso"
+                                    }
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="border-t pt-4">
+                              <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => window.open('https://creators.facebook.com/tools/meta-business-suite/?locale=es_LA', '_blank')}
+                              >
+                                <Facebook className="h-4 w-4 mr-2" />
+                                Abrir Meta Business Suite
+                              </Button>
+                            </div>
+                          </div>
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp}>
+                          <Card className="border-green-200 bg-green-50">
+                            <CardContent className="p-4">
+                              <div className="flex items-center gap-3">
+                                <Checkbox 
+                                  id="meta-setup-completed"
+                                  checked={metaBusinessSetupCompleted}
+                                  onCheckedChange={(checked) => setMetaBusinessSetupCompleted(!!checked)}
+                                />
+                                <Label htmlFor="meta-setup-completed" className="text-sm text-green-800">
+                                  He completado la configuración en Meta Business Suite y tengo mis tokens listos
+                                </Label>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      </CardContent>
+                    </>
+                  )}
+
+                  {/* Step 5: Token Configuration */}
+                  {currentStep === 5 && shouldShowPlatformSteps() && (
                     <>
                       <CardHeader>
                         <CardTitle>
@@ -735,67 +910,53 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                       </CardHeader>
                       <CardContent className="space-y-4">
                         {formData.platform === "whatsapp" && (
-                          <div className="space-y-6">
-                            <motion.div variants={fadeInUp}>
-                              <Card className="border-green-200 bg-green-50">
-                                <CardContent className="p-4">
-                                  <div className="flex items-start gap-3">
-                                    <Facebook className="h-5 w-5 text-green-600 mt-0.5" />
-                                    <div>
-                                      <h4 className="font-medium text-green-800">Configuración de WhatsApp Business</h4>
-                                      <p className="text-sm text-green-700 mt-1">
-                                        Para conectar WhatsApp, necesitas configurar la API de Meta (Facebook)
-                                      </p>
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
+                          <div className="space-y-4">
+                            <motion.div variants={fadeInUp} className="space-y-2">
+                              <Label htmlFor="wa-access-token">WhatsApp Access Token *</Label>
+                              <Input
+                                id="wa-access-token"
+                                type="password"
+                                value={formData.whatsapp_access_token}
+                                onChange={(e) => setFormData({ ...formData, whatsapp_access_token: e.target.value })}
+                                placeholder="EAAxxxxx..."
+                                className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              />
                             </motion.div>
 
-                            <div className="space-y-4">
-                              <motion.div variants={fadeInUp} className="space-y-2">
-                                <Label htmlFor="wa-access-token">WhatsApp Access Token *</Label>
-                                <Input
-                                  id="wa-access-token"
-                                  type="password"
-                                  value={formData.whatsapp_access_token}
-                                  onChange={(e) => setFormData({ ...formData, whatsapp_access_token: e.target.value })}
-                                  placeholder="EAAxxxxx..."
-                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                                />
-                              </motion.div>
+                            <motion.div variants={fadeInUp} className="space-y-2">
+                              <Label htmlFor="wa-phone-id">Phone Number ID *</Label>
+                              <Input
+                                id="wa-phone-id"
+                                value={formData.whatsapp_phone_number_id}
+                                onChange={(e) => setFormData({ ...formData, whatsapp_phone_number_id: e.target.value })}
+                                placeholder="123456789..."
+                                className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              />
+                            </motion.div>
 
-                              <motion.div variants={fadeInUp} className="space-y-2">
-                                <Label htmlFor="wa-phone-id">Phone Number ID *</Label>
-                                <Input
-                                  id="wa-phone-id"
-                                  value={formData.whatsapp_phone_number_id}
-                                  onChange={(e) => setFormData({ ...formData, whatsapp_phone_number_id: e.target.value })}
-                                  placeholder="123456789..."
-                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                                />
-                              </motion.div>
-
-                              <motion.div variants={fadeInUp} className="space-y-2">
-                                <Label htmlFor="wa-verify-token">Webhook Verify Token</Label>
-                                <Input
-                                  id="wa-verify-token"
-                                  value={formData.whatsapp_webhook_verify_token}
-                                  onChange={(e) => setFormData({ ...formData, whatsapp_webhook_verify_token: e.target.value })}
-                                  placeholder="mi_token_secreto"
-                                  className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                                />
-                              </motion.div>
-                            </div>
+                            <motion.div variants={fadeInUp} className="space-y-2">
+                              <Label htmlFor="wa-verify-token">Webhook Verify Token</Label>
+                              <Input
+                                id="wa-verify-token"
+                                value={formData.whatsapp_webhook_verify_token}
+                                onChange={(e) => setFormData({ ...formData, whatsapp_webhook_verify_token: e.target.value })}
+                                placeholder="mi_token_secreto"
+                                className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              />
+                            </motion.div>
 
                             <motion.div variants={fadeInUp}>
                               <Card className="border-blue-200 bg-blue-50">
                                 <CardContent className="p-4">
                                   <div className="text-center">
                                     <TestTube className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                                    <h4 className="font-medium text-blue-800">¿No tienes los tokens aún?</h4>
+                                    <h4 className="font-medium text-blue-800">
+                                      {!hasPaidSubscription() ? "Modo de Prueba Activado" : "¿No tienes los tokens aún?"}
+                                    </h4>
                                     <p className="text-sm text-blue-700 mb-3">
-                                      Puedes crear el bot sin tokens y configurarlos después desde la sección de prueba.
+                                      {!hasPaidSubscription() 
+                                        ? "Como usuario de prueba, puedes crear el bot sin configurar WhatsApp y probarlo en la sección de pruebas."
+                                        : "Puedes crear el bot sin tokens y configurarlos después. También podrás conectar WhatsApp más tarde."}
                                     </p>
                                     <Button
                                       variant="outline"
@@ -811,7 +972,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                                       }}
                                       disabled={isLoading}
                                     >
-                                      Crear Bot para Prueba
+                                      {!hasPaidSubscription() ? "Crear Bot de Prueba" : "Crear Bot sin WhatsApp"}
                                     </Button>
                                   </div>
                                 </CardContent>
@@ -904,6 +1065,145 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                       </CardContent>
                     </>
                   )}
+
+                  {/* Step 6: Webhook Configuration */}
+                  {currentStep === 6 && shouldShowPlatformSteps() && (
+                    <>
+                      <CardHeader>
+                        <CardTitle>
+                          Configurar Webhook de {formData.platform === "whatsapp" ? "WhatsApp" : "Instagram"}
+                        </CardTitle>
+                        <CardDescription>
+                          Último paso: configurar el webhook en Meta Developer Console para recibir mensajes
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <motion.div variants={fadeInUp}>
+                          <Card className="border-orange-200 bg-orange-50">
+                            <CardContent className="p-4">
+                              <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                  <Key className="h-5 w-5 text-orange-600" />
+                                  <h4 className="font-medium text-orange-800">URL del Webhook</h4>
+                                </div>
+                                <div className="bg-white p-3 rounded border font-mono text-sm break-all">
+                                  {window.location.origin}/api/whatsapp/webhook
+                                </div>
+                                <p className="text-xs text-orange-700">
+                                  Copia esta URL y úsala en la configuración del webhook de Meta Developer Console
+                                </p>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp}>
+                          <div className="bg-white border rounded-lg p-4 space-y-4">
+                            <h3 className="font-medium flex items-center gap-2">
+                              <Facebook className="h-4 w-4 text-blue-600" />
+                              Pasos en Meta Developer Console:
+                            </h3>
+                            
+                            <div className="space-y-3 text-sm">
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">1</div>
+                                <div>
+                                  <p className="font-medium">Ir a tu app en Meta Developer Console</p>
+                                  <p className="text-gray-600">developers.facebook.com/apps/</p>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">2</div>
+                                <div>
+                                  <p className="font-medium">
+                                    {formData.platform === "whatsapp" 
+                                      ? "Ir a WhatsApp > Configuración" 
+                                      : "Ir a Instagram > Configuración"}
+                                  </p>
+                                  <p className="text-gray-600">En el menú lateral de tu app</p>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">3</div>
+                                <div>
+                                  <p className="font-medium">Configurar Webhook</p>
+                                  <div className="text-gray-600 space-y-1">
+                                    <p><strong>URL del callback:</strong> La URL de arriba</p>
+                                    <p><strong>Token de verificación:</strong> {formData.whatsapp_webhook_verify_token || "tu_token_secreto"}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">4</div>
+                                <div>
+                                  <p className="font-medium">Suscribirse a eventos</p>
+                                  <p className="text-gray-600">
+                                    {formData.platform === "whatsapp" 
+                                      ? "Seleccionar: messages, message_deliveries, message_reads"
+                                      : "Seleccionar los eventos de mensajes que necesites"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <div className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">✓</div>
+                                <div>
+                                  <p className="font-medium">Verificar y Guardar</p>
+                                  <p className="text-gray-600">Meta verificará la conexión automáticamente</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="border-t pt-4 space-y-3">
+                              <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => window.open('https://developers.facebook.com/apps/', '_blank')}
+                              >
+                                <Facebook className="h-4 w-4 mr-2" />
+                                Abrir Meta Developer Console
+                              </Button>
+                              
+                              <div className="flex items-center gap-3">
+                                <Checkbox 
+                                  id="webhook-configured"
+                                  checked={tokensConfigured}
+                                  onCheckedChange={(checked) => setTokensConfigured(!!checked)}
+                                />
+                                <Label htmlFor="webhook-configured" className="text-sm">
+                                  He configurado correctamente el webhook en Meta Developer Console
+                                </Label>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp}>
+                          <Card className="border-green-200 bg-green-50">
+                            <CardContent className="p-4">
+                              <div className="text-center">
+                                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                                <h4 className="font-medium text-green-800">¡Todo listo!</h4>
+                                <p className="text-sm text-green-700 mb-3">
+                                  Una vez configurado el webhook, tu bot estará completamente funcional
+                                </p>
+                                <Button
+                                  onClick={handleCreateBot}
+                                  disabled={isLoading || !tokensConfigured}
+                                  className="w-full"
+                                >
+                                  {isLoading ? "Creando Bot..." : `Crear Bot con ${formData.platform === "whatsapp" ? "WhatsApp" : "Instagram"}`}
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      </CardContent>
+                    </>
+                  )}
                 </motion.div>
               </AnimatePresence>
 
@@ -945,10 +1245,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                       <Button
                         onClick={nextStep}
                         disabled={
-                          !canCreateBot ||
-                          (currentStep === 1 && !canProceedStep1) ||
-                          (currentStep === 2 && !canProceedStep2) ||
-                          (currentStep === 3 && !canProceedStep3)
+                          !canCreateBot || !isStepValid()
                         }
                         className="flex items-center justify-center gap-1 transition-all duration-300 rounded-2xl w-full sm:w-auto text-sm sm:text-base"
                       >

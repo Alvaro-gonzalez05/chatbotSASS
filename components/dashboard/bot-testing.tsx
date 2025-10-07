@@ -352,34 +352,49 @@ Mensaje del cliente: "${userMessage}"`
     setIsLoading(true)
 
     try {
-      // Simulate bot response delay
-      setTimeout(
-        async () => {
-          try {
-            const botResponse = await generateAIResponse(currentMessage, selectedBotData)
-            const botMessage: Message = {
-              id: (Date.now() + 1).toString(),
-              type: "bot",
-              content: botResponse,
-              timestamp: new Date(),
-            }
-            setMessages((prev) => [...prev, botMessage])
-          } catch (error) {
-            console.error('Error generating response:', error)
-            const errorMessage: Message = {
-              id: (Date.now() + 1).toString(),
-              type: "bot",
-              content: "Disculpa, tuve un problema procesando tu mensaje. ¿Podrías intentar de nuevo?",
-              timestamp: new Date(),
-            }
-            setMessages((prev) => [...prev, errorMessage])
-          } finally {
-            setIsLoading(false)
-          }
+      // Call the new chat API
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        1000 + Math.random() * 2000,
-      )
+        body: JSON.stringify({
+          botId: selectedBot,
+          message: currentMessage,
+          clientPhone: 'test-user-' + Date.now(), // Unique test phone
+          clientName: 'Usuario de Prueba',
+          platform: 'test'
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.success && data.response) {
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: "bot",
+          content: data.response,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, botMessage])
+      } else {
+        throw new Error(data.error || 'Unknown error')
+      }
+
     } catch (error) {
+      console.error('Error sending message:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: "bot",
+        content: "Disculpa, tuve un problema procesando tu mensaje. ¿Podrías intentar de nuevo?",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsLoading(false)
     }
   }
@@ -392,16 +407,49 @@ Mensaje del cliente: "${userMessage}"`
     const selectedBotData = bots.find((bot) => bot.id === selectedBot)
     if (!selectedBotData) return
 
-    // Usar la función de IA para generar el mensaje de bienvenida
-    const welcomeContent = await generateAIResponse("hola", selectedBotData)
-    
-    const welcomeMessage: Message = {
-      id: Date.now().toString(),
-      type: "bot",
-      content: welcomeContent,
-      timestamp: new Date(),
+    setIsLoading(true)
+
+    try {
+      // Call the new chat API for welcome message
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          botId: selectedBot,
+          message: 'hola',
+          clientPhone: 'test-user-' + Date.now(),
+          clientName: 'Usuario de Prueba',
+          platform: 'test'
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.response) {
+          const welcomeMessage: Message = {
+            id: Date.now().toString(),
+            type: "bot",
+            content: data.response,
+            timestamp: new Date(),
+          }
+          setMessages([welcomeMessage])
+        }
+      }
+    } catch (error) {
+      console.error('Error starting conversation:', error)
+      // Fallback to simple welcome message
+      const welcomeMessage: Message = {
+        id: Date.now().toString(),
+        type: "bot",
+        content: `¡Hola! Soy ${selectedBotData.name}, ¿en qué puedo ayudarte?`,
+        timestamp: new Date(),
+      }
+      setMessages([welcomeMessage])
+    } finally {
+      setIsLoading(false)
     }
-    setMessages([welcomeMessage])
   }
 
   return (
