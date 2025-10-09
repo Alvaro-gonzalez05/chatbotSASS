@@ -133,42 +133,212 @@ export function LandingPage() {
       </FadeIn>
 
       {/* Hero Section */}
-      <section className="py-12 sm:py-16 lg:py-20 px-4">
-        <div className="container mx-auto text-center">
-          <SlideUp>
-            <Badge variant="secondary" className="mb-4 sm:mb-6">
-              Desde Mendoza para el mundo
-            </Badge>
-          </SlideUp>
-          <FadeIn delay={0.2}>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 sm:mb-6 text-balance">
-              Automatiza tu atención al cliente con{" "}
-              <span className="text-primary">Inteligencia Artificial</span>
-            </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground mb-6 sm:mb-8 text-balance max-w-3xl mx-auto px-4">
-              Convierte visitantes en clientes fieles con chatbots inteligentes que nunca duermen. 
-              Creado en Mendoza, inspirado en la excelencia vitivinícola argentina.
-            </p>
-          </FadeIn>
-          <ScaleIn delay={0.4}>
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button size="lg" className="text-base sm:text-lg px-6 sm:px-8 w-full sm:w-auto" asChild>
+      <section className="py-12 sm:py-16 lg:py-24 px-4 overflow-hidden">
+        <div className="container mx-auto">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+            {/* Left Column - Content */}
+            <div className="space-y-6 lg:space-y-8">
+              <SlideUp>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="flex items-center gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    ))}
+                  </div>
+                  <span className="text-sm text-muted-foreground">4.9 en reviews</span>
+                </div>
+              </SlideUp>
+              
+              <FadeIn delay={0.1}>
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
+                  <span className="text-foreground">Convierte mensajes.</span>
+                  <br />
+                  <span className="text-foreground">Automatiza</span>{" "}
+                  <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-green-600 bg-clip-text text-transparent">
+                    Ventas
+                  </span>
+                </h1>
+              </FadeIn>
+              
+              
+              
+              <ScaleIn delay={0.3}>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button size="lg" className="bg-black hover:bg-gray-800 text-white px-8 py-4 text-lg font-medium" asChild>
                   <Link href="/register">
-                    Prueba Gratis por 14 Días
-                    <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
+                    Prueba UcoBot gratis
                   </Link>
                 </Button>
               </motion.div>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button size="lg" variant="outline" className="text-base sm:text-lg px-6 sm:px-8 w-full sm:w-auto">
-                  Ver Demo en Vivo
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button size="lg" variant="outline" className="px-8 py-4 text-lg font-medium">
+                  Ver demo en vivo
                 </Button>
               </motion.div>
             </div>
           </ScaleIn>
+          
+          <FadeIn delay={0.4}>
+            <p className="text-sm text-muted-foreground">
+              Primera herramienta de automatización que convierte consultas en ventas mientras duermes—dándote 
+              conversiones automáticas y confiables en las que puedes confiar las 24/7.
+            </p>
+          </FadeIn>
         </div>
-      </section>
+
+        {/* Right Column - Visual Demo */}
+        <div className="relative overflow-visible">
+          <FadeIn delay={0.5}>
+            {/* Background Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-green-200 via-blue-200 to-purple-200 rounded-3xl opacity-60" />
+            
+            {/* Main Cards Container */}
+            <div className="relative p-8 rounded-3xl min-h-[500px] flex flex-col justify-center items-center space-y-8">
+              
+              {/* Chat Interface - Primary Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6, duration: 0.5 }}
+                className="bg-white rounded-2xl shadow-xl p-4 border border-gray-100 w-full max-w-sm z-20"
+              >
+                <div className="flex items-center gap-3 mb-4 p-2 bg-gray-50 rounded-lg">
+                  <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span className="ml-2 text-xs text-gray-600 font-medium">UcoBot</span>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="text-sm font-medium text-gray-900">
+                    ¡Hola! ¿En qué te puedo ayudar hoy?
+                  </div>
+                  
+                  <div className="bg-blue-500 text-white p-3 rounded-lg rounded-br-sm ml-auto max-w-[80%] text-sm">
+                    Hola, ¿tienen productos disponibles?
+                  </div>
+                  
+                  <div className="text-sm text-gray-600 flex items-center gap-2">
+                    <div className="animate-pulse">Generando respuesta...</div>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Contact Card - Secondary Card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.8, duration: 0.6 }}
+                className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 border border-gray-100 w-full max-w-sm z-20"
+              >
+                <div className="flex items-center gap-3 sm:gap-4 mb-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-purple-400 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-lg">
+                    AG
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-gray-900 text-sm sm:text-base">Alvaro Gonzalez</h3>
+                    <p className="text-xs sm:text-sm text-gray-600">Mendoza, Argentina</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm">
+                    <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
+                    <span className="text-gray-700">+54 261 123-4567</span>
+                  </div>
+                  <div className="text-xs text-gray-500 bg-green-50 p-2 rounded">
+                    ✅ Cliente Registrado Correctamente
+                  </div>
+                </div>
+                
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <Zap className="w-3 h-3" />
+                    <span>Convierte consultas con IA</span>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Floating Metrics Cards - Sobresalen del contenedor */}
+            
+            {/* Metric 1: Top Left - Aumento de Ventas */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, x: -30, y: 20 }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+              transition={{ delay: 0.9, duration: 0.6 }}
+              className="absolute -top-4 sm:-top-8 -left-6 sm:-left-12 bg-white rounded-xl shadow-lg p-2 sm:p-4 border border-gray-100 w-32 sm:w-40 lg:w-44 transform rotate-3 z-30"
+            >
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-6 h-6 sm:w-10 sm:h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+                  <Zap className="w-3 h-3 sm:w-5 sm:h-5 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm sm:text-xl font-bold text-gray-900">+150%</div>
+                  <div className="text-xs sm:text-xs text-gray-600">Aumento de Ventas</div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Metric 2: Top Right - Atención 24/7 */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, x: 30, y: -20 }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+              transition={{ delay: 1.1, duration: 0.6 }}
+              className="absolute -top-2 sm:-top-4 -right-8 sm:-right-16 bg-white rounded-xl shadow-lg p-2 sm:p-4 border border-gray-100 w-28 sm:w-40 lg:w-44 transform -rotate-2 z-30"
+            >
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-6 h-6 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                  <Users className="w-3 h-3 sm:w-5 sm:h-5 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm sm:text-xl font-bold text-gray-900">24/7</div>
+                  <div className="text-xs sm:text-xs text-gray-600">Atención Automática</div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Metric 3: Bottom Left - Tiempo Respuesta */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, x: -20, y: 30 }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+              transition={{ delay: 1.3, duration: 0.6 }}
+              className="absolute -bottom-4 sm:-bottom-8 -left-4 sm:-left-8 bg-white rounded-xl shadow-lg p-2 sm:p-4 border border-gray-100 w-32 sm:w-40 lg:w-44 transform rotate-1 z-30"
+            >
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-6 h-6 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                  <Bot className="w-3 h-3 sm:w-5 sm:h-5 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm sm:text-xl font-bold text-gray-900">&lt; 3min</div>
+                  <div className="text-xs sm:text-xs text-gray-600">Tiempo Respuesta</div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Metric 4: Bottom Right - Respuestas Precisas */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, x: 25, y: 25 }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+              transition={{ delay: 1.5, duration: 0.6 }}
+              className="absolute -bottom-2 sm:-bottom-4 -right-6 sm:-right-12 bg-white rounded-xl shadow-lg p-2 sm:p-4 border border-gray-100 w-28 sm:w-40 lg:w-44 transform -rotate-3 z-30"
+            >
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-6 h-6 sm:w-10 sm:h-10 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-3 h-3 sm:w-5 sm:h-5 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm sm:text-xl font-bold text-gray-900">95%</div>
+                  <div className="text-xs sm:text-xs text-gray-600">Respuestas Precisas</div>
+                </div>
+              </div>
+            </motion.div>
+          </FadeIn>
+        </div>
+      </div>
+    </div>
+  </section>
 
       {/* Features Section */}
       <section className="py-12 sm:py-16 lg:py-20 px-4 bg-muted/50">
