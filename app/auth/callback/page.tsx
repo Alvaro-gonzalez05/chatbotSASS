@@ -43,15 +43,20 @@ export default function AuthCallbackPage() {
           router.push('/register/complete')
         } else {
           // Existing user with complete profile - show success animation then redirect
-          const { data: userProfile } = await supabase
+          const { data: userProfile, error: profileError } = await supabase
             .from('user_profiles')
-            .select('business_name, subscription_plan')
+            .select('business_name, plan_type, subscription_status')
             .eq('id', user.id)
             .single()
             
+          console.log('Callback - User profile data:', userProfile) // Debug log
+          if (profileError) {
+            console.error('Callback - Error fetching profile:', profileError)
+          }
+            
           setUserInfo({
             name: userProfile?.business_name || user.email?.split('@')[0],
-            plan: userProfile?.subscription_plan || 'trial',
+            plan: userProfile?.plan_type || 'trial',
             isNew: false
           })
           setShowSuccessOverlay(true)

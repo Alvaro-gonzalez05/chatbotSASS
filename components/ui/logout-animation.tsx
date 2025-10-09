@@ -2,26 +2,24 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { CheckCircle, Sparkles, User, Crown, Loader2 } from "lucide-react"
+import { LogOut, CheckCircle, Sparkles, User, Crown, Loader2, Waves } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useRouter } from "next/navigation"
 
-interface AuthSuccessOverlayProps {
+interface LogoutAnimationProps {
   isVisible: boolean
   userName?: string
   userPlan?: string
-  isNewUser?: boolean
   onComplete?: () => void
 }
 
-export default function AuthSuccessOverlay({
+export default function LogoutAnimation({
   isVisible,
   userName,
   userPlan = "trial",
-  isNewUser = false,
   onComplete
-}: AuthSuccessOverlayProps) {
+}: LogoutAnimationProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const router = useRouter()
 
@@ -29,11 +27,11 @@ export default function AuthSuccessOverlay({
     if (!isVisible) return
 
     const steps = [
-      { delay: 800, duration: 1000 },   // Aparición inicial (más tiempo)
-      { delay: 1800, duration: 1200 },  // Check animado (más tiempo)
-      { delay: 3200, duration: 800 },   // Mensaje de bienvenida
-      { delay: 4200, duration: 600 },   // Información del usuario
-      { delay: 5000, duration: 800 },   // Preparando redirección
+      { delay: 500, duration: 800 },    // Aparición inicial
+      { delay: 1300, duration: 1000 },  // Ícono de logout animado
+      { delay: 2500, duration: 800 },   // Mensaje de despedida
+      { delay: 3500, duration: 600 },   // Información final
+      { delay: 4300, duration: 800 },   // Preparando redirección
     ]
 
     const timers = steps.map((step, index) => {
@@ -42,14 +40,14 @@ export default function AuthSuccessOverlay({
       }, step.delay)
     })
 
-    // Redirección automática después de la animación (más tiempo)
+    // Redirección automática después de la animación
     const redirectTimer = setTimeout(() => {
       if (onComplete) {
         onComplete()
       } else {
-        router.push('/dashboard')
+        router.push('/')
       }
-    }, 6200)
+    }, 5500)
 
     return () => {
       timers.forEach(timer => clearTimeout(timer))
@@ -58,7 +56,6 @@ export default function AuthSuccessOverlay({
   }, [isVisible, router, onComplete])
 
   const getPlanInfo = (plan: string) => {
-    console.log('Getting plan info for:', plan) // Debug log
     switch (plan?.toLowerCase()) {
       case 'premium':
         return { label: 'Premium', color: 'bg-gradient-to-r from-purple-500 to-pink-500', icon: Crown }
@@ -69,7 +66,6 @@ export default function AuthSuccessOverlay({
       case 'trial':
         return { label: 'Prueba Gratuita', color: 'bg-gradient-to-r from-green-500 to-emerald-500', icon: User }
       default:
-        console.warn('Unknown plan type:', plan) // Debug warning
         return { label: 'Prueba Gratuita', color: 'bg-gradient-to-r from-gray-500 to-gray-600', icon: User }
     }
   }
@@ -98,17 +94,17 @@ export default function AuthSuccessOverlay({
                   animate={{ opacity: 1, scale: 1 }}
                   className="space-y-4"
                 >
-                  <Loader2 className="w-12 h-12 animate-spin text-blue-500 mx-auto" />
+                  <Loader2 className="w-12 h-12 animate-spin text-red-500 mx-auto" />
                   <h2 className="text-xl font-semibold text-gray-700">
-                    {isNewUser ? "Creando tu cuenta..." : "Iniciando sesión..."}
+                    Cerrando sesión...
                   </h2>
                 </motion.div>
               )}
 
-              {/* Animated Check Icon */}
+              {/* Animated Logout Icon */}
               {currentStep >= 2 && (
                 <motion.div
-                  initial={{ scale: 0, rotate: -180 }}
+                  initial={{ scale: 0, rotate: 180 }}
                   animate={{ 
                     scale: 1,
                     rotate: 0
@@ -117,13 +113,13 @@ export default function AuthSuccessOverlay({
                     type: "spring", 
                     stiffness: 200, 
                     damping: 10,
-                    duration: 0.8
+                    duration: 1
                   }}
                   className="relative mx-auto w-20 h-20"
                 >
-                  <div className="absolute inset-0 bg-green-100 rounded-full animate-pulse" />
-                  <div className="relative flex items-center justify-center w-full h-full bg-green-500 rounded-full">
-                    <CheckCircle className="w-12 h-12 text-white" />
+                  <div className="absolute inset-0 bg-red-100 rounded-full animate-pulse" />
+                  <div className="relative flex items-center justify-center w-full h-full bg-red-500 rounded-full">
+                    <LogOut className="w-12 h-12 text-white" />
                   </div>
                   
                   {/* Sparkles Animation */}
@@ -150,14 +146,14 @@ export default function AuthSuccessOverlay({
                         }}
                         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
                       >
-                        <Sparkles className="w-4 h-4 text-yellow-400" />
+                        <Sparkles className="w-4 h-4 text-orange-400" />
                       </motion.div>
                     ))}
                   </motion.div>
                 </motion.div>
               )}
 
-              {/* Success Message */}
+              {/* Farewell Message */}
               {currentStep >= 3 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -165,17 +161,17 @@ export default function AuthSuccessOverlay({
                     opacity: 1,
                     y: 0
                   }}
-                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
                   className="space-y-3"
                 >
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {isNewUser ? "¡Bienvenido!" : "¡Inicio exitoso!"}
-                  </h2>
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Waves className="w-6 h-6 text-gray-600" />
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      ¡Hasta luego!
+                    </h2>
+                  </div>
                   <p className="text-lg text-gray-600">
-                    {isNewUser 
-                      ? "Tu cuenta ha sido creada correctamente"
-                      : "Has iniciado sesión correctamente"
-                    }
+                    Sesión cerrada exitosamente
                   </p>
                 </motion.div>
               )}
@@ -188,14 +184,14 @@ export default function AuthSuccessOverlay({
                     opacity: 1,
                     y: 0
                   }}
-                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
                   className="space-y-4"
                 >
                   {userName && (
                     <div className="flex items-center justify-center gap-2">
                       <User className="w-5 h-5 text-gray-500" />
                       <span className="text-lg font-medium text-gray-700">
-                        {userName}
+                        Gracias, {userName}
                       </span>
                     </div>
                   )}
@@ -209,6 +205,10 @@ export default function AuthSuccessOverlay({
                       Plan {planInfo.label}
                     </Badge>
                   </div>
+
+                  <p className="text-sm text-gray-500 mt-4">
+                    ¡Esperamos verte pronto de nuevo!
+                  </p>
                 </motion.div>
               )}
 
@@ -217,17 +217,17 @@ export default function AuthSuccessOverlay({
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4 }}
+                  transition={{ duration: 0.6 }}
                   className="space-y-3"
                 >
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: "100%" }}
                     transition={{ duration: 0.8, ease: "easeInOut" }}
-                    className="h-1 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mx-auto"
+                    className="h-1 bg-gradient-to-r from-red-400 to-orange-500 rounded-full mx-auto"
                   />
                   <p className="text-sm text-gray-500">
-                    Redirigiendo al dashboard...
+                    Redirigiendo a la página principal...
                   </p>
                 </motion.div>
               )}

@@ -35,15 +35,20 @@ export default function LoginPage() {
 
         if (profile && profile.business_name && profile.business_name !== 'Mi Negocio') {
           // Mostrar animación de éxito para login con Google también
-          const { data: userProfile } = await supabase
+          const { data: userProfile, error: profileError } = await supabase
             .from('user_profiles')
-            .select('business_name, subscription_plan')
+            .select('business_name, plan_type, subscription_status')
             .eq('id', user.id)
             .single()
             
+          console.log('Google login - User profile data:', userProfile) // Debug log
+          if (profileError) {
+            console.error('Google login - Error fetching profile:', profileError)
+          }
+            
           setUserInfo({
             name: userProfile?.business_name || user.email?.split('@')[0],
-            plan: userProfile?.subscription_plan || 'trial'
+            plan: userProfile?.plan_type || 'trial'
           })
           setShowSuccessOverlay(true)
         } else {
@@ -81,15 +86,20 @@ export default function LoginPage() {
       
       if (user) {
         // Obtener información del usuario para la animación
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
-          .select('business_name, subscription_plan')
+          .select('business_name, plan_type, subscription_status')
           .eq('id', user.id)
           .single()
 
+        console.log('User profile data:', profile) // Debug log
+        if (profileError) {
+          console.error('Error fetching profile:', profileError)
+        }
+
         setUserInfo({
           name: profile?.business_name || user.email?.split('@')[0],
-          plan: profile?.subscription_plan || 'trial'
+          plan: profile?.plan_type || 'trial'
         })
         setShowSuccessOverlay(true)
       }

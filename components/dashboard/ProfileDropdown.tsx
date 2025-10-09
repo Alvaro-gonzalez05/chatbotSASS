@@ -16,6 +16,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import LogoutAnimation from "@/components/ui/logout-animation";
+import { useLogoutAnimation } from "@/hooks/use-logout-animation";
 
 interface ProfileDropdownProps {
   user: User;
@@ -29,6 +31,13 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
   const router = useRouter();
   const supabase = createClient();
 
+  // Hook para manejar logout con animación
+  const { logout, animationProps } = useLogoutAnimation({
+    userName: profile?.business_name || user?.email?.split('@')[0],
+    userPlan: profile?.plan_type || 'trial',
+    redirectTo: '/'
+  });
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -38,8 +47,8 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
   }
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
+    setIsOpen(false); // Cerrar dropdown primero
+    await logout(); // Usar el hook de logout con animación
   };
 
   const getInitials = (name: string) => {
@@ -374,6 +383,9 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
           </>
         )}
       </AnimatePresence>
+
+      {/* Logout Animation */}
+      <LogoutAnimation {...animationProps} />
     </div>
   );
 }
