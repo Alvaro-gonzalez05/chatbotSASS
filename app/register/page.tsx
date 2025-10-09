@@ -8,6 +8,7 @@ import { useState } from "react"
 import { motion, easeOut } from 'framer-motion'
 import { MoveRight, Check } from 'lucide-react'
 import Image from 'next/image'
+import AuthSuccessOverlay from '@/components/ui/auth-success-overlay'
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("")
@@ -16,6 +17,7 @@ export default function RegisterPage() {
   const [businessName, setBusinessName] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false)
   const router = useRouter()
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -47,7 +49,9 @@ export default function RegisterPage() {
         },
       })
       if (error) throw error
-      router.push("/register/success")
+      
+      // Mostrar animación de éxito antes de redirigir
+      setShowSuccessOverlay(true)
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
@@ -289,6 +293,19 @@ export default function RegisterPage() {
           </motion.div>
         </motion.div>
       </div>
+
+      {/* Auth Success Overlay */}
+      <AuthSuccessOverlay
+        isVisible={showSuccessOverlay}
+        userName={businessName || email.split('@')[0]}
+        userPlan="trial"
+        isNewUser={true}
+        onComplete={() => {
+          setShowSuccessOverlay(false)
+          setIsLoading(false)
+          router.push('/register/success')
+        }}
+      />
     </div>
   )
 }

@@ -8,12 +8,15 @@ import { useState, useEffect } from "react"
 import { motion, easeOut } from 'framer-motion'
 import { MoveRight } from 'lucide-react'
 import Image from 'next/image'
+import AuthSuccessOverlay from '@/components/ui/auth-success-overlay'
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false)
+  const [userInfo, setUserInfo] = useState<{name?: string, plan?: string}>({})
   const router = useRouter()
 
   useEffect(() => {
@@ -31,7 +34,18 @@ export default function LoginPage() {
           .single()
 
         if (profile && profile.business_name && profile.business_name !== 'Mi Negocio') {
-          router.push('/dashboard')
+          // Mostrar animación de éxito para login con Google también
+          const { data: userProfile } = await supabase
+            .from('user_profiles')
+            .select('business_name, subscription_plan')
+            .eq('id', user.id)
+            .single()
+            
+          setUserInfo({
+            name: userProfile?.business_name || user.email?.split('@')[0],
+            plan: userProfile?.subscription_plan || 'trial'
+          })
+          setShowSuccessOverlay(true)
         } else {
           router.push('/register/complete')
         }
@@ -59,15 +73,28 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: { user }, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       if (error) throw error
-      router.push("/dashboard")
+      
+      if (user) {
+        // Obtener información del usuario para la animación
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('business_name, subscription_plan')
+          .eq('id', user.id)
+          .single()
+
+        setUserInfo({
+          name: profile?.business_name || user.email?.split('@')[0],
+          plan: profile?.subscription_plan || 'trial'
+        })
+        setShowSuccessOverlay(true)
+      }
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
-    } finally {
       setIsLoading(false)
     }
   }
@@ -250,6 +277,19 @@ export default function LoginPage() {
           </motion.div>
         </motion.div>
       </div>
+
+      {/* Auth Success Overlay */}
+      <AuthSuccessOverlay
+        isVisible={showSuccessOverlay}
+        userName={userInfo.name}
+        userPlan={userInfo.plan}
+        isNewUser={false}
+        onComplete={() => {
+          setShowSuccessOverlay(false)
+          setIsLoading(false)
+          router.push('/dashboard')
+        }}
+      />
     </div>
   )
 }

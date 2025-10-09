@@ -1,12 +1,15 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import AuthSuccessOverlay from '@/components/ui/auth-success-overlay'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
   const supabase = createClient()
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false)
+  const [userInfo, setUserInfo] = useState<{name?: string, plan?: string, isNew?: boolean}>({})
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -39,8 +42,19 @@ export default function AuthCallbackPage() {
           // New user or incomplete profile - redirect to complete registration
           router.push('/register/complete')
         } else {
-          // Existing user with complete profile - redirect to dashboard
-          router.push('/dashboard')
+          // Existing user with complete profile - show success animation then redirect
+          const { data: userProfile } = await supabase
+            .from('user_profiles')
+            .select('business_name, subscription_plan')
+            .eq('id', user.id)
+            .single()
+            
+          setUserInfo({
+            name: userProfile?.business_name || user.email?.split('@')[0],
+            plan: userProfile?.subscription_plan || 'trial',
+            isNew: false
+          })
+          setShowSuccessOverlay(true)
         }
 
       } catch (error) {
@@ -63,6 +77,18 @@ export default function AuthCallbackPage() {
           Te estamos redirigiendo, por favor espera.
         </p>
       </div>
+
+      {/* Auth Success Overlay */}
+      <AuthSuccessOverlay
+        isVisible={showSuccessOverlay}
+        userName={userInfo.name}
+        userPlan={userInfo.plan}
+        isNewUser={userInfo.isNew}
+        onComplete={() => {
+          setShowSuccessOverlay(false)
+          router.push('/dashboard')
+        }}
+      />
     </div>
   )
 }

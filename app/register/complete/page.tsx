@@ -39,6 +39,7 @@ export default function CompleteRegistrationPage() {
 
       if (profile && profile.business_name && profile.business_name !== 'Mi Negocio') {
         // User already completed registration, redirect to dashboard
+        sessionStorage.setItem('loginSuccess', 'true')
         router.push('/dashboard')
         return
       }
@@ -71,6 +72,9 @@ export default function CompleteRegistrationPage() {
 
       if (updateError) throw updateError
 
+      // Set login success flag for animation (new user completed registration)
+      sessionStorage.setItem('loginSuccess', 'true')
+      
       // Redirect to dashboard
       router.push('/dashboard')
     } catch (error: unknown) {

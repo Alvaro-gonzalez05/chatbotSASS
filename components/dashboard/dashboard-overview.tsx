@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +18,7 @@ interface DashboardOverviewProps {
 }
 
 export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
+
   // Mock data - in real app, this would come from the database
   const stats = {
     totalClients: 0,
@@ -26,6 +28,8 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
   }
 
   const trialDaysLeft = 15 // This would be calculated based on user creation date
+
+
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -98,7 +102,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <ScrollScaleIn delay={0.5}>
-                <div className="text-xl sm:text-2xl font-bold">{stats.totalClientes}</div>
+                <div className="text-xl sm:text-2xl font-bold">{stats.totalClients}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">+0% desde el mes pasado</p>
             </CardContent>
@@ -270,7 +274,6 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
           </motion.div>
         </ScrollStaggerChild>
       </ScrollStaggeredChildren>
-
     </div>
   )
 }
