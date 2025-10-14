@@ -58,11 +58,19 @@ export default async function PedidosPage() {
   // Get unique categories
   const categories = [...new Set(products?.map(p => p.category).filter(Boolean))] as string[]
 
+  // Fetch delivery settings
+  const { data: deliverySettings } = await supabase
+    .from("delivery_settings")
+    .select("*")
+    .eq("user_id", data.user.id)
+    .single()
+
   return (
     <PedidosClient 
       initialOrders={orders || []}
       initialProducts={products || []}
       initialCategories={categories}
+      deliverySettings={deliverySettings || undefined}
     />
   )
 }

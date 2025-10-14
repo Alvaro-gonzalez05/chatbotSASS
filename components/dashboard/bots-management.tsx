@@ -23,6 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { MultiStepBotCreation } from "./multi-step-bot-creation"
+import { MetaBusinessConfig } from "./meta-business-config"
 import {
   Plus,
   Bot,
@@ -81,6 +82,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
   const [bots, setBots] = useState<BotData[]>(initialBots)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isMetaConfigDialogOpen, setIsMetaConfigDialogOpen] = useState(false)
   const [selectedBot, setSelectedBot] = useState<BotData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
@@ -243,6 +245,20 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       is_active: bot.is_active,
     })
     setIsEditDialogOpen(true)
+  }
+
+  const openMetaConfigDialog = (bot: BotData) => {
+    // Verificar si el usuario tiene un plan de pago
+    if (userSubscription?.plan_type === "trial") {
+      toast.error("Funcionalidad premium requerida", {
+        description: "La configuración de Meta Business Suite está disponible solo para planes de pago. Actualiza tu suscripción.",
+        duration: 4000,
+      })
+      return
+    }
+
+    setSelectedBot(bot)
+    setIsMetaConfigDialogOpen(true)
   }
 
   const handleFeatureChange = (featureId: string, checked: boolean) => {
@@ -486,6 +502,12 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
+                      {bot.platform === "whatsapp" && (
+                        <DropdownMenuItem onClick={() => openMetaConfigDialog(bot)}>
+                          <Zap className="mr-2 h-4 w-4" />
+                          Configurar Meta Business Suite
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={() => handleToggleBot(bot.id, !bot.is_active)}>
                         {bot.is_active ? (
                           <>
@@ -568,8 +590,30 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
         userId={userId}
       />
 
+      {/* Meta Business Configuration Dialog */}
+      <MetaBusinessConfig
+        isOpen={isMetaConfigDialogOpen}
+        onClose={() => {
+          setIsMetaConfigDialogOpen(false)
+          setSelectedBot(null)
+          // Recargar página para evitar estados inconsistentes
+          window.location.reload()
+        }}
+        bot={selectedBot}
+        onConfigComplete={() => {
+          // Recargar la página para asegurar que todo esté sincronizado
+          window.location.reload()
+        }}
+      />
+
       {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open)
+        if (!open) {
+          // Recargar página cuando se cierra el diálogo (incluyendo clic afuera)
+          window.location.reload()
+        }
+      }}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] sm:max-h-[80vh] overflow-y-auto mx-4 sm:mx-0">
           <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
             <DialogTitle className="text-lg sm:text-xl">Editar Bot</DialogTitle>
@@ -691,7 +735,11 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                 whileTap={{ scale: 0.95 }}
                 className="w-full sm:w-auto"
               >
-                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto text-sm sm:text-base">
+                <Button type="button" variant="outline" onClick={() => {
+                  setIsEditDialogOpen(false)
+                  // Recargar página al cancelar edición
+                  window.location.reload()
+                }} className="w-full sm:w-auto text-sm sm:text-base">
                   Cancelar
                 </Button>
               </motion.div>

@@ -86,7 +86,6 @@ const steps = [
   { id: "platform", title: "Plataforma" },
   { id: "config", title: "Configuración" },
   { id: "ai", title: "IA" },
-  { id: "tokens", title: "Tokens" },
 ]
 
 const fadeInUp = {
@@ -123,7 +122,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     facebook_app_secret: "",
     whatsapp_phone_number_id: "",
     whatsapp_access_token: "",
-    whatsapp_webhook_verify_token: "",
+    whatsapp_webhook_verify_token: `bot_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`,
   })
 
   useEffect(() => {
@@ -206,7 +205,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   }
 
   const getTotalSteps = () => {
-    return shouldShowPlatformSteps() ? 6 : 3
+    return 3
   }
 
   const resetForm = () => {
@@ -288,21 +287,19 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
 
       if (error) throw error
 
-      // Si el usuario configuró WhatsApp y tiene tokens, guardar la integración
-      if (formData.platform === "whatsapp" && 
-          formData.whatsapp_access_token && 
-          formData.whatsapp_phone_number_id &&
-          hasPaidSubscription()) {
+      // Si es WhatsApp, crear integración con token por defecto (para configurar luego)
+      if (formData.platform === "whatsapp") {
+        const defaultVerifyToken = `verify_${bot.id}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
         
         const whatsappData = {
           user_id: userId,
           bot_id: bot.id,
-          phone_number_id: formData.whatsapp_phone_number_id,
-          access_token: formData.whatsapp_access_token,
-          webhook_verify_token: formData.whatsapp_webhook_verify_token || `verify_${bot.id}_${Date.now()}`,
-          business_account_id: formData.whatsapp_phone_number_id, // Temporal, se puede actualizar después
+          phone_number_id: "pending_configuration", // Placeholder hasta configurar Meta
+          access_token: "pending_configuration", // Placeholder hasta configurar Meta
+          webhook_verify_token: defaultVerifyToken,
+          business_account_id: "pending_configuration", // Placeholder hasta configurar Meta
           webhook_url: `${window.location.origin}/api/whatsapp/webhook`,
-          is_active: true,
+          is_active: false, // Desactivado hasta completar configuración
           is_verified: false
         }
 
@@ -313,8 +310,8 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         if (whatsappError) {
           console.error("Error creating WhatsApp integration:", whatsappError)
           // No fallar la creación del bot por esto, solo mostrar advertencia
-          toast.error("Bot creado pero hubo un error con la configuración de WhatsApp", {
-            description: "Podrás configurar WhatsApp más tarde desde la configuración del bot.",
+          toast.error("Bot creado pero hubo un error preparando la integración de WhatsApp", {
+            description: "Podrás configurar WhatsApp más tarde desde las opciones del bot.",
             duration: 6000,
           })
         }
@@ -330,8 +327,8 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         window.dispatchEvent(new CustomEvent('botCreated', { detail: bot }))
         
         toast.success(`Bot "${bot.name}" creado exitosamente`, {
-          description: formData.platform === "whatsapp" && formData.whatsapp_access_token && hasPaidSubscription()
-            ? "Tu bot está configurado con WhatsApp y listo para recibir mensajes."
+          description: formData.platform === "whatsapp"
+            ? "Tu bot está listo. Para usarlo con WhatsApp, configura la integración con Meta Business Suite desde las opciones del bot."
             : "Tu bot está listo. Puedes probarlo en la sección de pruebas.",
           duration: 4000,
         })
@@ -355,12 +352,6 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         return formData.name.trim() !== "" && formData.personality_prompt.trim() !== ""
       case 3:
         return formData.gemini_api_key.trim() !== ""
-      case 4:
-        return shouldShowPlatformSteps() ? metaBusinessSetupCompleted : true
-      case 5:
-        return true // Los tokens son opcionales
-      case 6:
-        return shouldShowPlatformSteps() ? tokensConfigured : true
       default:
         return true
     }
@@ -934,16 +925,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                               />
                             </motion.div>
 
-                            <motion.div variants={fadeInUp} className="space-y-2">
-                              <Label htmlFor="wa-verify-token">Webhook Verify Token</Label>
-                              <Input
-                                id="wa-verify-token"
-                                value={formData.whatsapp_webhook_verify_token}
-                                onChange={(e) => setFormData({ ...formData, whatsapp_webhook_verify_token: e.target.value })}
-                                placeholder="mi_token_secreto"
-                                className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                              />
-                            </motion.div>
+
 
                             <motion.div variants={fadeInUp}>
                               <Card className="border-blue-200 bg-blue-50">
@@ -1089,8 +1071,19 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                                 <div className="bg-white p-3 rounded border font-mono text-sm break-all">
                                   {window.location.origin}/api/whatsapp/webhook
                                 </div>
+                                <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mt-2">
+                                  <p className="text-xs text-yellow-800 mb-1">
+                                    <strong>Desarrollo con ngrok:</strong>
+                                  </p>
+                                  <p className="text-xs text-yellow-700">
+                                    Si usas ngrok, usa: <code className="bg-white px-1 rounded">https://tu-id.ngrok-free.app/api/whatsapp/webhook</code>
+                                  </p>
+                                  <p className="text-xs text-yellow-700 mt-1">
+                                    <strong>Importante:</strong> Asegúrate de que la URL termine sin slash final
+                                  </p>
+                                </div>
                                 <p className="text-xs text-orange-700">
-                                  Copia esta URL y úsala en la configuración del webhook de Meta Developer Console
+                                  Copia esta URL exacta y úsala en Meta Developer Console
                                 </p>
                               </div>
                             </CardContent>
@@ -1181,25 +1174,30 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                           </div>
                         </motion.div>
 
-                        <motion.div variants={fadeInUp}>
-                          <Card className="border-green-200 bg-green-50">
-                            <CardContent className="p-4">
-                              <div className="text-center">
-                                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                                <h4 className="font-medium text-green-800">¡Todo listo!</h4>
-                                <p className="text-sm text-green-700 mb-3">
-                                  Una vez configurado el webhook, tu bot estará completamente funcional
-                                </p>
-                                <Button
-                                  onClick={handleCreateBot}
-                                  disabled={isLoading || !tokensConfigured}
-                                  className="w-full"
-                                >
-                                  {isLoading ? "Creando Bot..." : `Crear Bot con ${formData.platform === "whatsapp" ? "WhatsApp" : "Instagram"}`}
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
+                        {/* Campo para el Webhook Verify Token */}
+                        <motion.div variants={fadeInUp} className="space-y-2">
+                          <Label htmlFor="wa-verify-token">Webhook Verify Token *</Label>
+                          <Input
+                            id="wa-verify-token"
+                            value={formData.whatsapp_webhook_verify_token}
+                            onChange={(e) => setFormData({ ...formData, whatsapp_webhook_verify_token: e.target.value })}
+                            placeholder="mi_token_secreto"
+                            className="transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          />
+                          <div className="bg-blue-50 border border-blue-200 rounded p-3 mt-2">
+                            <p className="text-xs text-blue-800 mb-1">
+                              <strong>💡 Importante:</strong>
+                            </p>
+                            <p className="text-xs text-blue-700">
+                              • Este token es <strong>único para tu bot</strong> - puedes usar cualquier texto secreto
+                            </p>
+                            <p className="text-xs text-blue-700">
+                              • Ejemplo: <code className="bg-white px-1 rounded">mi_bot_2024_secreto</code>
+                            </p>
+                            <p className="text-xs text-blue-700">
+                              • Meta usará este token para verificar que el webhook es tuyo
+                            </p>
+                          </div>
                         </motion.div>
                       </CardContent>
                     </>

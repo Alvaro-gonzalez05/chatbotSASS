@@ -9,6 +9,7 @@ import Image from "next/image"
 import { FadeIn, SlideUp, ScaleIn, StaggeredFadeIn, StaggerChild } from "@/components/ui/page-transition"
 import { ScrollFadeIn, ScrollSlideUp, ScrollScaleIn, ScrollStaggeredChildren, ScrollStaggerChild } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
+import { FlipWords } from "@/components/ui/flipwords"
 
 export function LandingPage() {
   const plans = [
@@ -151,9 +152,17 @@ export function LandingPage() {
               
               <FadeIn delay={0.1}>
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
-                  <span className="text-foreground">Convierte mensajes.</span>
+                  <FlipWords
+                    words={["Convierte mensajes.", "Transforma consultas.", "Multiplica respuestas.", "Optimiza conversaciones."]}
+                    duration={3500}
+                    className="text-foreground"
+                  />
                   <br />
-                  <span className="text-foreground">Automatiza</span>{" "}
+                  <FlipWords
+                    words={["Automatiza", "Maximiza", "Impulsa", "Acelera"]}
+                    duration={3000}
+                    className="text-foreground"
+                  />{" "}
                   <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-green-600 bg-clip-text text-transparent">
                     Ventas
                   </span>

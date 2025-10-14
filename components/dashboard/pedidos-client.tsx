@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ShoppingCart, Package, Edit, Trash2, Eye } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ShoppingCart, Package, Edit, Trash2, Eye, Settings } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
@@ -22,6 +25,7 @@ interface Order {
   delivery_phone: string
   customer_notes?: string
   delivery_address?: string
+  order_type?: string
   items: any[]
   created_at: string
   client?: {
@@ -44,22 +48,48 @@ interface Product {
   created_at: string
 }
 
+interface DeliverySettings {
+  id?: string
+  pickup_enabled: boolean
+  delivery_enabled: boolean
+  pickup_instructions: string
+  delivery_instructions: string
+  delivery_fee: number
+  minimum_order_delivery: number
+  delivery_time_estimate: string
+  pickup_time_estimate: string
+}
+
 interface PedidosClientProps {
   initialOrders: Order[]
   initialProducts: Product[]
   initialCategories: string[]
+  deliverySettings?: DeliverySettings
 }
 
 export function PedidosClient({ 
   initialOrders, 
   initialProducts, 
-  initialCategories 
+  initialCategories,
+  deliverySettings: initialDeliverySettings 
 }: PedidosClientProps) {
   const [orders] = useState<Order[]>(initialOrders)
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [categories, setCategories] = useState<string[]>(initialCategories)
   const [isLoading, setIsLoading] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(
+    initialDeliverySettings || {
+      pickup_enabled: true,
+      delivery_enabled: false,
+      pickup_instructions: 'Retiro en el local',
+      delivery_instructions: 'Envío a domicilio',
+      delivery_fee: 0,
+      minimum_order_delivery: 0,
+      delivery_time_estimate: '30-45 minutos',
+      pickup_time_estimate: '15-20 minutos',
+    }
+  )
 
   const refreshProducts = async () => {
     try {
@@ -76,6 +106,52 @@ export function PedidosClient({
       toast.error("Error al cargar productos")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const saveDeliverySettings = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch("/api/delivery-settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(deliverySettings),
+      })
+
+      if (response.ok) {
+        toast.success("Configuración de modalidades guardada")
+      } else {
+        toast.error("Error al guardar configuración")
+      }
+    } catch (error) {
+      console.error("Error saving delivery settings:", error)
+      toast.error("Error al guardar configuración")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const getOrderTypeLabel = (orderType?: string) => {
+    switch (orderType) {
+      case 'pickup':
+        return 'Retiro en el local'
+      case 'delivery':
+        return 'Envío a domicilio'
+      default:
+        return 'Retiro en el local'
+    }
+  }
+
+  const getOrderTypeBadgeColor = (orderType?: string) => {
+    switch (orderType) {
+      case 'pickup':
+        return 'bg-blue-600 hover:bg-blue-700'
+      case 'delivery':
+        return 'bg-green-600 hover:bg-green-700'
+      default:
+        return 'bg-blue-600 hover:bg-blue-700'
     }
   }
 
@@ -129,7 +205,7 @@ export function PedidosClient({
       </div>
 
       <Tabs defaultValue="orders" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="orders" className="flex items-center gap-2">
             <ShoppingCart className="h-4 w-4" />
             Pedidos
@@ -137,6 +213,10 @@ export function PedidosClient({
           <TabsTrigger value="products" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
             Productos
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Configuración
           </TabsTrigger>
         </TabsList>
 
@@ -167,6 +247,7 @@ export function PedidosClient({
                   <TableRow>
                     <TableHead>Estado</TableHead>
                     <TableHead>Cliente</TableHead>
+                    <TableHead>Modalidad</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Plataforma</TableHead>
                     <TableHead>Fecha</TableHead>
@@ -183,9 +264,16 @@ export function PedidosClient({
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{order.client?.name || 'Cliente Anónimo'}</p>
+                          <p className="font-medium">
+                            {order.client?.name || order.delivery_phone || 'Cliente Anónimo'}
+                          </p>
                           <p className="text-sm text-muted-foreground">{order.delivery_phone}</p>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`${getOrderTypeBadgeColor(order.order_type)} text-white`}>
+                          {getOrderTypeLabel(order.order_type)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="font-medium">
                         ${order.total_amount}
@@ -219,7 +307,7 @@ export function PedidosClient({
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
                                   <Label>Cliente</Label>
-                                  <p>{order.client?.name || 'Cliente Anónimo'}</p>
+                                  <p>{order.client?.name || order.delivery_phone || 'Cliente Anónimo'}</p>
                                 </div>
                                 <div>
                                   <Label>Teléfono</Label>
@@ -229,6 +317,12 @@ export function PedidosClient({
                                   <Label>Estado</Label>
                                   <Badge className={`${getStatusColor(order.status)} text-white`}>
                                     {getStatusText(order.status)}
+                                  </Badge>
+                                </div>
+                                <div>
+                                  <Label>Modalidad</Label>
+                                  <Badge className={`${getOrderTypeBadgeColor(order.order_type)} text-white`}>
+                                    {getOrderTypeLabel(order.order_type)}
                                   </Badge>
                                 </div>
                                 <div>
@@ -351,6 +445,191 @@ export function PedidosClient({
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold">Configuración de Modalidades</h2>
+              <p className="text-sm text-muted-foreground">
+                Configura las modalidades de entrega disponibles para tus clientes
+              </p>
+            </div>
+            <Button 
+              onClick={saveDeliverySettings}
+              disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Guardar Configuración
+            </Button>
+          </div>
+
+          <div className="grid gap-6">
+            {/* Modalidades disponibles */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Modalidades Disponibles</CardTitle>
+                <CardDescription>
+                  Selecciona qué modalidades de entrega quieres ofrecer a tus clientes
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="pickup"
+                    checked={deliverySettings.pickup_enabled}
+                    onCheckedChange={(checked) =>
+                      setDeliverySettings(prev => ({ ...prev, pickup_enabled: !!checked }))
+                    }
+                  />
+                  <Label htmlFor="pickup" className="font-medium">Retiro en local</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="delivery"
+                    checked={deliverySettings.delivery_enabled}
+                    onCheckedChange={(checked) =>
+                      setDeliverySettings(prev => ({ ...prev, delivery_enabled: !!checked }))
+                    }
+                  />
+                  <Label htmlFor="delivery" className="font-medium">Envío a domicilio</Label>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Configuración de delivery */}
+            {deliverySettings.delivery_enabled && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Configuración de Delivery</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="delivery_fee">Costo de delivery ($)</Label>
+                      <Input
+                        id="delivery_fee"
+                        type="number"
+                        step="0.01"
+                        value={deliverySettings.delivery_fee}
+                        onChange={(e) =>
+                          setDeliverySettings(prev => ({ 
+                            ...prev, 
+                            delivery_fee: parseFloat(e.target.value) || 0 
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="minimum_order">Pedido mínimo para delivery ($)</Label>
+                      <Input
+                        id="minimum_order"
+                        type="number"
+                        step="0.01"
+                        value={deliverySettings.minimum_order_delivery}
+                        onChange={(e) =>
+                          setDeliverySettings(prev => ({ 
+                            ...prev, 
+                            minimum_order_delivery: parseFloat(e.target.value) || 0 
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Instrucciones personalizadas */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Instrucciones Personalizadas</CardTitle>
+                <CardDescription>
+                  Personaliza los mensajes que el bot enviará para cada modalidad
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {deliverySettings.pickup_enabled && (
+                  <div className="space-y-2">
+                    <Label htmlFor="pickup_instructions">Mensaje para retiro en local</Label>
+                    <Textarea
+                      id="pickup_instructions"
+                      value={deliverySettings.pickup_instructions}
+                      onChange={(e) =>
+                        setDeliverySettings(prev => ({ 
+                          ...prev, 
+                          pickup_instructions: e.target.value 
+                        }))
+                      }
+                      placeholder="Ej: Te esperamos en nuestro local en..."
+                    />
+                  </div>
+                )}
+
+                {deliverySettings.delivery_enabled && (
+                  <div className="space-y-2">
+                    <Label htmlFor="delivery_instructions">Mensaje para delivery</Label>
+                    <Textarea
+                      id="delivery_instructions"
+                      value={deliverySettings.delivery_instructions}
+                      onChange={(e) =>
+                        setDeliverySettings(prev => ({ 
+                          ...prev, 
+                          delivery_instructions: e.target.value 
+                        }))
+                      }
+                      placeholder="Ej: Realizamos delivery en la zona..."
+                    />
+                  </div>
+                )}
+
+
+              </CardContent>
+            </Card>
+
+            {/* Tiempos estimados */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Tiempos Estimados</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {deliverySettings.pickup_enabled && (
+                  <div className="space-y-2">
+                    <Label htmlFor="pickup_time">Tiempo estimado para retiro</Label>
+                    <Input
+                      id="pickup_time"
+                      value={deliverySettings.pickup_time_estimate}
+                      onChange={(e) =>
+                        setDeliverySettings(prev => ({ 
+                          ...prev, 
+                          pickup_time_estimate: e.target.value 
+                        }))
+                      }
+                      placeholder="Ej: 15-20 minutos"
+                    />
+                  </div>
+                )}
+
+                {deliverySettings.delivery_enabled && (
+                  <div className="space-y-2">
+                    <Label htmlFor="delivery_time">Tiempo estimado para delivery</Label>
+                    <Input
+                      id="delivery_time"
+                      value={deliverySettings.delivery_time_estimate}
+                      onChange={(e) =>
+                        setDeliverySettings(prev => ({ 
+                          ...prev, 
+                          delivery_time_estimate: e.target.value 
+                        }))
+                      }
+                      placeholder="Ej: 30-45 minutos"
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 

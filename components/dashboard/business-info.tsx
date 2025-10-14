@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building2, MapPin, Phone, Mail, Globe, Save } from "lucide-react"
+import { Building2, MapPin, Phone, Mail, Globe, Save, MenuSquare } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -24,6 +24,7 @@ interface BusinessInfo {
   phone: string
   email: string
   website: string
+  menu_link: string
   opening_hours: {
     monday: { isOpen: boolean; open: string; close: string }
     tuesday: { isOpen: boolean; open: string; close: string }
@@ -51,6 +52,7 @@ export function BusinessInfo() {
     phone: "",
     email: "",
     website: "",
+    menu_link: "",
     opening_hours: {
       monday: { isOpen: false, open: "09:00", close: "18:00" },
       tuesday: { isOpen: false, open: "09:00", close: "18:00" },
@@ -128,7 +130,27 @@ export function BusinessInfo() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const { error } = await supabase.from("user_profiles").update({ business_info: businessInfo }).eq("id", user.id)
+      // Use upsert to insert or update the user profile - save to both individual fields AND business_info
+      console.log('💾 Saving business info:', { user_id: user.id, business_info: businessInfo })
+      
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .upsert({ 
+          id: user.id,
+          // Individual fields for direct access
+          business_name: businessInfo.business_name,
+          business_description: businessInfo.description,
+          business_hours: businessInfo.opening_hours,
+          social_links: businessInfo.social_media,
+          location: businessInfo.address,
+          menu_link: businessInfo.menu_link,
+          // Also save complete object in business_info for backup
+          business_info: businessInfo 
+        })
+        .eq("id", user.id)
+        .select()
+
+      console.log('💾 Save result:', { data, error })
 
       if (error) throw error
 
@@ -413,20 +435,36 @@ export function BusinessInfo() {
                   </ScrollStaggerChild>
                 </ScrollStaggeredChildren>
 
-                <ScrollFadeIn delay={0.5}>
-                  <div className="space-y-2">
-                    <Label htmlFor="website">Sitio Web</Label>
-                    <div className="flex gap-2">
-                      <Globe className="h-4 w-4 mt-3 text-muted-foreground" />
-                      <Input
-                        id="website"
-                        value={businessInfo.website}
-                        onChange={(e) => updateField("website", e.target.value)}
-                        placeholder="https://www.miempresa.com"
-                      />
+                <ScrollStaggeredChildren className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ScrollStaggerChild>
+                    <div className="space-y-2">
+                      <Label htmlFor="website">Sitio Web</Label>
+                      <div className="flex gap-2">
+                        <Globe className="h-4 w-4 mt-3 text-muted-foreground" />
+                        <Input
+                          id="website"
+                          value={businessInfo.website}
+                          onChange={(e) => updateField("website", e.target.value)}
+                          placeholder="https://www.miempresa.com"
+                        />
+                      </div>
                     </div>
-                  </div>
-                </ScrollFadeIn>
+                  </ScrollStaggerChild>
+                  <ScrollStaggerChild>
+                    <div className="space-y-2">
+                      <Label htmlFor="menu_link">Menú/Catálogo</Label>
+                      <div className="flex gap-2">
+                        <MenuSquare className="h-4 w-4 mt-3 text-muted-foreground" />
+                        <Input
+                          id="menu_link"
+                          value={businessInfo.menu_link}
+                          onChange={(e) => updateField("menu_link", e.target.value)}
+                          placeholder="https://menu.miempresa.com"
+                        />
+                      </div>
+                    </div>
+                  </ScrollStaggerChild>
+                </ScrollStaggeredChildren>
               </CardContent>
             </Card>
           </ScrollFadeIn>

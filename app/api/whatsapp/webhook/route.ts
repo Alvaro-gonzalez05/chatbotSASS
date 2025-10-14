@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 
 // Webhook verification (GET request)
@@ -9,22 +9,45 @@ export async function GET(request: NextRequest) {
   const token = url.searchParams.get('hub.verify_token')
   const challenge = url.searchParams.get('hub.challenge')
 
-  console.log('WhatsApp Webhook Verification:', { mode, token, challenge })
-
   // Verify the webhook
   if (mode === 'subscribe') {
-    // Get the verify token from database or environment
-    const VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'your-verify-token'
-    
-    if (token === VERIFY_TOKEN) {
-      console.log('WhatsApp webhook verified successfully')
-      return new NextResponse(challenge, { status: 200 })
-    } else {
-      console.log('WhatsApp webhook verification failed - invalid token')
-      return new NextResponse('Verification failed', { status: 403 })
+    try {
+      // Check database for user's bot tokens
+      let VERIFY_TOKEN = null
+      
+      if (token) {
+        // Use admin client for webhook operations to bypass RLS
+        const supabase = createAdminClient()
+        
+        // Try direct token match
+        const { data: directMatch, error: directError } = await supabase
+          .from('whatsapp_integrations')
+          .select('*')
+          .eq('webhook_verify_token', token)
+          .single()
+        
+        if (directMatch && !directError) {
+          VERIFY_TOKEN = token
+        }
+      }
+      
+      if (VERIFY_TOKEN && token === VERIFY_TOKEN) {
+        return new NextResponse(challenge, { 
+          status: 200,
+          headers: {
+            'Content-Type': 'text/plain'
+          }
+        })
+      } else {
+        return new NextResponse('Verification failed', { status: 403 })
+      }
+    } catch (error) {
+      console.error('Error during webhook verification:', error)
+      return new NextResponse('Verification error', { status: 500 })
     }
   }
 
+  console.log('Invalid webhook verification request - missing mode or not subscribe')
   return new NextResponse('Bad request', { status: 400 })
 }
 
@@ -62,14 +85,16 @@ export async function POST(request: NextRequest) {
 }
 
 async function processWhatsAppMessage(messageData: any) {
-  console.log('Processing WhatsApp message:', messageData)
-
   if (!messageData.messages || messageData.messages.length === 0) {
-    console.log('No messages in webhook data')
     return
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
+
+  // Extract contact information if available
+  const contacts = messageData.contacts || []
+  const contactInfo = contacts.length > 0 ? contacts[0] : null
+  const senderName = contactInfo?.profile?.name || null
 
   for (const message of messageData.messages) {
     try {
@@ -91,35 +116,40 @@ async function processWhatsAppMessage(messageData: any) {
       // Find the WhatsApp integration for this phone number
       const { data: integration, error: integrationError } = await supabase
         .from('whatsapp_integrations')
-        .select(`
-          *,
-          bots (
-            id,
-            name,
-            personality,
-            instructions,
-            features
-          )
-        `)
+        .select('*')
         .eq('phone_number_id', messageData.metadata?.phone_number_id)
         .eq('is_active', true)
         .single()
 
       if (integrationError || !integration) {
-        console.log('No active integration found for phone number:', messageData.metadata?.phone_number_id)
+        
         continue
       }
 
-      // Check if we already processed this message
-      const { data: existingMessage } = await supabase
-        .from('whatsapp_messages')
-        .select('id')
-        .eq('whatsapp_message_id', whatsappMessageId)
+      // Fetch the bot separately with debugging
+      console.log('🔍 Searching for bot with ID:', integration.bot_id)
+      
+      // First check if there are multiple bots with this ID (should not happen)
+      const { data: bot, error: botError } = await supabase
+        .from('bots')
+        .select('id, name, personality_prompt, gemini_api_key, features, user_id')
+        .eq('id', integration.bot_id)
         .single()
 
-      if (existingMessage) {
-        console.log('Message already processed:', whatsappMessageId)
+      if (botError || !bot) {
+        console.error('❌ Bot not found:', botError?.message)
         continue
+      }
+
+      // Mark integration as verified if this is the first successful webhook
+      if (!integration.is_verified) {
+        await supabase
+          .from('whatsapp_integrations')
+          .update({
+            is_verified: true,
+            webhook_verified_at: new Date().toISOString()
+          })
+          .eq('id', integration.id)
       }
 
       // Extract message content based on type
@@ -151,12 +181,24 @@ async function processWhatsAppMessage(messageData: any) {
           textContent = `[${messageType} message]`
       }
 
+      // Check if we already processed this message
+      // Check for duplicate messages
+      const { data: existingMessage } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('whatsapp_message_id', whatsappMessageId)
+        .maybeSingle()
+
+      if (existingMessage) {
+        continue // Skip duplicate messages
+      }
+
       // Find or create conversation
       const { data: conversation, error: conversationError } = await supabase
         .from('conversations')
         .select('*')
         .eq('client_phone', senderPhone)
-        .eq('bot_id', integration.bots.id)
+        .eq('bot_id', bot.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -168,9 +210,10 @@ async function processWhatsAppMessage(messageData: any) {
         const { data: newConversation, error: createError } = await supabase
           .from('conversations')
           .insert({
-            bot_id: integration.bots.id,
+            user_id: bot.user_id,
+            bot_id: bot.id,
             client_phone: senderPhone,
-            client_name: senderPhone, // We'll update this when we get the contact info
+            client_name: senderName || senderPhone, // Use actual name from WhatsApp profile
             platform: 'whatsapp',
             status: 'active'
           })
@@ -183,6 +226,14 @@ async function processWhatsAppMessage(messageData: any) {
         }
 
         conversationId = newConversation.id
+      } else {
+        // Update conversation name if we have a better name and current name is just the phone
+        if (senderName && conversation.client_name === senderPhone) {
+          await supabase
+            .from('conversations')
+            .update({ client_name: senderName })
+            .eq('id', conversation.id)
+        }
       }
 
       // Store the WhatsApp message
@@ -205,14 +256,44 @@ async function processWhatsAppMessage(messageData: any) {
         continue
       }
 
-      // Store the message in conversations table
+      // Store the WhatsApp message using UPSERT to handle race conditions
+      const { data: insertedMessage, error: whatsappMessageError } = await supabase
+        .from('whatsapp_messages')
+        .upsert({
+          whatsapp_message_id: whatsappMessageId,
+          integration_id: integration.id,
+          conversation_id: conversationId,
+          sender_phone: senderPhone,
+          recipient_phone: recipientPhone,
+          message_type: messageType,
+          message_content: messageContent,
+          direction: 'inbound',
+          whatsapp_timestamp: parseInt(timestamp)
+        }, {
+          onConflict: 'whatsapp_message_id',
+          ignoreDuplicates: false
+        })
+        .select()
+
+      if (whatsappMessageError) {
+        console.error('Error storing WhatsApp message:', whatsappMessageError)
+        continue
+      }
+
+      // Check if this is a new message or if it was already processed
+      if (!insertedMessage || insertedMessage.length === 0) {
+        continue // Message already processed
+      }
+
+      // Store the message in conversations table for AI context
       const { error: conversationMessageError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           content: textContent,
-          sender_type: 'user',
-          platform_message_id: whatsappMessageId
+          sender_type: 'client',
+          message_type: messageType,
+          metadata: { whatsapp_message_id: whatsappMessageId }
         })
 
       if (conversationMessageError) {
@@ -222,7 +303,7 @@ async function processWhatsAppMessage(messageData: any) {
 
       // Only process AI response for text messages (for now)
       if (messageType === 'text' && textContent.trim()) {
-        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent)
+        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName)
       }
 
     } catch (error) {
@@ -235,11 +316,15 @@ async function generateAndSendAIResponse(
   integration: any,
   conversationId: string,
   senderPhone: string,
-  userMessage: string
+  userMessage: string,
+  botId: string,
+  senderName?: string
 ) {
   try {
-    // Generate AI response using existing chat API logic
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/chat`, {
+    // Generate AI response using webhook-specific chat API
+    const chatApiUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/chat/webhook`
+    
+    const response = await fetch(chatApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -247,7 +332,9 @@ async function generateAndSendAIResponse(
       body: JSON.stringify({
         message: userMessage,
         conversationId,
-        botId: integration.bots.id
+        botId: botId,
+        senderPhone,
+        senderName
       })
     })
 
@@ -260,7 +347,7 @@ async function generateAndSendAIResponse(
     
     if (aiResponse.response) {
       // Send response via WhatsApp
-      await sendWhatsAppMessage(integration.access_token, senderPhone, aiResponse.response)
+      await sendWhatsAppMessage(integration.access_token, integration.phone_number_id, senderPhone, aiResponse.response)
     }
 
   } catch (error) {
@@ -268,24 +355,38 @@ async function generateAndSendAIResponse(
   }
 }
 
-async function sendWhatsAppMessage(accessToken: string, recipientPhone: string, message: string) {
+async function sendWhatsAppMessage(accessToken: string, phoneNumberId: string, recipientPhone: string, message: string) {
   try {
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
+    // Normalize phone number for Argentina (remove extra 9)
+    let normalizedPhone = recipientPhone
+    if (recipientPhone.startsWith('549')) {
+      normalizedPhone = '54' + recipientPhone.substring(3)
+    }
+    
+    // Clean message to avoid encoding issues
+    const cleanMessage = message
+      .replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
+      .replace(/[^\x00-\xFF]/g, '')
+      .trim()
+    
+    const tokenToUse = accessToken.trim()
+
+    const requestBody = {
+      messaging_product: 'whatsapp',
+      to: normalizedPhone,
+      type: 'text',
+      text: {
+        body: cleanMessage
+      }
+    }
     
     const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${tokenToUse}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: recipientPhone,
-        type: 'text',
-        text: {
-          body: message
-        }
-      })
+      body: JSON.stringify(requestBody)
     })
 
     if (!response.ok) {
@@ -294,8 +395,7 @@ async function sendWhatsAppMessage(accessToken: string, recipientPhone: string, 
       return
     }
 
-    const result = await response.json()
-    console.log('WhatsApp message sent successfully:', result)
+    await response.json()
 
   } catch (error) {
     console.error('Error sending WhatsApp message:', error)
