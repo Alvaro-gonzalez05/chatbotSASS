@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/server"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,26 +44,149 @@ export async function POST(request: NextRequest) {
 
 
 
-    // Get conversation
-    const { data: conversation, error: conversationError } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("id", conversationId)
-      .single()
+    // Handle test conversations differently
+    let conversation
+    let actualConversationId = conversationId
+    
+    if (conversationId.startsWith('test-conversation-')) {
+      // Generate a consistent UUID based on the test conversation ID
+      // This allows multiple test conversations per bot with valid UUIDs
+      const crypto = require('crypto')
+      const namespace = '6ba7b810-9dad-11d1-80b4-00c04fd430c8' // UUID namespace
+      const hash = crypto.createHash('sha1').update(conversationId + botId).digest('hex')
+      // Create UUID v5-like format
+      actualConversationId = [
+        hash.substring(0, 8),
+        hash.substring(8, 12),
+        '5' + hash.substring(13, 16), // version 5
+        hash.substring(16, 20),
+        hash.substring(20, 32)
+      ].join('-')
+      
+      console.log(`🧪 Test conversation "${conversationId}" mapped to UUID: ${actualConversationId}`)
+      
+      // First check if test conversation already exists
+      const { data: existingConversation } = await supabase
+        .from("conversations")
+        .select("*")
+        .eq("id", actualConversationId)
+        .single()
 
-    if (conversationError || !conversation) {
-      console.error('Conversation not found:', conversationError)
-      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+      if (existingConversation) {
+        conversation = existingConversation
+        console.log('✅ Using existing test conversation:', actualConversationId)
+      } else {
+        // Create a real conversation for testing in the database using bot UUID
+        const { data: newConversation, error: createError } = await supabase
+          .from("conversations")
+          .insert({
+            id: actualConversationId,
+            user_id: bot.user_id,
+            bot_id: botId,
+            platform: 'test',
+            client_name: senderName || 'Usuario de Prueba',
+            client_phone: senderPhone || 'test-user',
+            client_id: null,
+            status: 'active',
+            last_message_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (createError) {
+          console.error('Error creating test conversation:', createError)
+          console.error('Attempted conversation data:', {
+            id: actualConversationId,
+            user_id: bot.user_id,
+            bot_id: botId,
+            platform: 'test'
+          })
+          return NextResponse.json({ error: "Error creating test conversation" }, { status: 500 })
+        }
+        
+        conversation = newConversation
+        console.log('✅ Created test conversation with bot UUID:', newConversation)
+      }
+    } else {
+      // Get real conversation from database
+      const { data: realConversation, error: conversationError } = await supabase
+        .from("conversations")
+        .select("*")
+        .eq("id", conversationId)
+        .single()
+
+      if (conversationError || !realConversation) {
+        console.error('Conversation not found:', conversationError)
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+      }
+      conversation = realConversation
+    }
+
+    // Auto-extract client data from the conversation if enabled
+    let extractedClientData = null
+    extractedClientData = await extractClientDataFromMessage(message, senderName, senderPhone, bot, conversation.id, supabase)
+    
+    // Create/update client record if we have extracted data
+    if (extractedClientData) {
+      console.log('🔍 Attempting to create/update client. Conversation client_id:', conversation.client_id)
+      console.log('🔍 Extracted client data:', extractedClientData)
+      
+      // If conversation already has a client, get existing client data to merge
+      let existingClientData = null
+      if (conversation.client_id) {
+        const { data: existingClient } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("id", conversation.client_id)
+          .single()
+        
+        if (existingClient) {
+          existingClientData = existingClient
+          console.log('🔍 Found existing client in conversation:', existingClient)
+          
+          // Merge data: keep existing data, only add missing fields
+          const mergedData = {
+            name: existingClient.name || extractedClientData.name,
+            phone: existingClient.phone || extractedClientData.phone,
+            email: existingClient.email || extractedClientData.email
+          }
+          
+          console.log('🔍 Merged client data:', mergedData)
+          extractedClientData = mergedData
+        }
+      }
+      
+      // For test conversations, only create client if we have both name and phone
+      const shouldCreateClient = !conversationId.startsWith('test-conversation-') || 
+        (extractedClientData.name && extractedClientData.phone)
+      
+      console.log('🔍 Should create client:', shouldCreateClient)
+      
+      if (shouldCreateClient) {
+        const clientRecord = await createOrUpdateClient(supabase, bot.user_id, extractedClientData, conversation.id)
+        if (clientRecord) {
+          console.log('✅ Client created/updated:', clientRecord.id)
+          // Update conversation with client_id (even test conversations)
+          await supabase
+            .from("conversations")
+            .update({ client_id: clientRecord.id })
+            .eq("id", conversation.id)
+        } else {
+          console.log('❌ Failed to create/update client')
+        }
+      }
+    } else {
+      console.log('🔍 No extracted client data to process')
     }
 
     // Generate bot response using the same logic as the main chat API
-    const botResponse = await generateBotResponse(supabase, bot, conversation, message, bot.user_id, userProfile, senderName, senderPhone)
+    const botResponse = await generateBotResponse(supabase, bot, conversation, message, bot.user_id, userProfile, senderName, senderPhone, extractedClientData)
 
-    // Save bot response to messages table
+    // Save bot response to messages table (works for both real and test conversations)
     const { error: saveError } = await supabase
       .from("messages")
       .insert({
-        conversation_id: conversationId,
+        conversation_id: actualConversationId,
         content: botResponse,
         sender_type: 'bot',
         message_type: 'text',
@@ -73,14 +197,14 @@ export async function POST(request: NextRequest) {
       console.error('Error saving bot message:', saveError)
     }
 
-    // Update conversation last activity
+    // Update conversation last activity (works for all conversations now)
     await supabase
       .from("conversations")
       .update({ 
         last_message_at: new Date().toISOString(),
         status: 'active'
       })
-      .eq("id", conversationId)
+      .eq("id", actualConversationId)
 
     return NextResponse.json({
       response: botResponse,
@@ -105,21 +229,25 @@ async function generateBotResponse(
   userId: string,
   userProfile: any,
   senderName?: string,
-  senderPhone?: string
+  senderPhone?: string,
+  extractedClientData?: any
 ): Promise<string> {
   try {
-    // Get conversation history for context
+    // Get conversation history for context (recent messages first)
     const { data: messages } = await supabase
       .from("messages")
       .select("*")
       .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: true })
-      .limit(20) // Last 20 messages for context
+      .order("created_at", { ascending: false })
+      .limit(8) // Last 8 messages for better context
 
-    const conversationHistory = messages?.map((msg: any) => ({
+    // Reverse to get chronological order for AI
+    const recentMessages = messages?.reverse() || []
+
+    const conversationHistory = recentMessages.map((msg: any) => ({
       role: msg.sender_type === 'client' ? 'user' : 'assistant',
       content: msg.content
-    })) || []
+    }))
 
     // Prepare the enhanced prompt with business information from user_profiles table
     let businessInfo = 'No hay información del negocio disponible.'
@@ -136,22 +264,18 @@ async function generateBotResponse(
       console.log('🏢 User profile loaded:', userProfile)
       console.log('🤖 Bot features:', botFeatures)
       
-      // Format business hours
+      // Format business hours - simplified
       let hoursText = 'No especificado'
       if (userProfile.business_hours && typeof userProfile.business_hours === 'object') {
         const openDays = Object.entries(userProfile.business_hours)
           .filter(([_, dayInfo]: [string, any]) => dayInfo?.isOpen)
-          .map(([day, dayInfo]: [string, any]) => `${day}: ${dayInfo.open} - ${dayInfo.close}`)
-        hoursText = openDays.length > 0 ? openDays.join(', ') : 'Cerrado toda la semana'
+        hoursText = openDays.length > 0 ? `${openDays.length} días abierto` : 'Cerrado'
       }
 
-      // Format social media
+      // Format social media - simplified
       let socialText = 'No especificado'
-      if (userProfile.social_links && typeof userProfile.social_links === 'object') {
-        const socialLinks = Object.entries(userProfile.social_links)
-          .filter(([_, link]) => link && typeof link === 'string' && link.trim())
-          .map(([platform, link]) => `${platform}: ${link}`)
-        socialText = socialLinks.length > 0 ? socialLinks.join(', ') : 'No especificado'
+      if (userProfile.social_links?.whatsapp) {
+        socialText = `WhatsApp: ${userProfile.social_links.whatsapp}`
       }
 
       // Try to get additional info from business_info field if individual fields are empty
@@ -162,46 +286,75 @@ async function generateBotResponse(
       const menuText = menuLink ? `Disponible en: ${menuLink}` : 'No especificado'
 
       businessInfo = `
-Nombre del negocio: ${userProfile.business_name || fallbackInfo.business_name || 'No especificado'}
-Descripción: ${userProfile.business_description || fallbackInfo.description || 'No especificado'}
-Dirección: ${userProfile.location || fallbackInfo.address || 'No especificado'}
-Teléfono: ${fallbackInfo.phone || 'No especificado'}
-Email: ${fallbackInfo.email || 'No especificado'}
-Sitio web: ${fallbackInfo.website || 'No especificado'}
-Menú/Catálogo: ${menuText}
-Tipo de negocio: ${fallbackInfo.business_type || 'No especificado'}
-Horarios de atención: ${hoursText}
-Redes sociales: ${socialText}
+${userProfile.business_name || 'Negocio'} - ${userProfile.business_description || 'Restaurante'}
+📍 ${userProfile.location || 'No especificado'}
+📞 ${fallbackInfo.phone || 'No especificado'}
+🍴 Menú: ${menuText}
+⏰ ${hoursText}
+${socialText ? '📱 ' + socialText : ''}
       `.trim()
 
       // Get delivery settings if bot can take orders
       if (canTakeOrders) {
-        const { data: deliverySettings } = await supabase
+        const { data: deliverySettings, error: deliveryError } = await supabase
           .from("delivery_settings")
           .select("*")
           .eq("user_id", userId)
           .single()
 
-        if (deliverySettings) {
-          const availableModes = []
-          if (deliverySettings.pickup_enabled) {
-            availableModes.push(`• RETIRO EN EL LOCAL: ${deliverySettings.pickup_instructions} (Tiempo estimado: ${deliverySettings.pickup_time_estimate})`)
+        console.log('🚚 Delivery settings:', deliverySettings, 'Error:', deliveryError)
+
+        let finalDeliverySettings = deliverySettings
+
+        // If no delivery settings exist, create default ones
+        if (!deliverySettings) {
+          console.log('🚚 Creating default delivery settings for user')
+          const { data: newSettings, error: createError } = await supabase
+            .from("delivery_settings")
+            .insert({
+              user_id: userId,
+              pickup_enabled: true,
+              delivery_enabled: false,
+              pickup_instructions: 'Retiro en el local',
+              delivery_instructions: 'Envío a domicilio',
+              delivery_fee: 0,
+              minimum_order_delivery: 0,
+              delivery_time_estimate: '30-45 minutos',
+              pickup_time_estimate: '15-20 minutos'
+            })
+            .select()
+            .single()
+
+          if (!createError && newSettings) {
+            finalDeliverySettings = newSettings
+            console.log('✅ Default delivery settings created:', newSettings)
+          } else {
+            console.error('❌ Error creating default delivery settings:', createError)
           }
-          if (deliverySettings.delivery_enabled) {
-            const deliveryFee = deliverySettings.delivery_fee > 0 ? ` (Costo: $${deliverySettings.delivery_fee})` : ''
-            const minOrder = deliverySettings.minimum_order_delivery > 0 ? ` (Pedido mínimo: $${deliverySettings.minimum_order_delivery})` : ''
-            availableModes.push(`• ENVÍO A DOMICILIO: ${deliverySettings.delivery_instructions}${deliveryFee}${minOrder} (Tiempo estimado: ${deliverySettings.delivery_time_estimate})`)
+        }
+
+        if (finalDeliverySettings) {
+          const availableModes = []
+          const modeOptions = []
+          
+          if (finalDeliverySettings.pickup_enabled) {
+            availableModes.push(`• RETIRO: ${finalDeliverySettings.pickup_time_estimate}`)
+            modeOptions.push('retiro')
+          }
+          if (finalDeliverySettings.delivery_enabled) {
+            availableModes.push(`• ENVÍO: ${finalDeliverySettings.delivery_time_estimate}`)
+            modeOptions.push('envío')
           }
           
           if (availableModes.length > 0) {
+            const modePrompt = modeOptions.length === 1 
+              ? `Solo ofrecemos ${modeOptions[0]}` 
+              : `Pregunta: "¿Lo querés para ${modeOptions.join(' o ')}?"`
+            
             deliveryModesInfo = `
-MODALIDADES DE ENTREGA DISPONIBLES:
-${availableModes.join('\n')}
-
-IMPORTANTE PARA ENVÍOS A DOMICILIO:
-- Si el cliente elige envío a domicilio, SIEMPRE pregunta por la dirección completa antes de confirmar el pedido
-- La dirección debe incluir calle, número, barrio/zona
-- Sin dirección completa NO se puede confirmar el pedido de envío a domicilio
+MODALIDADES: ${availableModes.join(', ')}
+${modePrompt}
+${finalDeliverySettings.delivery_enabled ? 'Para envío: pedir dirección completa' : ''}
             `.trim()
           }
         }
@@ -253,18 +406,22 @@ INFORMACIÓN ADICIONAL PARA RESPUESTAS SOBRE MENÚ:
 FUNCIONALIDADES ESPECIALES DEL BOT:
 Estás habilitado para: ${capabilities.join(' y ')}.
 
-${canTakeOrders ? `
-INSTRUCCIONES PARA PEDIDOS:
-- FLUJO: 1) Confirma producto/cantidad 2) Delivery/retiro 3) Solo pide teléfono si no lo tienes 4) "PEDIDO CONFIRMADO" + resumen
-- Ya tienes el teléfono del cliente (${senderPhone || 'no disponible'}), NO lo pidas de nuevo
-- Cuando tengas: producto + cantidad + delivery/retiro, di "PEDIDO CONFIRMADO" inmediatamente
-- Los números simples (1,2,3) son cantidades
-` : ''}
+        ${canTakeOrders ? `
+PEDIDOS: producto → modalidad → "PEDIDO CONFIRMADO"
+` : ''}${canTakeReservations ? `
+        ${canTakeReservations ? `
+RESERVAS: pedir fecha, hora, personas, nombre, teléfono → "RESERVA CONFIRMADA"
+- En el resumen, usa el nombre que te dio el cliente, no "Usuario de Prueba"
+- Acepta formatos naturales de fecha: "mañana", "el viernes", "15 de octubre"  
+- Acepta formatos naturales de hora: "7 pm", "19:00", "siete de la noche", "20 horas"
 
-${canTakeReservations ? `
-INSTRUCCIONES PARA RESERVAS:
-- Pide: fecha, hora, cantidad personas, nombre, teléfono
-- Al final: "RESERVA CONFIRMADA" con resumen
+MANEJO DE CONTEXTO - MUY IMPORTANTE:
+- Antes de hacer cualquier pregunta, LEE los mensajes anteriores de esta conversación
+- Si el cliente ya dijo fecha/hora/personas/nombre en mensajes anteriores, NO lo preguntes de nuevo
+- Ejemplo: Si en un mensaje anterior dijo "sábado 7pm para 4 personas", ya tienes fecha/hora/personas
+- SOLO pregunta la información que realmente te falta según el historial
+- Usa TODA la información acumulada de mensajes anteriores para decidir qué preguntar
+` : ''}
 ` : ''}
         `.trim()
       }
@@ -272,7 +429,9 @@ INSTRUCCIONES PARA RESERVAS:
     
     // Prepare client information
     const clientInfo = senderName || senderPhone || 'Cliente'
-    const hasClientPhone = senderPhone && senderPhone !== conversation.client_phone
+    const hasClientPhone = senderPhone && senderPhone !== 'test-user' && senderPhone !== conversation.client_phone
+    const hasExtractedName = extractedClientData?.name && extractedClientData.name !== 'Usuario de Prueba'
+    const hasExtractedPhone = extractedClientData?.phone && extractedClientData.phone !== 'test-user'
 
     const systemPrompt = `Eres ${bot.name}, un asistente virtual amigable y profesional que representa a un negocio.
 
@@ -284,21 +443,38 @@ ${productsInfo}
 ${deliveryModesInfo}
 
 INFORMACIÓN DEL CLIENTE ACTUAL:
-- Nombre: ${clientInfo}
-${senderPhone ? `- Teléfono: ${senderPhone}` : ''}
+- Nombre: ${hasExtractedName ? extractedClientData.name : clientInfo}
+- Teléfono: ${hasExtractedPhone ? extractedClientData.phone : (senderPhone || 'No disponible')}
+- Estado de datos: ${hasExtractedName && hasExtractedPhone ? 'COMPLETOS' : hasExtractedName ? 'FALTA TELÉFONO' : 'FALTA NOMBRE Y TELÉFONO'}
 
 ${botCapabilities}
+
+${botFeatures.includes('register_clients') ? `
+REGISTRO DE CLIENTES:
+- Si FALTA TELÉFONO: "¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?"
+- Si COMPLETOS: responde normal
+` : ''}
 
 PERSONALIDAD:
 ${bot.personality_prompt || 'Responde de manera útil, cortés y profesional. Siempre mantén un tono amigable y orientado al servicio al cliente.'}
 
 INSTRUCCIONES:
-- Recuerda toda la conversación anterior
-- Responde como parte del equipo del negocio
+- LEE Y RECUERDA todo el historial de conversación antes de responder
+- Si ya tienes información de mensajes anteriores, úsala - NO la pidas otra vez
+- Responde como parte del equipo del negocio  
 - Usa información del negocio proporcionada
 - Respuestas cortas, naturales y amigables
 - Solo temas del negocio
 - Números = cantidades en pedidos
+
+DETECCIÓN DE INTENCIONES:
+- PEDIDOS: Palabras clave como "quiero", "pedir", "ordenar", "llevar", "comprar", "me das", nombres de productos
+- RESERVAS: Palabras clave como "reservar", "mesa", "cita", "apartar", "agendar", "programar", fechas y horas
+- EXTRACCIÓN DE DATOS: Si el cliente menciona su nombre o teléfono, tómalo en cuenta para futuras referencias
+- Responde proactivamente cuando detectes estas intenciones
+- Para pedidos: confirma productos, cantidades y modalidad de entrega
+- Para reservas: confirma fecha, hora, cantidad de personas y datos de contacto
+- Sé natural al preguntar datos faltantes, no como un formulario
 
 MENÚ/CARTA:
 - Si piden carta: saluda + contexto + enlace directo (no hipervínculo) + invitar preguntas
@@ -338,7 +514,6 @@ MENÚ/CARTA:
           temperature: 0.3,
           topK: 20,
           topP: 0.8,
-          maxOutputTokens: 1024,
         }
       })
     })
@@ -354,10 +529,9 @@ MENÚ/CARTA:
     if (data.candidates && data.candidates[0]) {
       const candidate = data.candidates[0]
       
-      // Check if response was cut off due to max tokens
-      if (candidate.finishReason === 'MAX_TOKENS') {
-        console.warn('Response was cut off due to MAX_TOKENS limit')
-        return "Disculpa, mi respuesta fue muy larga. ¿Podrías repetir tu pregunta de forma más específica?"
+      // Log finish reason for debugging
+      if (candidate.finishReason) {
+        console.log('🔍 Gemini finish reason:', candidate.finishReason)
       }
       
       // Check if we have valid content
@@ -378,7 +552,8 @@ MENÚ/CARTA:
             canTakeOrders, 
             canTakeReservations,
             senderName,
-            senderPhone
+            senderPhone,
+            extractedClientData
           )
         }
 
@@ -405,25 +580,49 @@ async function processOrdersAndReservations(
   canTakeOrders: boolean,
   canTakeReservations: boolean,
   senderName?: string,
-  senderPhone?: string
+  senderPhone?: string,
+  extractedClientData?: any
 ) {
   try {
     // Analyze the conversation to detect completed orders or reservations
     const combinedText = `${userMessage} ${aiResponse}`.toLowerCase()
     
-    // Order detection patterns
+    // Order detection patterns - improved logic
     if (canTakeOrders) {
       const orderKeywords = [
         'pedido confirmado', 'pedido registrado', 'total del pedido', 
         'resumen del pedido', 'pedido finalizado', 'tu pedido es',
-        'el total es', 'total: $', 'confirmo tu pedido'
+        'el total es', 'total: $', 'confirmo tu pedido', 'anotado',
+        'ya estamos preparando', 'te esperamos', 'listo el pedido',
+        'perfecto, una', 'dale, una', 'excelente elección',
+        'tu orden', 'orden confirmada', 'orden registrada',
+        'perfecto!', 'listo!', '¡perfecto!', '¡listo!',
+        'apuntado', 'tomamos nota', 'muy bien',
+        'quedó anotado', 'genial', '¡genial!'
       ]
       
       const hasOrderConfirmation = orderKeywords.some(keyword => 
         aiResponse.toLowerCase().includes(keyword)
       )
       
-      if (hasOrderConfirmation) {
+      // Also check if we have a complete order (product + quantity + delivery method)
+      const orderInfo = parseOrderFromResponse(aiResponse, userMessage)
+      const hasCompleteOrder = orderInfo.items.length > 0 && (
+        combinedText.includes('retir') || 
+        combinedText.includes('domicilio') || 
+        combinedText.includes('envío') ||
+        combinedText.includes('delivery')
+      )
+      
+      // Create order if confirmed OR if we have complete information and bot seems to be acknowledging it
+      if (hasOrderConfirmation || (hasCompleteOrder && (
+        aiResponse.toLowerCase().includes('dale') ||
+        aiResponse.toLowerCase().includes('perfecto') ||
+        aiResponse.toLowerCase().includes('excelente') ||
+        aiResponse.toLowerCase().includes('anotado') ||
+        aiResponse.toLowerCase().includes('listo')
+      ))) {
+        console.log('🛒 Order detected - creating order. Confirmation:', hasOrderConfirmation, 'Complete:', hasCompleteOrder)
         // Create order directly from confirmed information
         await createOrderFromConfirmedResponse(supabase, bot, conversation, userMessage, aiResponse, senderName, senderPhone)
       }
@@ -432,17 +631,31 @@ async function processOrdersAndReservations(
     // Reservation detection patterns
     if (canTakeReservations) {
       const reservationKeywords = [
-        'reserva confirmada', 'reserva registrada', 'reserva para',
-        'mesa reservada', 'tu reserva', 'reserva finalizada'
+        'reserva confirmada', 'genial! reserva confirmada', 
+        'reserva registrada', 'reserva para', 'mesa reservada', 
+        'tu reserva', 'reserva finalizada', 'reserva anotada', 
+        'reserva lista', 'cita confirmada', 'cita registrada', 
+        'tu cita', 'mesa apartada', 'te esperamos el', 
+        'nos vemos el', 'quedaste agendado', 'agendamos tu', 
+        'programamos tu', 'tenemos tu mesa',
+        'aquí tenés el resumen', 'resumen:', '**fecha:**', '**hora:**',
+        'confirmada para', 'listo para', 'anotado para', 'registrado para'
       ]
       
       const hasReservationConfirmation = reservationKeywords.some(keyword => 
         aiResponse.toLowerCase().includes(keyword)
       )
       
+      console.log('🔍 Checking reservation confirmation. Found:', hasReservationConfirmation)
+      console.log('🤖 AI Response preview:', aiResponse.substring(0, 100))
+      console.log('🔍 Full AI Response for debugging:', aiResponse)
+      
       if (hasReservationConfirmation) {
-        // Extract reservation information
-        await processReservationFromConversation(supabase, bot, conversation, userMessage, aiResponse, senderName, senderPhone)
+        console.log('✅ Reservation confirmation detected - calling processReservationFromConversation')
+        // Extract reservation information - passing extracted client data too
+        await processReservationFromConversation(supabase, bot, conversation, userMessage, aiResponse, senderName, senderPhone, extractedClientData)
+      } else {
+        console.log('❌ No reservation confirmation keywords found in response')
       }
     }
   } catch (error) {
@@ -678,7 +891,7 @@ Si no hay pedido completo, responde: NO_ORDER
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: extractionPrompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
+        generationConfig: { temperature: 0.1 }
       })
     })
 
@@ -694,7 +907,16 @@ Si no hay pedido completo, responde: NO_ORDER
       
       if (extractionResult && extractionResult !== 'NO_ORDER') {
         try {
-          const orderData = JSON.parse(extractionResult)
+          // Clean up the response text - remove markdown formatting if present
+          let cleanedText = extractionResult.trim()
+          if (cleanedText.startsWith('```json')) {
+            cleanedText = cleanedText.replace(/```json\s*/, '').replace(/```\s*$/, '')
+          }
+          if (cleanedText.startsWith('```')) {
+            cleanedText = cleanedText.replace(/```\s*/, '').replace(/```\s*$/, '')
+          }
+          
+          const orderData = JSON.parse(cleanedText)
           
           if (orderData.hasOrder && orderData.items && orderData.items.length > 0) {
             // Save order to database
@@ -736,9 +958,17 @@ async function processReservationFromConversation(
   userMessage: string,
   aiResponse: string,
   senderName?: string,
-  senderPhone?: string
+  senderPhone?: string,
+  extractedClientData?: any
 ) {
   try {
+    console.log('🏨 PROCESSING RESERVATION FROM CONVERSATION')
+    console.log('🔍 Processing reservation from conversation:', {
+      userMessage,
+      aiResponse: aiResponse.substring(0, 100) + '...',
+      extractedClientData,
+      botGeminiKey: bot.gemini_api_key ? 'Present' : 'Missing'
+    })
     // Get recent conversation messages for context
     const { data: messages } = await supabase
       .from("messages")
@@ -754,60 +984,130 @@ async function processReservationFromConversation(
     // Use AI to extract structured reservation information
     const extractionPrompt = `
 Analiza esta conversación de un bot de restaurante y extrae la información de la reserva si está completa.
-Solo responde con un JSON válido o "NO_RESERVATION" si no hay una reserva completa.
 
 Conversación:
 ${conversationContext}
 Usuario: ${userMessage}
 Bot: ${aiResponse}
 
-Si hay una reserva completa, responde con este formato JSON:
+FECHAS DE REFERENCIA:
+- Hoy es: ${new Date().toISOString().split('T')[0]}
+- "Mañana" = ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+
+INSTRUCCIONES:
+- Si el bot dice "RESERVA CONFIRMADA" o "confirmada para" o habla de una reserva específica con datos completos, entonces SÍ hay una reserva completa
+- Si la fecha dice "mañana", usar la fecha de mañana
+- Si dice "20hs", "8pm", "viernes", convertir al formato correcto 
+- Si dice "para 3 personas" o "3 personas", extraer el número
+- Extrae el nombre mencionado en la conversación (ej: "alvaro gonzalez")
+
+Si hay una reserva completa, responde SOLO con JSON:
 {
   "hasReservation": true,
-  "customerName": "nombre del cliente",
-  "customerPhone": "teléfono",
+  "customerName": "nombre extraído o Usuario de Prueba",
+  "customerPhone": "teléfono extraído o test-user",
   "reservationDate": "YYYY-MM-DD",
   "reservationTime": "HH:MM",
-  "partySize": 4,
-  "specialRequests": "solicitudes especiales o null"
+  "partySize": número_de_personas,
+  "specialRequests": null
 }
 
-Si no hay reserva completa, responde: NO_RESERVATION
+Si NO hay reserva completa, responde: NO_RESERVATION
 `
 
+    console.log('🤖 Calling Gemini AI for reservation extraction...')
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: extractionPrompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
+        generationConfig: { 
+          temperature: 0.1, 
+          topP: 0.8,
+          topK: 40
+        }
       })
     })
 
+    console.log('🤖 Gemini response status:', response.status)
     if (response.ok) {
       const data = await response.json()
+      console.log('🤖 Gemini response data:', JSON.stringify(data, null, 2))
       
       if (!data.candidates || !data.candidates[0]) {
-        console.error('Invalid Gemini response for reservation extraction:', data)
+        console.error('❌ Invalid Gemini response for reservation extraction:', data)
         return
       }
       
-      const extractionResult = data.candidates[0]?.content?.parts?.[0]?.text?.trim()
+      const candidate = data.candidates[0]
+      let extractionResult = candidate?.content?.parts?.[0]?.text?.trim()
+      
+      console.log('🤖 AI extraction result for reservation:', extractionResult)
+      
+      // If Gemini didn't return content due to token limit, try manual extraction
+      if (!extractionResult || candidate.finishReason === 'MAX_TOKENS') {
+        console.log('⚠️ Gemini response incomplete, trying manual extraction...')
+        extractionResult = await manualReservationExtraction(aiResponse, userMessage, conversationContext)
+      }
       
       if (extractionResult && extractionResult !== 'NO_RESERVATION') {
         try {
-          const reservationData = JSON.parse(extractionResult)
+          // Clean up the response text - remove markdown formatting if present
+          let cleanedText = extractionResult.trim()
+          if (cleanedText.startsWith('```json')) {
+            cleanedText = cleanedText.replace(/```json\s*/, '').replace(/```\s*$/, '')
+          }
+          if (cleanedText.startsWith('```')) {
+            cleanedText = cleanedText.replace(/```\s*/, '').replace(/```\s*$/, '')
+          }
+          
+          const reservationData = JSON.parse(cleanedText)
           
           if (reservationData.hasReservation) {
+            // Use extracted client data if available
+            let customerName = senderName || reservationData.customerName || conversation.client_name
+            let customerPhone = senderPhone || reservationData.customerPhone || conversation.client_phone
+            
+            if (extractedClientData) {
+              if (extractedClientData.name) customerName = extractedClientData.name
+              if (extractedClientData.phone) customerPhone = extractedClientData.phone
+            }
+
+            console.log('🏨 Saving reservation with data:', {
+              customerName,
+              customerPhone,
+              date: reservationData.reservationDate,
+              time: reservationData.reservationTime,
+              partySize: reservationData.partySize
+            })
+
+            // Create or update client record with the reservation data
+            let clientId = conversation.client_id
+            if (customerName && customerPhone && (customerName !== 'Usuario de Prueba' && customerPhone !== 'test-user')) {
+              const clientRecord = await createOrUpdateClient(supabase, bot.user_id, {
+                name: customerName,
+                phone: customerPhone
+              }, conversation.id)
+              
+              if (clientRecord) {
+                clientId = clientRecord.id
+                // Update conversation with the client_id
+                await supabase
+                  .from("conversations")
+                  .update({ client_id: clientRecord.id })
+                  .eq("id", conversation.id)
+              }
+            }
+
             // Save reservation to database
             const { error } = await supabase
               .from("reservations")
               .insert({
                 user_id: bot.user_id,
-                client_id: conversation.client_id,
+                client_id: clientId,
                 conversation_id: conversation.id,
-                customer_name: senderName || reservationData.customerName || conversation.client_name,
-                customer_phone: senderPhone || reservationData.customerPhone || conversation.client_phone,
+                customer_name: customerName,
+                customer_phone: customerPhone,
                 reservation_date: reservationData.reservationDate,
                 reservation_time: reservationData.reservationTime,
                 party_size: reservationData.partySize,
@@ -828,5 +1128,384 @@ Si no hay reserva completa, responde: NO_RESERVATION
     }
   } catch (error) {
     console.error('Error extracting reservation information:', error)
+  }
+}
+
+// Manual extraction fallback for reservations
+async function manualReservationExtraction(aiResponse: string, userMessage: string, conversationContext: string): Promise<string> {
+  console.log('🔧 Manual extraction from:', { aiResponse, userMessage })
+  
+  // Check if this looks like a confirmed reservation
+  if (aiResponse.toLowerCase().includes('reserva confirmada')) {
+    try {
+      // Extract basic info from the confirmation message
+      const responseLines = aiResponse.split('\n')
+      let customerName = 'Usuario de Prueba'
+      let reservationDate = new Date().toISOString().split('T')[0] // Today as fallback
+      let reservationTime = '20:00'
+      let partySize = 2
+      
+      // Try to extract name from "RESERVA CONFIRMADA para [name]"
+      const nameMatch = aiResponse.match(/confirmada para ([^e]+?)(?:el|a las|en)/i)
+      if (nameMatch) {
+        customerName = nameMatch[1].trim()
+      }
+      
+      // Also try to extract from user message if not found in response
+      if (customerName === 'Usuario de Prueba') {
+        const userNameMatch = userMessage.match(/soy ([^y]+?)(?:y|quiero|para)/i)
+        if (userNameMatch) {
+          customerName = userNameMatch[1].trim()
+        }
+      }
+      
+      // Try to extract date - more comprehensive day detection
+      // Use local time to avoid timezone issues
+      const today = new Date()
+      const year = today.getFullYear()
+      const month = today.getMonth()
+      const date = today.getDate()
+      const todayDay = today.getDay() // 0=Sunday, 1=Monday, etc
+      
+      console.log('🗓️ Date calculation - Today:', { 
+        year, 
+        month: month + 1, // Show human-readable month 
+        date, 
+        todayDay, 
+        dayName: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][todayDay],
+        todayISO: today.toISOString().split('T')[0]
+      })
+      
+      if (aiResponse.includes('mañana') || userMessage.includes('mañana')) {
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        reservationDate = tomorrow.toISOString().split('T')[0]
+        console.log('🗓️ Mañana calculated:', reservationDate)
+      } else if (aiResponse.includes('jueves') || userMessage.includes('jueves')) {
+        // Get next thursday (day 4)
+        let daysToAdd = (4 - todayDay + 7) % 7
+        if (daysToAdd === 0) daysToAdd = 7 // If today is Thursday, get next Thursday
+        const nextThursday = new Date(today)
+        nextThursday.setDate(nextThursday.getDate() + daysToAdd)
+        reservationDate = nextThursday.toISOString().split('T')[0]
+        console.log('🗓️ Jueves calculated:', reservationDate, 'daysToAdd:', daysToAdd)
+      } else if (aiResponse.includes('miércoles') || userMessage.includes('miércoles')) {
+        // Get next wednesday (day 3)
+        let daysToAdd = (3 - todayDay + 7) % 7
+        if (daysToAdd === 0) daysToAdd = 7 // If today is Wednesday, get next Wednesday
+        const nextWednesday = new Date(today)
+        nextWednesday.setDate(nextWednesday.getDate() + daysToAdd)
+        reservationDate = nextWednesday.toISOString().split('T')[0]
+        console.log('🗓️ Miércoles calculated:', reservationDate, 'daysToAdd:', daysToAdd)
+      } else if (aiResponse.includes('viernes') || userMessage.includes('viernes')) {
+        // Get next friday (day 5)
+        let daysToAdd = (5 - todayDay + 7) % 7
+        if (daysToAdd === 0) daysToAdd = 7 // If today is Friday, get next Friday
+        const nextFriday = new Date(today)
+        nextFriday.setDate(nextFriday.getDate() + daysToAdd)
+        reservationDate = nextFriday.toISOString().split('T')[0]
+        console.log('🗓️ Viernes calculated:', reservationDate, 'daysToAdd:', daysToAdd)
+      } else if (aiResponse.includes('sábado') || userMessage.includes('sábado')) {
+        // Get next saturday (day 6)
+        let daysToAdd = (6 - todayDay + 7) % 7
+        if (daysToAdd === 0) daysToAdd = 7
+        const nextSaturday = new Date(today)
+        nextSaturday.setDate(nextSaturday.getDate() + daysToAdd)
+        reservationDate = nextSaturday.toISOString().split('T')[0]
+        console.log('🗓️ Sábado calculated:', reservationDate, 'daysToAdd:', daysToAdd)
+      } else if (aiResponse.includes('domingo') || userMessage.includes('domingo')) {
+        // Get next sunday (day 0) - Find the next Sunday after today
+        let daysToAdd = 7 - todayDay // Days until next Sunday
+        if (todayDay === 0) daysToAdd = 7 // If today is Sunday, next Sunday is in 7 days
+        const nextSunday = new Date(today)
+        nextSunday.setDate(nextSunday.getDate() + daysToAdd)
+        reservationDate = nextSunday.toISOString().split('T')[0]
+        console.log('🗓️ Domingo calculated:', reservationDate, 'daysToAdd:', daysToAdd, 'from day', todayDay, 'miércoles(3) + days =', 15 + daysToAdd)
+      }
+      
+      // Try to extract time (19:00, 20:00, etc) - check both response and user message
+      let timeMatch = aiResponse.match(/(\d{1,2}):(\d{2})\s*hs?/i)
+      if (!timeMatch) {
+        timeMatch = userMessage.match(/(\d{1,2})\s*pm|(\d{1,2})\s*:\s*(\d{2})|(\d{1,2})\s*hs?/i)
+        if (timeMatch) {
+          if (timeMatch[1]) { // PM format
+            let hour = parseInt(timeMatch[1])
+            if (hour < 12) hour += 12 // Convert to 24h
+            reservationTime = `${hour.toString().padStart(2, '0')}:00`
+          } else if (timeMatch[2] && timeMatch[3]) { // HH:MM format
+            reservationTime = `${timeMatch[2].padStart(2, '0')}:${timeMatch[3]}`
+          } else if (timeMatch[4]) { // Just hour
+            reservationTime = `${timeMatch[4].padStart(2, '0')}:00`
+          }
+        }
+      } else {
+        reservationTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`
+      }
+      
+      // Try to extract party size - check both response and user message
+      let partyMatch = aiResponse.match(/para (\d+) personas?/i)
+      if (!partyMatch) {
+        partyMatch = userMessage.match(/para (\d+) personas?|(\d+) personas?/i)
+      }
+      if (partyMatch) {
+        partySize = parseInt(partyMatch[1] || partyMatch[2])
+      }
+      
+      const manualResult = {
+        hasReservation: true,
+        customerName,
+        customerPhone: 'test-user',
+        reservationDate,
+        reservationTime,
+        partySize,
+        specialRequests: null
+      }
+      
+      console.log('🔧 Manual extraction result:', manualResult)
+      return JSON.stringify(manualResult)
+    } catch (error) {
+      console.error('Error in manual extraction:', error)
+      return 'NO_RESERVATION'
+    }
+  }
+  
+  return 'NO_RESERVATION'
+}
+
+// Function to extract client data from message using AI
+async function extractClientDataFromMessage(message: string, senderName?: string, senderPhone?: string, bot?: any, conversationId?: string, supabase?: any): Promise<any> {
+  try {
+    // Check if bot has auto client detection enabled (assume true for now)
+    const autoDetectionEnabled = true // Could be bot.auto_client_detection in future
+    if (!autoDetectionEnabled) return null
+
+    // Skip if we already have both name and phone from WhatsApp
+    if (senderName && senderPhone && senderName !== 'Usuario de Prueba' && senderPhone !== 'test-user') {
+      return { name: senderName, phone: senderPhone }
+    }
+
+    // Get conversation history for better context
+    let conversationContext = message
+    if (conversationId && supabase) {
+      const { data: messages } = await supabase
+        .from("messages")
+        .select("content, sender_type")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(10)
+
+      if (messages && messages.length > 0) {
+        conversationContext = messages.map((msg: any) => 
+          `${msg.sender_type === 'client' ? 'Cliente' : 'Bot'}: ${msg.content}`
+        ).join('\n') + `\nCliente: ${message}`
+      }
+    }
+
+    // Use AI to extract potential client data from the conversation
+    const extractionPrompt = `
+Analiza la siguiente conversación y extrae SOLO si está EXPLÍCITAMENTE mencionado:
+- Nombre del cliente (nombre de persona, no apodos como "mi amor", "corazón")  
+- Número de teléfono
+
+Conversación:
+${conversationContext}
+
+REGLAS IMPORTANTES:
+- Solo extrae información que esté claramente mencionada
+- Para nombres: acepta solo nombres propios de personas (ej: "Juan", "María", "Carlos López")
+- Para teléfonos: acepta números de 7-15 dígitos, con o sin espacios/guiones (ej: "301234567", "3001234567", "+57301234567", "261 454 0609", "2614-540-609")
+- Busca frases como: "mi número es", "mi teléfono es", "me pueden llamar al", "soy del", números que aparezcan solos
+- NO extraigas apodos, términos cariñosos, o información implícita
+- NO inventes información que no está en el mensaje
+
+Responde SOLO en formato JSON (sin markdown):
+{
+  "name": "nombre extraído o null",
+  "phone": "teléfono extraído o null"
+}
+`
+
+    const genAI = new GoogleGenerativeAI(bot.gemini_api_key)
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+
+    const result = await model.generateContent(extractionPrompt)
+    const responseText = result.response.text()
+    
+    try {
+      // Clean up the response text - remove markdown formatting if present
+      let cleanedText = responseText.trim()
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\s*/, '').replace(/```\s*$/, '')
+      }
+      if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\s*/, '').replace(/```\s*$/, '')
+      }
+      
+      const extractedData = JSON.parse(cleanedText)
+      
+      // Validate extracted data
+      const validData: any = {}
+      
+      if (extractedData.name && typeof extractedData.name === 'string' && extractedData.name.length > 1) {
+        validData.name = extractedData.name.trim()
+      }
+      
+      if (extractedData.phone && typeof extractedData.phone === 'string') {
+        // Clean phone number: remove spaces, dashes, parentheses, but keep + for international
+        const cleanPhone = extractedData.phone.trim().replace(/[\s\-\(\)]/g, '')
+        // Validate it's a reasonable phone number (7-15 digits, optionally starting with +)
+        if (cleanPhone.match(/^\+?[\d]{7,15}$/)) {
+          validData.phone = cleanPhone
+        }
+      }
+      
+      // Manual fallback extraction if AI didn't work
+      if (!validData.name || !validData.phone) {
+        const manualExtraction = extractClientDataManually(conversationContext)
+        if (!validData.name && manualExtraction.name) validData.name = manualExtraction.name
+        if (!validData.phone && manualExtraction.phone) validData.phone = manualExtraction.phone
+      }
+      
+      // Return only if we have something useful
+      if (validData.name || validData.phone) {
+        console.log('📞 Extracted client data:', validData)
+        return validData
+      }
+      
+    } catch (parseError) {
+      console.log('Could not parse client data extraction:', parseError)
+      // Try manual extraction as fallback
+      const manualExtraction = extractClientDataManually(conversationContext)
+      if (manualExtraction.name || manualExtraction.phone) {
+        console.log('📞 Manual extracted client data:', manualExtraction)
+        return manualExtraction
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('Error in client data extraction:', error)
+    return null
+  }
+}
+
+// Manual extraction function for client data
+function extractClientDataManually(conversationText: string): {name: string | null, phone: string | null} {
+  let name = null
+  let phone = null
+  
+  // Extract names - look for "soy [name]", "me llamo [name]", "mi nombre es [name]"
+  const namePatterns = [
+    /(?:soy|me llamo|mi nombre es|nombre:)\s+([a-zA-ZáéíóúñüÁÉÍÓÚÑÜ\s]{2,30})/i,
+    /a nombre de\s+([a-zA-ZáéíóúñüÁÉÍÓÚÑÜ\s]{2,30})/i
+  ]
+  
+  for (const pattern of namePatterns) {
+    const match = conversationText.match(pattern)
+    if (match && match[1]) {
+      name = match[1].trim()
+      break
+    }
+  }
+  
+  // Extract phone numbers - look for various patterns
+  const phonePatterns = [
+    /(?:mi (?:número|telefono) es|me pueden llamar al|teléfono:|número:)\s*([\+\d\s\-\(\)]{7,20})/i,
+    /(\+?[\d]{2,4}[\s\-]?[\d]{3,4}[\s\-]?[\d]{3,4}[\s\-]?[\d]{0,4})/g, // Generic phone pattern
+    /(261[\s\-]?[\d]{3}[\s\-]?[\d]{4})/g, // Mendoza area code
+    /(\+54[\s\-]?9?[\s\-]?261[\s\-]?[\d]{3}[\s\-]?[\d]{4})/g // Argentina +54 with Mendoza
+  ]
+  
+  for (const pattern of phonePatterns) {
+    const match = conversationText.match(pattern)
+    if (match && match[1]) {
+      // Clean the phone number
+      const cleanPhone = match[1].trim().replace(/[\s\-\(\)]/g, '')
+      if (cleanPhone.match(/^\+?[\d]{7,15}$/)) {
+        phone = cleanPhone
+        break
+      }
+    }
+  }
+  
+  return { name, phone }
+}
+
+// Function to create or update client record
+async function createOrUpdateClient(supabase: any, userId: string, clientData: any, conversationId?: string): Promise<any> {
+  try {
+    // First check if client already exists by phone or name
+    let existingClient = null
+    
+    if (clientData.phone) {
+      const { data: phoneClient } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("phone", clientData.phone)
+        .single()
+      
+      existingClient = phoneClient
+    }
+    
+    if (!existingClient && clientData.name) {
+      const { data: nameClient } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("name", clientData.name)
+        .single()
+      
+      existingClient = nameClient
+    }
+
+    if (existingClient) {
+      // Update existing client with new information
+      const updatedData: any = {}
+      if (clientData.name && !existingClient.name) updatedData.name = clientData.name
+      if (clientData.phone && !existingClient.phone) updatedData.phone = clientData.phone
+      
+      if (Object.keys(updatedData).length > 0) {
+        const { data: updated, error } = await supabase
+          .from("clients")
+          .update(updatedData)
+          .eq("id", existingClient.id)
+          .select()
+          .single()
+        
+        if (!error) {
+          console.log('📝 Updated existing client:', updated)
+          return updated
+        }
+      }
+      
+      return existingClient
+    } else {
+      // Create new client record
+      const newClientData = {
+        user_id: userId,
+        name: clientData.name || 'Cliente sin nombre',
+        phone: clientData.phone || null,
+        email: null
+      }
+
+      const { data: newClient, error } = await supabase
+        .from("clients")
+        .insert(newClientData)
+        .select()
+        .single()
+
+      if (!error) {
+        console.log('👤 Created new client:', newClient)
+        return newClient
+      } else {
+        console.error('Error creating client:', error)
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error('Error in createOrUpdateClient:', error)
+    return null
   }
 }

@@ -11,6 +11,7 @@
   "dependencies": {
     "@adobe/react-spectrum": "^3.44.2",
     "@emotion/is-prop-valid": "latest",
+    "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^3.9.1",
     "@next/font": "^14.2.15",
     "@radix-ui/react-accordion": "1.2.2",

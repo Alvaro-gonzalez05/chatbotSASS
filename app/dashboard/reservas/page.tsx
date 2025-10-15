@@ -83,12 +83,16 @@ export default async function ReservasPage() {
 
   // Separate upcoming and past reservations
   const today = new Date()
-  const upcomingReservations = reservations?.filter(r => 
-    new Date(`${r.reservation_date}T${r.reservation_time}`) >= today
-  ) || []
-  const pastReservations = reservations?.filter(r => 
-    new Date(`${r.reservation_date}T${r.reservation_time}`) < today
-  ) || []
+  const upcomingReservations = reservations?.filter(r => {
+    // Create date without timezone issues
+    const reservationDateTime = new Date(`${r.reservation_date}T${r.reservation_time}`)
+    return reservationDateTime >= today
+  }) || []
+  const pastReservations = reservations?.filter(r => {
+    // Create date without timezone issues  
+    const reservationDateTime = new Date(`${r.reservation_date}T${r.reservation_time}`)
+    return reservationDateTime < today
+  }) || []
 
   return (
     <div className="container mx-auto py-6">
@@ -181,7 +185,7 @@ export default async function ReservasPage() {
                     <TableCell>
                       <div>
                         <p className="font-medium">
-                          {format(new Date(reservation.reservation_date), 'dd MMM yyyy', { locale: es })}
+                          {format(new Date(reservation.reservation_date + 'T12:00:00'), 'dd MMM yyyy', { locale: es })}
                         </p>
                         <p className="text-sm text-muted-foreground flex items-center gap-1">
                           <Clock className="h-3 w-3" />
@@ -229,7 +233,7 @@ export default async function ReservasPage() {
                               </div>
                               <div>
                                 <Label>Fecha</Label>
-                                <p>{format(new Date(reservation.reservation_date), 'dd MMMM yyyy', { locale: es })}</p>
+                                <p>{format(new Date(reservation.reservation_date + 'T12:00:00'), 'dd MMMM yyyy', { locale: es })}</p>
                               </div>
                               <div>
                                 <Label>Hora</Label>
@@ -311,7 +315,7 @@ export default async function ReservasPage() {
                     <TableCell>
                       <div>
                         <p className="font-medium">
-                          {format(new Date(reservation.reservation_date), 'dd MMM yyyy', { locale: es })}
+                          {format(new Date(reservation.reservation_date + 'T12:00:00'), 'dd MMM yyyy', { locale: es })}
                         </p>
                         <p className="text-sm text-muted-foreground">{reservation.reservation_time}</p>
                       </div>
@@ -350,7 +354,7 @@ export default async function ReservasPage() {
                               </div>
                               <div>
                                 <Label>Fecha</Label>
-                                <p>{format(new Date(reservation.reservation_date), 'dd MMMM yyyy', { locale: es })}</p>
+                                <p>{format(new Date(reservation.reservation_date + 'T12:00:00'), 'dd MMMM yyyy', { locale: es })}</p>
                               </div>
                               <div>
                                 <Label>Hora</Label>
