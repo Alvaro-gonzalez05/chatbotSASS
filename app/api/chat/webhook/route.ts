@@ -27,6 +27,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Bot not found" }, { status: 404 })
     }
 
+    // Define bot features early for use throughout the function
+    const botFeatures = bot.features || []
+    const canRegisterClients = botFeatures.includes('register_clients')
+    const canTakeOrders = botFeatures.includes('take_orders')
+    const canTakeReservations = botFeatures.includes('take_reservations')
+
     // Get user profile information using the bot's user_id
     const { data: userProfile, error: profileError } = await supabase
       .from("user_profiles")
@@ -122,12 +128,15 @@ export async function POST(request: NextRequest) {
       conversation = realConversation
     }
 
-    // Auto-extract client data from the conversation if enabled
+    // Bot features already defined above
+    
+    // Always extract client data (needed for reservations and better UX)
+    // But only create/update clients if registration is enabled
     let extractedClientData = null
     extractedClientData = await extractClientDataFromMessage(message, senderName, senderPhone, bot, conversation.id, supabase)
     
-    // Create/update client record if we have extracted data
-    if (extractedClientData) {
+    // Create/update client record if we have extracted data AND registration is enabled
+    if (extractedClientData && canRegisterClients) {
       console.log('🔍 Attempting to create/update client. Conversation client_id:', conversation.client_id)
       console.log('🔍 Extracted client data:', extractedClientData)
       
@@ -255,14 +264,9 @@ async function generateBotResponse(
     let botCapabilities = ''
     let deliveryModesInfo = ''
     
-    // Check bot features for orders and reservations
-    const botFeatures = bot.features || []
-    const canTakeOrders = botFeatures.includes('take_orders')
-    const canTakeReservations = botFeatures.includes('take_reservations')
-    
     if (userProfile) {
       console.log('🏢 User profile loaded:', userProfile)
-      console.log('🤖 Bot features:', botFeatures)
+      console.log('🤖 Bot features:', bot.features || [])
       
       // Format business hours - simplified
       let hoursText = 'No especificado'
@@ -295,7 +299,7 @@ ${socialText ? '📱 ' + socialText : ''}
       `.trim()
 
       // Get delivery settings if bot can take orders
-      if (canTakeOrders) {
+      if ((bot.features || []).includes('take_orders')) {
         const { data: deliverySettings, error: deliveryError } = await supabase
           .from("delivery_settings")
           .select("*")
@@ -397,19 +401,20 @@ INFORMACIÓN ADICIONAL PARA RESPUESTAS SOBRE MENÚ:
       }
 
       // Define bot capabilities based on features
-      if (canTakeOrders || canTakeReservations) {
+      const features = bot.features || []
+      if (features.includes('take_orders') || features.includes('take_reservations')) {
         const capabilities = []
-        if (canTakeOrders) capabilities.push('tomar pedidos de productos del catálogo')
-        if (canTakeReservations) capabilities.push('tomar reservas para mesas')
+        if (features.includes('take_orders')) capabilities.push('tomar pedidos de productos del catálogo')
+        if (features.includes('take_reservations')) capabilities.push('tomar reservas para mesas')
         
         botCapabilities = `
 FUNCIONALIDADES ESPECIALES DEL BOT:
 Estás habilitado para: ${capabilities.join(' y ')}.
 
-        ${canTakeOrders ? `
+        ${features.includes('take_orders') ? `
 PEDIDOS: producto → modalidad → "PEDIDO CONFIRMADO"
-` : ''}${canTakeReservations ? `
-        ${canTakeReservations ? `
+` : ''}${features.includes('take_reservations') ? `
+        ${features.includes('take_reservations') ? `
 RESERVAS: pedir fecha, hora, personas, nombre, teléfono → "RESERVA CONFIRMADA"
 - En el resumen, usa el nombre que te dio el cliente, no "Usuario de Prueba"
 - Acepta formatos naturales de fecha: "mañana", "el viernes", "15 de octubre"  
@@ -432,6 +437,9 @@ MANEJO DE CONTEXTO - MUY IMPORTANTE:
     const hasClientPhone = senderPhone && senderPhone !== 'test-user' && senderPhone !== conversation.client_phone
     const hasExtractedName = extractedClientData?.name && extractedClientData.name !== 'Usuario de Prueba'
     const hasExtractedPhone = extractedClientData?.phone && extractedClientData.phone !== 'test-user'
+    
+    // Define features for use in template
+    const features = bot.features || []
 
     const systemPrompt = `Eres ${bot.name}, un asistente virtual amigable y profesional que representa a un negocio.
 
@@ -449,7 +457,7 @@ INFORMACIÓN DEL CLIENTE ACTUAL:
 
 ${botCapabilities}
 
-${botFeatures.includes('register_clients') ? `
+${features.includes('register_clients') ? `
 REGISTRO DE CLIENTES:
 - Si FALTA TELÉFONO: "¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?"
 - Si COMPLETOS: responde normal
@@ -542,15 +550,18 @@ MENÚ/CARTA:
         const aiResponse = candidate.content.parts[0].text.trim()
 
         // Process orders and reservations if bot has those features enabled
-        if (canTakeOrders || canTakeReservations) {
+        const featuresCheck = bot.features || []
+        const takeOrders = featuresCheck.includes('take_orders')
+        const takeReservations = featuresCheck.includes('take_reservations')
+        if (takeOrders || takeReservations) {
           await processOrdersAndReservations(
             supabase, 
             bot, 
             conversation, 
             userMessage, 
             aiResponse, 
-            canTakeOrders, 
-            canTakeReservations,
+            takeOrders, 
+            takeReservations,
             senderName,
             senderPhone,
             extractedClientData
@@ -1366,6 +1377,35 @@ Responde SOLO en formato JSON (sin markdown):
         if (!validData.phone && manualExtraction.phone) validData.phone = manualExtraction.phone
       }
       
+      // If we have a phone but no valid name, try to find existing client in database
+      // This should work regardless of client registration settings for better UX
+      const hasValidName = validData.name && 
+        !validData.name.includes('quién') && 
+        !validData.name.includes('hacemos') && 
+        !validData.name.includes('cuál') &&
+        validData.name.length < 50 // Reasonable name length
+      
+      if (validData.phone && !hasValidName && supabase && bot.user_id) {
+        console.log('🔍 Searching for existing client by phone:', validData.phone)
+        const { data: existingClient } = await supabase
+          .from("clients")
+          .select("name")
+          .eq("user_id", bot.user_id)
+          .eq("phone", validData.phone)
+          .single()
+        
+        if (existingClient && existingClient.name) {
+          validData.name = existingClient.name
+          console.log('✅ Found existing client name from DB:', existingClient.name)
+        } else {
+          // Clear invalid name if no client found
+          if (!hasValidName) {
+            validData.name = null
+          }
+          console.log('ℹ️ No existing client found for phone:', validData.phone)
+        }
+      }
+      
       // Return only if we have something useful
       if (validData.name || validData.phone) {
         console.log('📞 Extracted client data:', validData)
@@ -1377,6 +1417,33 @@ Responde SOLO en formato JSON (sin markdown):
       // Try manual extraction as fallback
       const manualExtraction = extractClientDataManually(conversationContext)
       if (manualExtraction.name || manualExtraction.phone) {
+        // If manual extraction has phone but no valid name, try to find existing client
+        const hasValidManualName = manualExtraction.name && 
+          !manualExtraction.name.includes('quién') && 
+          !manualExtraction.name.includes('hacemos') && 
+          !manualExtraction.name.includes('cuál') &&
+          manualExtraction.name.length < 50
+        
+        if (manualExtraction.phone && !hasValidManualName && supabase && bot.user_id) {
+          console.log('🔍 Searching for existing client by phone (manual):', manualExtraction.phone)
+          const { data: existingClient } = await supabase
+            .from("clients")
+            .select("name")
+            .eq("user_id", bot.user_id)
+            .eq("phone", manualExtraction.phone)
+            .single()
+          
+          if (existingClient && existingClient.name) {
+            manualExtraction.name = existingClient.name
+            console.log('✅ Found existing client name from DB (manual):', existingClient.name)
+          } else {
+            // Clear invalid name if no client found
+            if (!hasValidManualName) {
+              manualExtraction.name = null
+            }
+          }
+        }
+        
         console.log('📞 Manual extracted client data:', manualExtraction)
         return manualExtraction
       }
@@ -1434,7 +1501,8 @@ function extractClientDataManually(conversationText: string): {name: string | nu
 // Function to create or update client record
 async function createOrUpdateClient(supabase: any, userId: string, clientData: any, conversationId?: string): Promise<any> {
   try {
-    // First check if client already exists by phone or name
+    // ONLY check if client already exists by PHONE NUMBER (unique identifier)
+    // Names are NOT unique - multiple people can have the same name
     let existingClient = null
     
     if (clientData.phone) {
@@ -1446,17 +1514,9 @@ async function createOrUpdateClient(supabase: any, userId: string, clientData: a
         .single()
       
       existingClient = phoneClient
-    }
-    
-    if (!existingClient && clientData.name) {
-      const { data: nameClient } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("name", clientData.name)
-        .single()
-      
-      existingClient = nameClient
+      console.log('🔍 Found existing client by phone:', existingClient ? existingClient.id : 'none')
+    } else {
+      console.log('🔍 No phone provided, cannot search for existing client')
     }
 
     if (existingClient) {

@@ -34,6 +34,7 @@ export function BotTesting() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [conversationId, setConversationId] = useState<string>("")
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -42,6 +43,15 @@ export function BotTesting() {
   useEffect(() => {
     fetchBots()
   }, [])
+
+  // Initialize conversation ID when a bot is selected
+  useEffect(() => {
+    if (selectedBot && !conversationId) {
+      const newConversationId = generateConversationId()
+      setConversationId(newConversationId)
+      console.log('🆕 Initial conversation ID generated:', newConversationId)
+    }
+  }, [selectedBot])
 
   const fetchBots = async () => {
     try {
@@ -67,7 +77,12 @@ export function BotTesting() {
 
   // Removed - now using webhook directly
 
-  // All functions removed - now using webhook directly
+  // Generate a new conversation ID
+  const generateConversationId = () => {
+    const timestamp = Date.now()
+    const randomId = Math.random().toString(36).substring(2, 15)
+    return `test-conversation-${timestamp}-${randomId}`
+  }
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || !selectedBot || isLoading) return
@@ -88,8 +103,13 @@ export function BotTesting() {
     setIsLoading(true)
 
     try {
-      // Call the webhook API (same as WhatsApp) - usando conversationId único pero consistente
-      const conversationId = `test-conversation-${selectedBot}`
+      // Use the current conversation ID (generated when resetting or starting)
+      let currentConversationId = conversationId
+      if (!currentConversationId) {
+        currentConversationId = generateConversationId()
+        setConversationId(currentConversationId)
+      }
+      
       const response = await fetch('/api/chat/webhook', {
         method: 'POST',
         headers: {
@@ -97,7 +117,7 @@ export function BotTesting() {
         },
         body: JSON.stringify({
           botId: selectedBot,
-          conversationId: conversationId,
+          conversationId: currentConversationId,
           message: currentMessage,
           senderName: 'Usuario de Prueba',
           senderPhone: 'test-user'
@@ -141,6 +161,10 @@ export function BotTesting() {
 
   const resetConversation = () => {
     setMessages([])
+    // Generate a new conversation ID to start fresh
+    const newConversationId = generateConversationId()
+    setConversationId(newConversationId)
+    console.log('🔄 New conversation ID generated:', newConversationId)
   }
 
   const startConversation = async () => {
@@ -150,8 +174,14 @@ export function BotTesting() {
     setIsLoading(true)
 
     try {
+      // Generate conversation ID if not exists
+      let currentConversationId = conversationId
+      if (!currentConversationId) {
+        currentConversationId = generateConversationId()
+        setConversationId(currentConversationId)
+      }
+      
       // Call the webhook API for welcome message (same as WhatsApp)
-      const conversationId = `test-conversation-${selectedBot}`
       const response = await fetch('/api/chat/webhook', {
         method: 'POST',
         headers: {
@@ -159,7 +189,7 @@ export function BotTesting() {
         },
         body: JSON.stringify({
           botId: selectedBot,
-          conversationId: conversationId,
+          conversationId: currentConversationId,
           message: 'hola',
           senderName: 'Usuario de Prueba',
           senderPhone: 'test-user'
