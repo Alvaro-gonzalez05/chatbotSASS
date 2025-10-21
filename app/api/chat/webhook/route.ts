@@ -446,6 +446,20 @@ MANEJO DE CONTEXTO - MUY IMPORTANTE:
 INFORMACIÓN DEL NEGOCIO:
 ${businessInfo}
 
+TUS CAPACIDADES Y SERVICIOS:
+${(() => {
+  const capabilities = []
+  if (features.includes('take_orders')) capabilities.push('✅ TOMAR PEDIDOS de productos del menú')
+  if (features.includes('take_reservations')) capabilities.push('✅ TOMAR RESERVAS de mesas')
+  if (features.includes('loyalty_points')) capabilities.push('✅ GESTIONAR PUNTOS de fidelidad')
+  
+  const result = capabilities.length > 0 
+    ? `Puedes hacer lo siguiente:\n${capabilities.join('\n')}\n\nSI te preguntan sobre estos servicios, responde con confianza que SÍ los ofreces.`
+    : 'Solo puedes brindar información general del negocio.'
+  
+  return result
+})()}
+
 ${productsInfo}
 
 ${deliveryModesInfo}
