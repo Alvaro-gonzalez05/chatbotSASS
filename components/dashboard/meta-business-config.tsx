@@ -35,16 +35,26 @@ interface BotData {
   gemini_api_key?: string
   is_active: boolean
   created_at: string
+  user_id: string
 }
 
-interface WhatsAppIntegration {
-  id: string
-  phone_number_id: string
+interface MetaIntegration {
+  id?: string
+  // WhatsApp fields
+  phone_number_id?: string
   access_token: string
-  webhook_verify_token: string
-  business_account_id: string
-  is_active: boolean
-  is_verified: boolean
+  webhook_verify_token?: string
+  business_account_id?: string
+  
+  // Instagram fields
+  instagram_business_account_id?: string
+  app_id?: string
+  app_secret?: string
+  
+  // Common fields
+  webhook_url?: string
+  is_active?: boolean
+  is_verified?: boolean
 }
 
 interface MetaBusinessConfigProps {
@@ -54,13 +64,32 @@ interface MetaBusinessConfigProps {
   onConfigComplete: () => void
 }
 
-const configSteps = [
-  { id: "business", title: "Configuración de negocio", description: "Configura tu cuenta de Meta Business" },
-  { id: "app", title: "Aplicación de WhatsApp", description: "Crear y configurar la aplicación" },
-  { id: "webhook", title: "Webhook", description: "Configurar la URL de webhook" },
-  { id: "tokens", title: "Tokens de acceso", description: "Obtener y configurar los tokens" },
-  { id: "test", title: "Pruebas", description: "Verificar la configuración" }
-]
+// Pasos dinámicos basados en la plataforma
+const getConfigSteps = (platform: string) => {
+  const baseSteps = [
+    { id: "business", title: "Configuración de negocio", description: "Configura tu cuenta de Meta Business" },
+  ]
+
+  if (platform === "whatsapp") {
+    return [
+      ...baseSteps,
+      { id: "app", title: "Aplicación de WhatsApp", description: "Crear y configurar la aplicación" },
+      { id: "webhook", title: "Webhook", description: "Configurar la URL de webhook" },
+      { id: "tokens", title: "Tokens de acceso", description: "Obtener y configurar los tokens" },
+      { id: "test", title: "Pruebas", description: "Verificar la configuración" }
+    ]
+  } else if (platform === "instagram") {
+    return [
+      ...baseSteps,
+      { id: "app", title: "Aplicación de Instagram", description: "Crear y configurar la aplicación" },
+      { id: "webhook", title: "Webhook", description: "Configurar la URL de webhook" }, 
+      { id: "tokens", title: "Tokens y configuración", description: "Obtener tokens e IDs necesarios" },
+      { id: "test", title: "Pruebas", description: "Verificar la configuración" }
+    ]
+  }
+
+  return baseSteps
+}
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },
@@ -70,24 +99,54 @@ const fadeInUp = {
 export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: MetaBusinessConfigProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
-  const [whatsappIntegration, setWhatsappIntegration] = useState<WhatsAppIntegration | null>(null)
+  const [metaIntegration, setMetaIntegration] = useState<MetaIntegration | null>(null)
   const [isCompleted, setIsCompleted] = useState(false)
   const supabase = createClient()
   
   // Ref para almacenar el timeout ID
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Form data dinámico basado en la plataforma
   const [formData, setFormData] = useState({
+    // WhatsApp fields
     phone_number_id: "",
     access_token: "",
     business_account_id: "",
+    
+    // Instagram fields  
+    instagram_business_account_id: "",
+    app_id: "",
+    app_secret: "",
+    
+    // Common fields
+    webhook_url: "",
+    webhook_verify_token: "",
   })
+
+  // Obtener pasos de configuración basados en la plataforma
+  const configSteps = getConfigSteps(bot?.platform || 'whatsapp')
+
+  // Función para generar un token aleatorio
+  const generateVerifyToken = () => {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+  }
 
   useEffect(() => {
     if (isOpen && bot) {
-      fetchWhatsAppIntegration()
+      fetchMetaIntegration()
     }
   }, [isOpen, bot])
+
+  // Usar el ID del bot como token de verificación
+  useEffect(() => {
+    if (isOpen && bot?.id && !formData.webhook_verify_token) {
+      console.log('🔑 Using bot ID as webhook verify token:', bot.id)
+      setFormData(prev => ({
+        ...prev,
+        webhook_verify_token: bot.id
+      }))
+    }
+  }, [isOpen, bot?.id, formData.webhook_verify_token])
 
   // Limpieza cuando el componente se desmonta
   useEffect(() => {
@@ -98,28 +157,40 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
     }
   }, [])
 
-  const fetchWhatsAppIntegration = async () => {
+  const fetchMetaIntegration = async () => {
     if (!bot) return
 
     try {
       const { data, error } = await supabase
-        .from("whatsapp_integrations")
+        .from("integrations")
         .select("*")
-        .eq("bot_id", bot.id)
+        .eq("user_id", bot.user_id)
+        .eq("platform", bot.platform)
         .single()
 
       if (error && error.code !== "PGRST116") {
-        console.error("Error fetching WhatsApp integration:", error)
+        console.error("Error fetching integration:", error)
         return
       }
 
-      if (data) {
-        setWhatsappIntegration(data)
+      if (data && data.config) {
+        setMetaIntegration(data)
         setFormData({
-          phone_number_id: data.phone_number_id === "pending_configuration" ? "" : data.phone_number_id,
-          access_token: data.access_token === "pending_configuration" ? "" : data.access_token,
-          business_account_id: data.business_account_id === "pending_configuration" ? "" : data.business_account_id,
+          phone_number_id: data.config.phone_number_id || "",
+          access_token: data.config.access_token || "",
+          business_account_id: data.config.business_account_id || "",
+          instagram_business_account_id: data.config.instagram_business_account_id || "",
+          app_id: data.config.app_id || "",
+          app_secret: data.config.app_secret || "",
+          webhook_url: data.config.webhook_url || "",
+          webhook_verify_token: bot.id
         })
+      } else {
+        // Si no hay integración existente, usar el ID del bot como token
+        setFormData(prev => ({
+          ...prev,
+          webhook_verify_token: bot.id
+        }))
       }
     } catch (error) {
       console.error("Error fetching integration:", error)
@@ -127,29 +198,31 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
   }
 
   const handleSaveConfiguration = async () => {
-    if (!bot || !whatsappIntegration) return
+    if (!bot) return
 
     setIsLoading(true)
 
     try {
-      const updatedData = {
+      const configData = {
         phone_number_id: formData.phone_number_id,
         access_token: formData.access_token,
         business_account_id: formData.business_account_id,
-        is_active: true,
-        is_verified: false // Se verificará cuando se reciba el primer webhook
+        instagram_business_account_id: formData.instagram_business_account_id,
+        app_id: formData.app_id,
+        app_secret: formData.app_secret,
+        webhook_url: formData.webhook_url
       }
 
-      console.log("Guardando configuración:", {
-        botId: bot.id,
-        integrationId: whatsappIntegration.id,
-        updatedData
-      })
-
       const { error, data } = await supabase
-        .from("whatsapp_integrations")
-        .update(updatedData)
-        .eq("id", whatsappIntegration.id)
+        .from("integrations")
+        .upsert({
+          user_id: bot.user_id,
+          platform: bot.platform,
+          config: configData,
+          is_active: true
+        }, {
+          onConflict: 'user_id,platform'
+        })
         .select()
 
       if (error) throw error
@@ -159,8 +232,9 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
       setIsCompleted(true)
 
       timeoutRef.current = setTimeout(() => {
+        const platformName = bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'
         toast.success("Configuración completada", {
-          description: "Tu bot de WhatsApp está configurado y listo para recibir mensajes.",
+          description: `Tu bot de ${platformName} está configurado y listo para recibir mensajes.`,
           duration: 4000,
         })
         onConfigComplete()
@@ -202,9 +276,17 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
   const isStepValid = () => {
     switch (currentStep) {
       case 4: // Paso de tokens
-        return formData.phone_number_id.trim() !== "" && 
-               formData.access_token.trim() !== "" && 
-               formData.business_account_id.trim() !== ""
+        if (bot?.platform === 'whatsapp') {
+          return formData.phone_number_id.trim() !== "" && 
+                 formData.access_token.trim() !== "" && 
+                 formData.business_account_id.trim() !== ""
+        } else if (bot?.platform === 'instagram') {
+          return formData.instagram_business_account_id.trim() !== "" && 
+                 formData.access_token.trim() !== "" && 
+                 formData.app_id.trim() !== "" && 
+                 formData.app_secret.trim() !== ""
+        }
+        return false
       default:
         return true
     }
@@ -267,7 +349,7 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
             >
               <h3 className="text-lg font-semibold">¡Configuración completada!</h3>
               <p className="text-sm text-muted-foreground">
-                Tu bot de WhatsApp está listo para recibir mensajes
+                Tu bot de {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'} está listo para recibir mensajes
               </p>
             </motion.div>
           </motion.div>
@@ -291,7 +373,7 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
             Configurar Meta Business Suite
           </DialogTitle>
           <DialogDescription>
-            Configura la integración de WhatsApp para el bot "{bot?.name}"
+            Configura la integración de {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'} para el bot "{bot?.name}"
           </DialogDescription>
         </DialogHeader>
 
@@ -427,7 +509,7 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                       <h4 className="font-medium text-amber-900">Importante</h4>
                       <p className="text-sm text-amber-800 mt-1">
                         Asegúrate de completar estos pasos antes de continuar. 
-                        Sin una cuenta de Meta Business verificada, no podrás usar WhatsApp Business API.
+                        Sin una cuenta de Meta Business verificada, no podrás usar {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'} Business API.
                       </p>
                     </div>
                   </div>
@@ -443,7 +525,7 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  Crear Aplicación de WhatsApp
+                  Crear Aplicación de {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'}
                 </CardTitle>
                 <CardDescription>
                   Crea una aplicación en el panel de desarrolladores de Meta
@@ -526,16 +608,17 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                       whileTap={{ scale: 0.98 }}
                       transition={{ duration: 0.2 }}
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/api/whatsapp/webhook`)
+                        const webhookPath = bot?.platform === 'instagram' ? 'instagram' : 'whatsapp'
+                        navigator.clipboard.writeText(`${window.location.origin}/api/${webhookPath}/webhook`)
                         toast.success("URL copiada al portapapeles")
                       }}
                     >
                       <code className="text-sm break-all group-hover:text-blue-600 transition-colors">
-                        {typeof window !== 'undefined' ? window.location.origin : ''}/api/whatsapp/webhook
+                        {typeof window !== 'undefined' ? window.location.origin : ''}/api/{bot?.platform === 'instagram' ? 'instagram' : 'whatsapp'}/webhook
                       </code>
                     </motion.div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Copia esta URL y pégala en la configuración de webhook de tu aplicación de WhatsApp
+                      Copia esta URL y pégala en la configuración de webhook de tu aplicación de {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'}
                     </p>
                   </motion.div>
 
@@ -547,14 +630,14 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                       whileTap={{ scale: 0.98 }}
                       transition={{ duration: 0.2 }}
                       onClick={() => {
-                        if (whatsappIntegration?.webhook_verify_token) {
-                          navigator.clipboard.writeText(whatsappIntegration.webhook_verify_token)
+                        if (formData.webhook_verify_token) {
+                          navigator.clipboard.writeText(formData.webhook_verify_token)
                           toast.success("Token copiado al portapapeles")
                         }
                       }}
                     >
                       <code className="text-sm break-all group-hover:text-blue-600 transition-colors">
-                        {whatsappIntegration?.webhook_verify_token || "Cargando..."}
+                        {formData.webhook_verify_token || "Generando..."}
                       </code>
                     </motion.div>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -568,13 +651,25 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                     whileHover={{ scale: 1.02 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <h4 className="font-medium text-blue-900 mb-2">En tu aplicación de WhatsApp:</h4>
+                    <h4 className="font-medium text-blue-900 mb-2">En tu aplicación de {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'}:</h4>
                     <ol className="text-sm text-blue-800 space-y-1">
-                      <li>1. Ve a "Configuration" en el panel de WhatsApp</li>
-                      <li>2. Entra a configurar el webhook</li>
-                      <li>3. Pega la URL del webhook y el token de verificación</li>
-                      <li>4. Selecciona "messages" en los eventos</li>
-                      <li>5. Haz clic en "Guardar y continuar"</li>
+                      {bot?.platform === 'whatsapp' ? (
+                        <>
+                          <li>1. Ve a "Configuration" en el panel de WhatsApp</li>
+                          <li>2. Entra a configurar el webhook</li>
+                          <li>3. Pega la URL del webhook y el token de verificación</li>
+                          <li>4. Selecciona "messages" en los eventos</li>
+                          <li>5. Haz clic en "Guardar y continuar"</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>1. Ve a "Messenger" en el panel de tu aplicación</li>
+                          <li>2. Configura el webhook con la URL proporcionada</li>
+                          <li>3. Selecciona los eventos de Instagram Direct</li>
+                          <li>4. Conecta tu cuenta de Instagram Business</li>
+                          <li>5. Verifica que todo esté funcionando</li>
+                        </>
+                      )}
                     </ol>
                   </motion.div>
                 </motion.div>
@@ -602,7 +697,7 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                     <div>
                       <h4 className="font-medium text-amber-900">Obtén estos datos de tu aplicación</h4>
                       <p className="text-sm text-amber-800 mt-1">
-                        Ve a la configuración de WhatsApp en tu aplicación de Meta para obtener estos valores.
+                        Ve a la configuración de {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'} en tu aplicación de Meta para obtener estos valores.
                       </p>
                       
                     </div>
@@ -626,25 +721,113 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                     }
                   }}
                 >
-                  <motion.div variants={fadeInUp}>
-                    <Label htmlFor="phone-id" className="text-sm font-medium">Phone Number ID *</Label>
-                    <motion.div
-                      whileFocus={{ scale: 1.01 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Input
-                        id="phone-id"
-                        value={formData.phone_number_id}
-                        onChange={(e) => setFormData({ ...formData, phone_number_id: e.target.value })}
-                        placeholder="Ejemplo: 123456789012345"
-                        className="mt-1 transition-all duration-300 focus:shadow-lg focus:shadow-blue-500/10"
-                      />
-                    </motion.div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Encuentra este ID en la configuración del número de teléfono de WhatsApp
-                    </p>
-                  </motion.div>
+                  {/* Campos específicos para WhatsApp */}
+                  {bot?.platform === 'whatsapp' && (
+                    <>
+                      <motion.div variants={fadeInUp}>
+                        <Label htmlFor="phone-id" className="text-sm font-medium">Phone Number ID *</Label>
+                        <motion.div
+                          whileFocus={{ scale: 1.01 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Input
+                            id="phone-id"
+                            value={formData.phone_number_id}
+                            onChange={(e) => setFormData({ ...formData, phone_number_id: e.target.value })}
+                            placeholder="Ejemplo: 123456789012345"
+                            className="mt-1 transition-all duration-300 focus:shadow-lg focus:shadow-blue-500/10"
+                          />
+                        </motion.div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Encuentra este ID en la configuración del número de teléfono de WhatsApp
+                        </p>
+                      </motion.div>
 
+                      <motion.div variants={fadeInUp}>
+                        <Label htmlFor="business-id" className="text-sm font-medium">Business Account ID *</Label>
+                        <motion.div
+                          whileFocus={{ scale: 1.01 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Input
+                            id="business-id"
+                            value={formData.business_account_id}
+                            onChange={(e) => setFormData({ ...formData, business_account_id: e.target.value })}
+                            placeholder="Ejemplo: 987654321098765"
+                            className="mt-1 transition-all duration-300 focus:shadow-lg focus:shadow-blue-500/10"
+                          />
+                        </motion.div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ID de tu cuenta de WhatsApp Business
+                        </p>
+                      </motion.div>
+                    </>
+                  )}
+
+                  {/* Campos específicos para Instagram */}
+                  {bot?.platform === 'instagram' && (
+                    <>
+                      <motion.div variants={fadeInUp}>
+                        <Label htmlFor="instagram-business-id" className="text-sm font-medium">Instagram Business Account ID *</Label>
+                        <motion.div
+                          whileFocus={{ scale: 1.01 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Input
+                            id="instagram-business-id"
+                            value={formData.instagram_business_account_id}
+                            onChange={(e) => setFormData({ ...formData, instagram_business_account_id: e.target.value })}
+                            placeholder="Ejemplo: 123456789012345"
+                            className="mt-1 transition-all duration-300 focus:shadow-lg focus:shadow-blue-500/10"
+                          />
+                        </motion.div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ID de tu cuenta de Instagram Business
+                        </p>
+                      </motion.div>
+
+                      <motion.div variants={fadeInUp}>
+                        <Label htmlFor="app-id" className="text-sm font-medium">App ID *</Label>
+                        <motion.div
+                          whileFocus={{ scale: 1.01 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Input
+                            id="app-id"
+                            value={formData.app_id}
+                            onChange={(e) => setFormData({ ...formData, app_id: e.target.value })}
+                            placeholder="Ejemplo: 123456789012345"
+                            className="mt-1 transition-all duration-300 focus:shadow-lg focus:shadow-blue-500/10"
+                          />
+                        </motion.div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ID de tu aplicación de Facebook
+                        </p>
+                      </motion.div>
+
+                      <motion.div variants={fadeInUp}>
+                        <Label htmlFor="app-secret" className="text-sm font-medium">App Secret *</Label>
+                        <motion.div
+                          whileFocus={{ scale: 1.01 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Input
+                            id="app-secret"
+                            type="password"
+                            value={formData.app_secret}
+                            onChange={(e) => setFormData({ ...formData, app_secret: e.target.value })}
+                            placeholder="Secreto de tu aplicación"
+                            className="mt-1 transition-all duration-300 focus:shadow-lg focus:shadow-blue-500/10"
+                          />
+                        </motion.div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Secreto de tu aplicación de Facebook
+                        </p>
+                      </motion.div>
+                    </>
+                  )}
+
+                  {/* Campo común para Access Token */}
                   <motion.div variants={fadeInUp}>
                     <Label htmlFor="access-token" className="text-sm font-medium">Access Token *</Label>
                     <motion.div
@@ -661,26 +844,7 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                       />
                     </motion.div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Token de acceso temporal de tu aplicación (se puede generar uno permanente después)
-                    </p>
-                  </motion.div>
-
-                  <motion.div variants={fadeInUp}>
-                    <Label htmlFor="business-id" className="text-sm font-medium">Business Account ID *</Label>
-                    <motion.div
-                      whileFocus={{ scale: 1.01 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Input
-                        id="business-id"
-                        value={formData.business_account_id}
-                        onChange={(e) => setFormData({ ...formData, business_account_id: e.target.value })}
-                        placeholder="Ejemplo: 987654321098765"
-                        className="mt-1 transition-all duration-300 focus:shadow-lg focus:shadow-blue-500/10"
-                      />
-                    </motion.div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      ID de tu cuenta de WhatsApp Business
+                      Token de acceso de tu aplicación Meta
                     </p>
                   </motion.div>
                 </motion.div>
@@ -703,14 +867,37 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-sm font-medium text-gray-700">Phone Number ID:</div>
-                    <div className="text-sm text-gray-600 font-mono">{formData.phone_number_id}</div>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-sm font-medium text-gray-700">Business Account ID:</div>
-                    <div className="text-sm text-gray-600 font-mono">{formData.business_account_id}</div>
-                  </div>
+                  {/* Campos específicos para WhatsApp */}
+                  {bot?.platform === 'whatsapp' && (
+                    <>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm font-medium text-gray-700">Phone Number ID:</div>
+                        <div className="text-sm text-gray-600 font-mono">{formData.phone_number_id}</div>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm font-medium text-gray-700">Business Account ID:</div>
+                        <div className="text-sm text-gray-600 font-mono">{formData.business_account_id}</div>
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* Campos específicos para Instagram */}
+                  {bot?.platform === 'instagram' && (
+                    <>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm font-medium text-gray-700">Instagram Business Account ID:</div>
+                        <div className="text-sm text-gray-600 font-mono">{formData.instagram_business_account_id}</div>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm font-medium text-gray-700">App ID:</div>
+                        <div className="text-sm text-gray-600 font-mono">{formData.app_id}</div>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm font-medium text-gray-700">App Secret:</div>
+                        <div className="text-sm text-gray-600 font-mono">{"*".repeat(8)}</div>
+                      </div>
+                    </>
+                  )}
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <div className="text-sm font-medium text-gray-700">Access Token:</div>
                     <div className="text-sm text-gray-600 font-mono">
@@ -718,12 +905,12 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                     </div>
                   </div>
                   
-                  {whatsappIntegration && (
+                  {metaIntegration && (
                     <div className="p-3 bg-blue-50 rounded-lg">
                       <div className="text-sm font-medium text-blue-700 mb-2">Estado de la Integración:</div>
                       <div className="space-y-1 text-xs text-blue-600">
-                        <div>• Activa: {whatsappIntegration.is_active ? '✅ Sí' : '❌ No'}</div>
-                        <div>• Verificada: {whatsappIntegration.is_verified ? '✅ Sí' : '⏳ Pendiente'}</div>
+                        <div>• Activa: {metaIntegration.is_active ? '✅ Sí' : '❌ No'}</div>
+                        <div>• Verificada: {metaIntegration.is_verified ? '✅ Sí' : '⏳ Pendiente'}</div>
                         <div>• Webhook URL configurada: ✅ Sí</div>
                       </div>
                     </div>
@@ -735,19 +922,27 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
                     <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
                     <div>
                       <h4 className="font-medium text-yellow-900 mb-2">Información importante</h4>
-                      <p className="text-sm text-yellow-800 mb-2">
-                        El <strong>Phone Number ID</strong> debe coincidir exactamente con el que Meta envía en los webhooks.
-                      </p>
-                      <p className="text-sm text-yellow-800">
-                        <strong>ID recibido en webhook:</strong> <code className="bg-yellow-100 px-1 rounded">793528520499781</code>
-                      </p>
-                      <p className="text-sm text-yellow-800 mt-1">
-                        <strong>ID configurado:</strong> <code className="bg-yellow-100 px-1 rounded">{formData.phone_number_id}</code>
-                      </p>
-                      {formData.phone_number_id !== "793528520499781" && (
-                        <p className="text-sm text-red-600 mt-2 font-medium">
-                          ⚠️ Los IDs no coinciden. El bot no funcionará hasta que se corrija.
-                        </p>
+                      {bot?.platform === 'whatsapp' ? (
+                        <>
+                          <p className="text-sm text-yellow-800 mb-2">
+                            El <strong>Phone Number ID</strong> debe coincidir exactamente con el que Meta envía en los webhooks.
+                          </p>
+                          <p className="text-sm text-yellow-800 mt-1">
+                            <strong>ID configurado:</strong> <code className="bg-yellow-100 px-1 rounded">{formData.phone_number_id}</code>
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-yellow-800 mb-2">
+                            Asegúrate de que el <strong>Instagram Business Account ID</strong> y <strong>App ID</strong> sean correctos.
+                          </p>
+                          <p className="text-sm text-yellow-800 mt-1">
+                            <strong>Instagram ID configurado:</strong> <code className="bg-yellow-100 px-1 rounded">{formData.instagram_business_account_id}</code>
+                          </p>
+                          <p className="text-sm text-yellow-800 mt-1">
+                            <strong>App ID configurado:</strong> <code className="bg-yellow-100 px-1 rounded">{formData.app_id}</code>
+                          </p>
+                        </>
                       )}
                     </div>
                   </div>

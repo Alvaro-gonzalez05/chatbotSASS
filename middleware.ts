@@ -13,9 +13,11 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
-     * - api/whatsapp/webhook (public webhook endpoints)
+     * - api/whatsapp/* (WhatsApp endpoints)
+     * - api/instagram/* (Instagram endpoints) 
+     * - api/debug/* (debug endpoints)
      * - api/chat/webhook (webhook chat API)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/whatsapp/webhook|api/chat/webhook|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/whatsapp/.*|api/instagram/.*|api/debug/.*|api/chat/webhook|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }

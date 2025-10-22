@@ -19,15 +19,19 @@ export async function GET(request: NextRequest) {
         // Use admin client for webhook operations to bypass RLS
         const supabase = createAdminClient()
         
-        // Try direct token match
-        const { data: directMatch, error: directError } = await supabase
-          .from('whatsapp_integrations')
-          .select('*')
-          .eq('webhook_verify_token', token)
+        // Search for bot by ID (token is the bot ID)
+        const { data: bot, error: botError } = await supabase
+          .from('bots')
+          .select('id, name, user_id')
+          .eq('platform', 'whatsapp')
+          .eq('id', token)
           .single()
         
-        if (directMatch && !directError) {
+        if (!botError && bot) {
           VERIFY_TOKEN = token
+          console.log('✅ Found WhatsApp bot with ID:', bot.id)
+        } else {
+          console.log('❌ No WhatsApp bot found with ID:', token)
         }
       }
       
@@ -113,43 +117,44 @@ async function processWhatsAppMessage(messageData: any) {
 
       const recipientPhone = messageData.metadata?.phone_number_id || messageData.metadata?.display_phone_number
 
-      // Find the WhatsApp integration for this phone number
-      const { data: integration, error: integrationError } = await supabase
-        .from('whatsapp_integrations')
-        .select('*')
-        .eq('phone_number_id', messageData.metadata?.phone_number_id)
+      // Find the integration for WhatsApp with matching phone_number_id
+      const { data: integrations, error: integrationsError } = await supabase
+        .from('integrations')
+        .select('*, bots!inner(*)')
+        .eq('platform', 'whatsapp')
         .eq('is_active', true)
-        .single()
 
-      if (integrationError || !integration) {
-        
+      if (integrationsError || !integrations) {
+        console.error('Error fetching WhatsApp integrations:', integrationsError)
         continue
       }
 
-      // Fetch the bot separately with debugging
-      console.log('🔍 Searching for bot with ID:', integration.bot_id)
-      
-      // First check if there are multiple bots with this ID (should not happen)
-      const { data: bot, error: botError } = await supabase
-        .from('bots')
-        .select('id, name, personality_prompt, gemini_api_key, features, user_id')
-        .eq('id', integration.bot_id)
-        .single()
+      // Find integration with matching phone_number_id
+      const integration = integrations.find(i => 
+        i.config?.phone_number_id === messageData.metadata?.phone_number_id
+      )
 
-      if (botError || !bot) {
-        console.error('❌ Bot not found:', botError?.message)
+      if (!integration || !integration.bots) {
+        console.log('No active WhatsApp integration found for phone number:', messageData.metadata?.phone_number_id)
         continue
       }
+
+      const bot = integration.bots
+
+      console.log('🔍 Found bot:', bot.name, 'with ID:', bot.id)
 
       // Mark integration as verified if this is the first successful webhook
       if (!integration.is_verified) {
+        const updatedIntegrations = {
+          ...integration,
+          is_verified: true,
+          webhook_verified_at: new Date().toISOString()
+        }
+        
         await supabase
-          .from('whatsapp_integrations')
-          .update({
-            is_verified: true,
-            webhook_verified_at: new Date().toISOString()
-          })
-          .eq('id', integration.id)
+          .from('bots')
+          .update({ integrations: updatedIntegrations })
+          .eq('id', bot.id)
       }
 
       // Extract message content based on type

@@ -502,10 +502,10 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
-                      {bot.platform === "whatsapp" && (
+                      {(bot.platform === "whatsapp" || bot.platform === "instagram") && (
                         <DropdownMenuItem onClick={() => openMetaConfigDialog(bot)}>
                           <Zap className="mr-2 h-4 w-4" />
-                          Configurar Meta Business Suite
+                          {bot.platform === "whatsapp" ? "Configurar Meta Business (WhatsApp)" : "Configurar Meta Business (Instagram)"}
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={() => handleToggleBot(bot.id, !bot.is_active)}>

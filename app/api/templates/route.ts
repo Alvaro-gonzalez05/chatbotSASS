@@ -80,37 +80,54 @@ export async function GET(request: NextRequest) {
 // Obtener plantillas de WhatsApp Business desde Meta API
 async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: string | null) {
   try {
-    // Obtener configuraciones de WhatsApp del usuario
+    // Obtener configuraciones de WhatsApp del usuario desde la tabla bots
     let query = supabase
-      .from('whatsapp_integrations')
-      .select(`
-        *,
-        bots!inner(id, name, user_id)
-      `)
-      .eq('bots.user_id', userId)
+      .from('bots')
+      .select('id, name, platform, integrations')
+      .eq('user_id', userId)
+      .eq('platform', 'whatsapp')
       .eq('is_active', true)
 
     if (botId) {
-      query = query.eq('bot_id', botId)
+      query = query.eq('id', botId)
     }
 
-    const { data: integrations } = await query
+    const { data: bots } = await query
 
-    if (!integrations || integrations.length === 0) {
+    if (!bots || bots.length === 0) {
       return []
     }
 
     const templates: any[] = []
 
-    // Para cada integración de WhatsApp, obtener plantillas desde Meta API
-    for (const integration of integrations) {
+    // Para cada bot de WhatsApp, obtener plantillas desde Meta API
+    for (const bot of bots) {
       try {
+        // Verificar que tenga configuración de integración
+        const integrationConfig = bot.integrations
+        if (!integrationConfig?.business_account_id || !integrationConfig?.access_token) {
+          // Agregar plantilla informativa sobre configuración faltante
+          templates.push({
+            id: `config-error-${bot.id}`,
+            name: '⚠️ Configuración Incompleta',
+            platform: 'whatsapp',
+            bot_id: bot.id,
+            bot_name: bot.name,
+            status: 'ERROR',
+            body_content: `Bot "${bot.name}" necesita configuración completa. Campos faltantes: ${!integrationConfig?.access_token ? 'access_token ' : ''}${!integrationConfig?.business_account_id ? 'business_account_id' : ''}`,
+            variables: [],
+            can_use: false,
+            source: 'config_error'
+          })
+          continue
+        }
+
         // Llamar a Meta Graph API para obtener message templates
         const response = await fetch(
-          `https://graph.facebook.com/v18.0/${integration.whatsapp_business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
+          `https://graph.facebook.com/v18.0/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
           {
             headers: {
-              'Authorization': `Bearer ${integration.access_token}`,
+              'Authorization': `Bearer ${integrationConfig.access_token}`,
               'Content-Type': 'application/json'
             }
           }
@@ -125,26 +142,42 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
                 id: template.id || `whatsapp_${template.name}`,
                 name: template.name,
                 platform: 'whatsapp',
-                bot_id: integration.bot_id,
-                bot_name: integration.bots.name,
+                bot_id: bot.id,
+                bot_name: bot.name,
                 status: template.status,
                 language: template.language,
                 category: template.category,
                 components: template.components,
                 quality_score: template.quality_score,
                 // Extraer el cuerpo del mensaje principal
-                body_text: extractWhatsAppTemplateBody(template.components),
+                body_content: extractWhatsAppTemplateBody(template.components),
                 variables: extractWhatsAppTemplateVariables(template.components),
+                can_use: template.status === 'APPROVED',
                 source: 'meta_api',
                 last_synced: new Date().toISOString()
               })
             })
           }
         } else {
-          console.error(`Failed to fetch WhatsApp templates for integration ${integration.id}:`, await response.text())
+          const errorText = await response.text()
+          console.error(`Failed to fetch WhatsApp templates for bot ${bot.id}:`, errorText)
+          
+          // Agregar plantilla de error informativa
+          templates.push({
+            id: `api-error-${bot.id}`,
+            name: '❌ Error de API',
+            platform: 'whatsapp',
+            bot_id: bot.id,
+            bot_name: bot.name,
+            status: 'API_ERROR',
+            body_content: `Error al obtener plantillas de Meta API para "${bot.name}". Código: ${response.status}. Verifica que el token y business_account_id sean válidos.`,
+            variables: [],
+            can_use: false,
+            source: 'api_error'
+          })
         }
       } catch (error) {
-        console.error(`Error fetching WhatsApp templates for integration ${integration.id}:`, error)
+        console.error(`Error fetching WhatsApp templates for bot ${bot.id}:`, error)
       }
     }
 
@@ -158,50 +191,114 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
 // Obtener plantillas de Instagram Business desde Meta API
 async function fetchInstagramTemplates(supabase: any, userId: string, botId?: string | null) {
   try {
-    // Obtener configuraciones de Instagram del usuario
+    // Obtener configuraciones de Instagram del usuario desde la tabla bots
     let query = supabase
-      .from('instagram_integrations')
-      .select(`
-        *,
-        bots!inner(id, name, user_id)
-      `)
-      .eq('bots.user_id', userId)
+      .from('bots')
+      .select('id, name, platform, integrations')
+      .eq('user_id', userId)
+      .eq('platform', 'instagram')
       .eq('is_active', true)
 
     if (botId) {
-      query = query.eq('bot_id', botId)
+      query = query.eq('id', botId)
     }
 
-    const { data: integrations } = await query
+    const { data: bots } = await query
 
-    if (!integrations || integrations.length === 0) {
+    if (!bots || bots.length === 0) {
       return []
     }
 
     const templates: any[] = []
 
-    // Para cada integración de Instagram, obtener plantillas
-    for (const integration of integrations) {
+    // Para cada bot de Instagram, obtener plantillas
+    for (const bot of bots) {
       try {
-        // Obtener quick replies y plantillas de respuesta automática
-        const response = await fetch(
-          `https://graph.facebook.com/v18.0/${integration.instagram_business_account_id}/messaging_feature_review`,
+        // Verificar que tenga configuración de integración
+        const integrationConfig = bot.integrations
+        if (!integrationConfig?.instagram_business_account_id || !integrationConfig?.access_token) {
+          // Agregar plantilla informativa sobre configuración faltante
+          const missingFields = []
+          if (!integrationConfig?.access_token) missingFields.push('access_token')
+          if (!integrationConfig?.instagram_business_account_id) missingFields.push('instagram_business_account_id')
+          if (!integrationConfig?.app_id) missingFields.push('app_id')
+          if (!integrationConfig?.app_secret) missingFields.push('app_secret')
+
+          templates.push({
+            id: `config-error-${bot.id}`,
+            name: '⚠️ Configuración Incompleta',
+            platform: 'instagram',
+            bot_id: bot.id,
+            bot_name: bot.name,
+            status: 'ERROR',
+            body_content: `Bot "${bot.name}" necesita configuración completa. Campos faltantes: ${missingFields.join(', ')}`,
+            variables: [],
+            can_use: false,
+            source: 'config_error'
+          })
+          continue
+        }
+
+        // Para Instagram, las plantillas de mensaje funcionan diferente
+        // Instagram usa principalmente plantillas de WhatsApp Business API cuando está conectado a una página
+        // Primero intentamos obtener plantillas de message templates si tiene business_account_id
+        if (integrationConfig.business_account_id) {
+          const response = await fetch(
+            `https://graph.facebook.com/v18.0/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
+            {
+              headers: {
+                'Authorization': `Bearer ${integrationConfig.access_token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          )
+
+          if (response.ok) {
+            const result = await response.json()
+            
+            if (result.data) {
+              result.data.forEach((template: any) => {
+                templates.push({
+                  id: template.id || `instagram_${template.name}`,
+                  name: template.name,
+                  platform: 'instagram',
+                  bot_id: bot.id,
+                  bot_name: bot.name,
+                  status: template.status,
+                  language: template.language,
+                  category: template.category,
+                  components: template.components,
+                  quality_score: template.quality_score,
+                  body_content: extractWhatsAppTemplateBody(template.components),
+                  variables: extractWhatsAppTemplateVariables(template.components),
+                  can_use: template.status === 'APPROVED',
+                  source: 'meta_api',
+                  last_synced: new Date().toISOString()
+                })
+              })
+            }
+          }
+        }
+
+        // También obtener configuraciones específicas de Instagram como ice breakers, quick replies, etc.
+        const instagramResponse = await fetch(
+          `https://graph.facebook.com/v18.0/${integrationConfig.instagram_business_account_id}?fields=name,biography,profile_picture_url`,
           {
             headers: {
-              'Authorization': `Bearer ${integration.access_token}`,
+              'Authorization': `Bearer ${integrationConfig.access_token}`,
               'Content-Type': 'application/json'
             }
           }
         )
 
-        if (response.ok) {
-          const result = await response.json()
+        if (instagramResponse.ok) {
+          const result = await instagramResponse.json()
           
           // También obtener plantillas personalizadas almacenadas localmente para Instagram
           const { data: localTemplates } = await supabase
             .from('message_templates')
             .select('*')
-            .eq('bot_id', integration.bot_id)
+            .eq('bot_id', bot.id)
             .eq('platform', 'instagram')
             .eq('status', 'active')
 
@@ -211,13 +308,14 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
                 id: template.id,
                 name: template.template_name,
                 platform: 'instagram',
-                bot_id: integration.bot_id,
-                bot_name: integration.bots.name,
+                bot_id: bot.id,
+                bot_name: bot.name,
                 status: template.status,
                 language: template.language || 'es',
                 category: template.category || 'utility',
-                body_text: template.body_content,
+                body_content: template.body_content,
                 variables: template.variables_used || [],
+                can_use: template.status === 'approved',
                 source: 'local_db',
                 created_at: template.created_at,
                 updated_at: template.updated_at
@@ -226,7 +324,7 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
           }
         }
       } catch (error) {
-        console.error(`Error fetching Instagram templates for integration ${integration.id}:`, error)
+        console.error(`Error fetching Instagram templates for bot ${bot.id}:`, error)
       }
     }
 
