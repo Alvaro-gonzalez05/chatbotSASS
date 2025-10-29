@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function POST(request: NextRequest) {
   try {
-    const { botId, message, conversationId, senderPhone, senderName } = await request.json()
+    const { botId, message, conversationId, senderPhone, senderName, senderInstagramId, platform } = await request.json()
 
     if (!botId || !message || !conversationId) {
       return NextResponse.json(
@@ -133,7 +133,16 @@ export async function POST(request: NextRequest) {
     // Always extract client data (needed for reservations and better UX)
     // But only create/update clients if registration is enabled
     let extractedClientData = null
-    extractedClientData = await extractClientDataFromMessage(message, senderName, senderPhone, bot, conversation.id, supabase)
+    extractedClientData = await extractClientDataFromMessage(
+      message, 
+      senderName, 
+      senderPhone, 
+      bot, 
+      conversation.id, 
+      supabase, 
+      platform || conversation.platform, // Use platform from request or conversation
+      senderInstagramId
+    )
     
     // Create/update client record if we have extracted data AND registration is enabled
     if (extractedClientData && canRegisterClients) {
@@ -153,11 +162,27 @@ export async function POST(request: NextRequest) {
           existingClientData = existingClient
           console.log('🔍 Found existing client in conversation:', existingClient)
           
-          // Merge data: keep existing data, only add missing fields
+          // Merge data intelligently: 
+          // - Keep real names, don't overwrite with usernames
+          // - Update with new extracted data if it's better
+          const isNewNameRealName = extractedClientData.name && 
+            !extractedClientData.name.startsWith('@') && 
+            extractedClientData.name !== 'Usuario de Prueba' &&
+            extractedClientData.name !== 'Cliente sin nombre'
+          
+          const isExistingNameRealName = existingClient.name && 
+            !existingClient.name.startsWith('@') && 
+            existingClient.name !== 'Usuario de Prueba' &&
+            existingClient.name !== 'Cliente sin nombre'
+          
           const mergedData = {
-            name: existingClient.name || extractedClientData.name,
-            phone: existingClient.phone || extractedClientData.phone,
-            email: existingClient.email || extractedClientData.email
+            name: isNewNameRealName ? extractedClientData.name : 
+                  isExistingNameRealName ? existingClient.name : 
+                  extractedClientData.name || existingClient.name,
+            phone: extractedClientData.phone || existingClient.phone,
+            email: extractedClientData.email || existingClient.email,
+            instagram_id: extractedClientData.instagram_id || existingClient.instagram,
+            instagram_username: extractedClientData.instagram_username || existingClient.instagram_username
           }
           
           console.log('🔍 Merged client data:', mergedData)
@@ -184,12 +209,64 @@ export async function POST(request: NextRequest) {
           console.log('❌ Failed to create/update client')
         }
       }
+      
+      // Additional check: if we have an existing client with "Cliente sin nombre" 
+      // and we can extract a name from bot responses, update it
+      if (conversation.client_id) {
+        const { data: existingClient } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("id", conversation.client_id)
+          .single()
+        
+        if (existingClient && 
+            (existingClient.name === 'Cliente sin nombre' || !existingClient.name)) {
+          
+          // Get all messages from this conversation to extract name from bot responses
+          const { data: allMessages } = await supabase
+            .from("messages")
+            .select("content, sender_type")
+            .eq("conversation_id", conversation.id)
+            .order("created_at", { ascending: true })
+          
+          if (allMessages && allMessages.length > 0) {
+            const nameFromBot = extractNameFromBotResponses(allMessages)
+            if (nameFromBot) {
+              console.log(`🔄 Updating existing client "${existingClient.name}" with name from bot: "${nameFromBot}"`)
+              const { data: updatedClient, error } = await supabase
+                .from("clients")
+                .update({ name: nameFromBot })
+                .eq("id", existingClient.id)
+                .select()
+                .single()
+              
+              if (!error) {
+                console.log('✅ Successfully updated client name:', updatedClient)
+              } else {
+                console.error('❌ Error updating client name:', error)
+              }
+            }
+          }
+        }
+      }
     } else {
       console.log('🔍 No extracted client data to process')
     }
 
     // Generate bot response using the same logic as the main chat API
-    const botResponse = await generateBotResponse(supabase, bot, conversation, message, bot.user_id, userProfile, senderName, senderPhone, extractedClientData)
+    const botResponse = await generateBotResponse(
+      supabase, 
+      bot, 
+      conversation, 
+      message, 
+      bot.user_id, 
+      userProfile, 
+      senderName, 
+      senderPhone, 
+      extractedClientData,
+      platform || conversation.platform, // Add platform parameter
+      senderInstagramId
+    )
 
     // Save bot response to messages table (works for both real and test conversations)
     const { error: saveError } = await supabase
@@ -239,7 +316,9 @@ async function generateBotResponse(
   userProfile: any,
   senderName?: string,
   senderPhone?: string,
-  extractedClientData?: any
+  extractedClientData?: any,
+  platform?: string,
+  senderInstagramId?: string
 ): Promise<string> {
   try {
     // Get conversation history for context (recent messages first)
@@ -465,16 +544,41 @@ ${productsInfo}
 ${deliveryModesInfo}
 
 INFORMACIÓN DEL CLIENTE ACTUAL:
+${(() => {
+  const currentPlatform = platform || conversation.platform
+  
+  if (currentPlatform === 'instagram') {
+    const instagramUsername = extractedClientData?.instagram_username || 
+      (senderName?.startsWith('@') && !senderName?.includes('instagram_') ? senderName : null)
+    
+    return `- Plataforma: Instagram
+- Nombre: ${hasExtractedName ? extractedClientData.name : 'No proporcionado'}
+- Username: ${instagramUsername || 'No disponible'}
+- Instagram ID: ${senderInstagramId || 'No disponible'}
+- Estado de datos: ${hasExtractedName && instagramUsername ? 'COMPLETOS (Instagram)' : 'FALTA NOMBRE'}`
+  } else {
+    return `- Plataforma: WhatsApp
 - Nombre: ${hasExtractedName ? extractedClientData.name : clientInfo}
 - Teléfono: ${hasExtractedPhone ? extractedClientData.phone : (senderPhone || 'No disponible')}
-- Estado de datos: ${hasExtractedName && hasExtractedPhone ? 'COMPLETOS' : hasExtractedName ? 'FALTA TELÉFONO' : 'FALTA NOMBRE Y TELÉFONO'}
+- Estado de datos: ${hasExtractedName && hasExtractedPhone ? 'COMPLETOS' : hasExtractedName ? 'FALTA TELÉFONO' : 'FALTA NOMBRE Y TELÉFONO'}`
+  }
+})()}
 
 ${botCapabilities}
 
 ${features.includes('register_clients') ? `
 REGISTRO DE CLIENTES:
-- Si FALTA TELÉFONO: "¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?"
-- Si COMPLETOS: responde normal
+${(() => {
+  const currentPlatform = platform || conversation.platform
+  
+  if (currentPlatform === 'instagram') {
+    return `- Para Instagram: Si falta NOMBRE, pregunta de manera natural: "¿Cómo te llamas?" o "¿Cuál es tu nombre?"
+- Si ya tienes nombre: responde normal y usa el nombre en la conversación`
+  } else {
+    return `- Para WhatsApp: Si FALTA TELÉFONO: "¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?"
+- Si COMPLETOS: responde normal`
+  }
+})()}
 ` : ''}
 
 PERSONALIDAD:
@@ -1357,15 +1461,54 @@ async function manualReservationExtraction(aiResponse: string, userMessage: stri
 }
 
 // Function to extract client data from message using AI
-async function extractClientDataFromMessage(message: string, senderName?: string, senderPhone?: string, bot?: any, conversationId?: string, supabase?: any): Promise<any> {
+async function extractClientDataFromMessage(
+  message: string, 
+  senderName?: string, 
+  senderPhone?: string, 
+  bot?: any, 
+  conversationId?: string, 
+  supabase?: any,
+  platform?: string,
+  senderInstagramId?: string
+): Promise<any> {
   try {
     // Check if bot has auto client detection enabled (assume true for now)
     const autoDetectionEnabled = true // Could be bot.auto_client_detection in future
     if (!autoDetectionEnabled) return null
 
-    // Skip if we already have both name and phone from WhatsApp
-    if (senderName && senderPhone && senderName !== 'Usuario de Prueba' && senderPhone !== 'test-user') {
-      return { name: senderName, phone: senderPhone }
+    // Handle platform-specific initial data
+    if (platform === 'instagram') {
+      // For Instagram, we have the Instagram ID and possibly the username
+      let instagramUsername = null
+      
+      // Extract username if senderName is in @username format
+      if (senderName?.startsWith('@') && !senderName.includes('instagram_')) {
+        instagramUsername = senderName.substring(1) // Remove the @ symbol
+        
+        // If senderName is just a username (starts with @), don't use it as real name
+        // Let AI extract the real name from messages instead
+        return {
+          instagram_id: senderInstagramId,
+          instagram_username: instagramUsername
+        }
+      }
+      
+      // Skip if sender name is the default Instagram format
+      if (senderName?.startsWith('@instagram_') || senderName?.startsWith('Instagram User')) {
+        // Don't return early, let AI try to extract real name from message
+      } else if (senderName && senderName !== 'Usuario de Prueba') {
+        // We have a real name (not a username) for Instagram user
+        return { 
+          name: senderName, 
+          instagram_id: senderInstagramId,
+          instagram_username: instagramUsername
+        }
+      }
+    } else if (platform === 'whatsapp') {
+      // Skip if we already have both name and phone from WhatsApp
+      if (senderName && senderPhone && senderName !== 'Usuario de Prueba' && senderPhone !== 'test-user') {
+        return { name: senderName, phone: senderPhone }
+      }
     }
 
     // Get conversation history for better context
@@ -1382,15 +1525,31 @@ async function extractClientDataFromMessage(message: string, senderName?: string
         conversationContext = messages.map((msg: any) => 
           `${msg.sender_type === 'client' ? 'Cliente' : 'Bot'}: ${msg.content}`
         ).join('\n') + `\nCliente: ${message}`
+        
+        // Try to extract name from bot responses first (bot remembers user names)
+        const botNameExtraction = extractNameFromBotResponses(messages)
+        if (botNameExtraction) {
+          console.log('🤖 Extracted name from bot response:', botNameExtraction)
+          const result: any = { name: botNameExtraction }
+          if (platform === 'instagram' && senderInstagramId) {
+            result.instagram_id = senderInstagramId
+          } else if (platform === 'whatsapp' && senderPhone) {
+            result.phone = senderPhone
+          }
+          return result
+        }
       }
     }
 
     // Use AI to extract potential client data from the conversation
     const extractionPrompt = `
 Analiza la siguiente conversación y extrae SOLO si está EXPLÍCITAMENTE mencionado:
-- Nombre del cliente (nombre de persona, no apodos como "mi amor", "corazón")  
-- Número de teléfono
+${platform === 'instagram' 
+  ? '- Nombre del cliente (nombre de persona, no apodos como "mi amor", "corazón")\n- NO busques números de teléfono (es Instagram)'
+  : '- Nombre del cliente (nombre de persona, no apodos como "mi amor", "corazón")\n- Número de teléfono'
+}
 
+Plataforma: ${platform || 'WhatsApp'}
 Conversación:
 ${conversationContext}
 
@@ -1403,9 +1562,9 @@ REGLAS IMPORTANTES:
 - NO inventes información que no está en el mensaje
 
 Responde SOLO en formato JSON (sin markdown):
-{
-  "name": "nombre extraído o null",
-  "phone": "teléfono extraído o null"
+${platform === 'instagram' 
+  ? '{\n  "name": "nombre extraído o null"\n}'
+  : '{\n  "name": "nombre extraído o null",\n  "phone": "teléfono extraído o null"\n}'
 }
 `
 
@@ -1427,14 +1586,15 @@ Responde SOLO en formato JSON (sin markdown):
       
       const extractedData = JSON.parse(cleanedText)
       
-      // Validate extracted data
+      // Validate extracted data based on platform
       const validData: any = {}
       
       if (extractedData.name && typeof extractedData.name === 'string' && extractedData.name.length > 1) {
         validData.name = extractedData.name.trim()
       }
       
-      if (extractedData.phone && typeof extractedData.phone === 'string') {
+      // Only validate phone for WhatsApp platform
+      if (platform !== 'instagram' && extractedData.phone && typeof extractedData.phone === 'string') {
         // Clean phone number: remove spaces, dashes, parentheses, but keep + for international
         const cleanPhone = extractedData.phone.trim().replace(/[\s\-\(\)]/g, '')
         // Validate it's a reasonable phone number (7-15 digits, optionally starting with +)
@@ -1443,11 +1603,17 @@ Responde SOLO en formato JSON (sin markdown):
         }
       }
       
+      // For Instagram, add the Instagram ID
+      if (platform === 'instagram' && senderInstagramId) {
+        validData.instagram_id = senderInstagramId
+      }
+      
       // Manual fallback extraction if AI didn't work
-      if (!validData.name || !validData.phone) {
+      if (!validData.name || (platform !== 'instagram' && !validData.phone)) {
         const manualExtraction = extractClientDataManually(conversationContext)
         if (!validData.name && manualExtraction.name) validData.name = manualExtraction.name
-        if (!validData.phone && manualExtraction.phone) validData.phone = manualExtraction.phone
+        // Only extract phone for non-Instagram platforms
+        if (platform !== 'instagram' && !validData.phone && manualExtraction.phone) validData.phone = manualExtraction.phone
       }
       
       // If we have a phone but no valid name, try to find existing client in database
@@ -1458,29 +1624,47 @@ Responde SOLO en formato JSON (sin markdown):
         !validData.name.includes('cuál') &&
         validData.name.length < 50 // Reasonable name length
       
-      if (validData.phone && !hasValidName && supabase && bot.user_id) {
-        console.log('🔍 Searching for existing client by phone:', validData.phone)
-        const { data: existingClient } = await supabase
-          .from("clients")
-          .select("name")
-          .eq("user_id", bot.user_id)
-          .eq("phone", validData.phone)
-          .single()
-        
-        if (existingClient && existingClient.name) {
-          validData.name = existingClient.name
-          console.log('✅ Found existing client name from DB:', existingClient.name)
-        } else {
-          // Clear invalid name if no client found
-          if (!hasValidName) {
-            validData.name = null
+      // Search for existing client by phone (WhatsApp) or Instagram ID
+      if (supabase && bot.user_id && !hasValidName) {
+        if (platform === 'instagram' && senderInstagramId) {
+          console.log('🔍 Searching for existing Instagram client:', senderInstagramId)
+          const { data: existingClient } = await supabase
+            .from("clients")
+            .select("name")
+            .eq("user_id", bot.user_id)
+            .eq("instagram", senderInstagramId)
+            .single()
+          
+          if (existingClient && existingClient.name) {
+            validData.name = existingClient.name
+            console.log('✅ Found existing Instagram client name from DB:', existingClient.name)
+          } else {
+            console.log('ℹ️ No existing Instagram client found for ID:', senderInstagramId)
           }
-          console.log('ℹ️ No existing client found for phone:', validData.phone)
+        } else if (validData.phone) {
+          console.log('🔍 Searching for existing client by phone:', validData.phone)
+          const { data: existingClient } = await supabase
+            .from("clients")
+            .select("name")
+            .eq("user_id", bot.user_id)
+            .eq("phone", validData.phone)
+            .single()
+          
+          if (existingClient && existingClient.name) {
+            validData.name = existingClient.name
+            console.log('✅ Found existing client name from DB:', existingClient.name)
+          } else {
+            // Clear invalid name if no client found
+            if (!hasValidName) {
+              validData.name = null
+            }
+            console.log('ℹ️ No existing client found for phone:', validData.phone)
+          }
         }
       }
       
       // Return only if we have something useful
-      if (validData.name || validData.phone) {
+      if (validData.name || validData.phone || validData.instagram_id) {
         console.log('📞 Extracted client data:', validData)
         return validData
       }
@@ -1529,6 +1713,54 @@ Responde SOLO en formato JSON (sin markdown):
   }
 }
 
+// Function to extract names from bot responses when the bot recognizes the user
+function extractNameFromBotResponses(messages: any[]): string | null {
+  // Look for bot messages that greet the user by name
+  const botMessages = messages.filter(msg => msg.sender_type === 'bot')
+  
+  for (const botMsg of botMessages) {
+    const content = botMsg.content?.toLowerCase() || ''
+    
+    // Common greeting patterns where bot mentions user's name
+    const greetingPatterns = [
+      /¡hola,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      /hola,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      /¡buenas,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      /buenas,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      /¡qué tal,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      /qué tal,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      /bienvenido,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      /¡bienvenido,?\s+([a-záéíóúñü][a-záéíóúñü\s]*?)!/i,
+      // Also check for names followed by common phrases
+      /([a-záéíóúñü][a-záéíóúñü\s]*?),?\s+¡de nuevo por acá!/i,
+      /([a-záéíóúñü][a-záéíóúñü\s]*?),?\s+de nuevo por acá!/i
+    ]
+    
+    for (const pattern of greetingPatterns) {
+      const match = botMsg.content.match(pattern)
+      if (match && match[1]) {
+        const extractedName = match[1].trim()
+        // Validate it's a reasonable name (not too long, doesn't contain common phrases)
+        if (extractedName.length >= 2 && 
+            extractedName.length <= 25 && 
+            !extractedName.includes('de nuevo') &&
+            !extractedName.includes('por acá') &&
+            !extractedName.includes('tal') &&
+            !extractedName.includes('cómo') &&
+            !/\d/.test(extractedName)) { // No numbers in name
+          
+          // Capitalize first letter
+          const finalName = extractedName.charAt(0).toUpperCase() + extractedName.slice(1).toLowerCase()
+          console.log(`🎯 Extracted name from bot greeting: "${finalName}" from message: "${botMsg.content.substring(0, 50)}..."`)
+          return finalName
+        }
+      }
+    }
+  }
+  
+  return null
+}
+
 // Manual extraction function for client data
 function extractClientDataManually(conversationText: string): {name: string | null, phone: string | null} {
   let name = null
@@ -1574,7 +1806,7 @@ function extractClientDataManually(conversationText: string): {name: string | nu
 // Function to create or update client record
 async function createOrUpdateClient(supabase: any, userId: string, clientData: any, conversationId?: string): Promise<any> {
   try {
-    // ONLY check if client already exists by PHONE NUMBER (unique identifier)
+    // Check if client already exists by PHONE NUMBER or INSTAGRAM ID (unique identifiers)
     // Names are NOT unique - multiple people can have the same name
     let existingClient = null
     
@@ -1588,15 +1820,40 @@ async function createOrUpdateClient(supabase: any, userId: string, clientData: a
       
       existingClient = phoneClient
       console.log('🔍 Found existing client by phone:', existingClient ? existingClient.id : 'none')
+    } else if (clientData.instagram_id) {
+      const { data: instagramClient } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("instagram", clientData.instagram_id)
+        .single()
+      
+      existingClient = instagramClient
+      console.log('🔍 Found existing client by Instagram ID:', existingClient ? existingClient.id : 'none')
     } else {
-      console.log('🔍 No phone provided, cannot search for existing client')
+      console.log('🔍 No phone or Instagram ID provided, cannot search for existing client')
     }
 
     if (existingClient) {
       // Update existing client with new information
       const updatedData: any = {}
-      if (clientData.name && !existingClient.name) updatedData.name = clientData.name
+      
+      // Update name if we have a better name than the existing one
+      const shouldUpdateName = clientData.name && 
+        clientData.name !== 'Cliente sin nombre' && 
+        (existingClient.name === 'Cliente sin nombre' || 
+         existingClient.name === null || 
+         existingClient.name === '' ||
+         !existingClient.name)
+      
+      if (shouldUpdateName) {
+        updatedData.name = clientData.name
+        console.log(`🔄 Updating client name from "${existingClient.name}" to "${clientData.name}"`)
+      }
+      
       if (clientData.phone && !existingClient.phone) updatedData.phone = clientData.phone
+      if (clientData.instagram_id && !existingClient.instagram) updatedData.instagram = clientData.instagram_id
+      if (clientData.instagram_username && !existingClient.instagram_username) updatedData.instagram_username = clientData.instagram_username
       
       if (Object.keys(updatedData).length > 0) {
         const { data: updated, error } = await supabase
@@ -1619,6 +1876,8 @@ async function createOrUpdateClient(supabase: any, userId: string, clientData: a
         user_id: userId,
         name: clientData.name || 'Cliente sin nombre',
         phone: clientData.phone || null,
+        instagram: clientData.instagram_id || null,
+        instagram_username: clientData.instagram_username || null,
         email: null
       }
 

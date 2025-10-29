@@ -31,6 +31,7 @@ interface Client {
   phone?: string
   email?: string
   instagram?: string
+  instagram_username?: string
   birthday?: string
   points: number
   total_purchases: number
@@ -58,6 +59,7 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
     phone: "",
     email: "",
     instagram: "",
+    instagram_username: "",
     birthday: "",
     points: 0,
   })
@@ -68,6 +70,7 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
       phone: "",
       email: "",
       instagram: "",
+      instagram_username: "",
       birthday: "",
       points: 0,
     })
@@ -170,6 +173,7 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
       phone: client.phone || "",
       email: client.email || "",
       instagram: client.instagram || "",
+      instagram_username: client.instagram_username || "",
       birthday: client.birthday || "",
       points: client.points,
     })
@@ -262,6 +266,9 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
                     onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
                     placeholder="@usuario"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Para clientes de Instagram, el username se obtiene automáticamente
+                  </p>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="birthday">Cumpleaños</Label>
@@ -432,22 +439,38 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
                       <TableCell>
                         <div className="space-y-1">
                           {client.phone && (
-                            <div className="flex items-center text-sm">
+                            <a 
+                              href={`https://wa.me/${client.phone.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center text-sm hover:text-green-600 transition-colors cursor-pointer"
+                              title="Abrir en WhatsApp"
+                            >
                               <Phone className="h-3 w-3 mr-1" />
                               {client.phone}
-                            </div>
+                            </a>
                           )}
                           {client.email && (
-                            <div className="flex items-center text-sm">
+                            <a
+                              href={`mailto:${client.email}`}
+                              className="flex items-center text-sm hover:text-blue-600 transition-colors cursor-pointer"
+                              title="Enviar email"
+                            >
                               <Mail className="h-3 w-3 mr-1" />
                               {client.email}
-                            </div>
+                            </a>
                           )}
-                          {client.instagram && (
-                            <div className="flex items-center text-sm">
+                          {(client.instagram_username || client.instagram) && (
+                            <a
+                              href={client.instagram_username ? `https://instagram.com/${client.instagram_username}` : `https://instagram.com`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center text-sm hover:text-pink-600 transition-colors cursor-pointer"
+                              title={client.instagram_username ? "Ver perfil de Instagram" : "Instagram"}
+                            >
                               <Instagram className="h-3 w-3 mr-1" />
-                              {client.instagram}
-                            </div>
+                              {client.instagram_username ? `@${client.instagram_username}` : client.instagram}
+                            </a>
                           )}
                         </div>
                       </TableCell>
@@ -531,13 +554,20 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-instagram">Instagram</Label>
+                <Label htmlFor="edit-instagram">Instagram Username</Label>
                 <Input
                   id="edit-instagram"
-                  value={formData.instagram}
+                  value={formData.instagram_username ? `@${formData.instagram_username}` : formData.instagram}
                   onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
                   placeholder="@usuario"
+                  readOnly={!!formData.instagram_username}
+                  className={formData.instagram_username ? "bg-muted" : ""}
                 />
+                {formData.instagram_username && (
+                  <p className="text-xs text-muted-foreground">
+                    Username obtenido automáticamente desde Instagram
+                  </p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-birthday">Cumpleaños</Label>

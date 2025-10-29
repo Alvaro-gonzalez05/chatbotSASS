@@ -14,7 +14,7 @@ export default async function ClientsPage() {
   // Get clients for this user
   const { data: clients } = await supabase
     .from("clients")
-    .select("*")
+    .select("*, instagram_username")
     .eq("user_id", data.user.id)
     .order("created_at", { ascending: false })
 

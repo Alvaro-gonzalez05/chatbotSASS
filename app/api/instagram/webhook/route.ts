@@ -113,6 +113,42 @@ function cleanOldMessages() {
   }
 }
 
+// Function to get Instagram username from Instagram ID
+async function getInstagramUsername(instagramUserId: string, accessToken: string): Promise<string | null> {
+  try {
+    console.log('📸 Fetching Instagram username for ID:', instagramUserId)
+    
+    const response = await fetch(
+      `https://graph.instagram.com/${instagramUserId}?fields=username&access_token=${accessToken}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('❌ Instagram API Error getting username:', errorData)
+      return null
+    }
+
+    const data = await response.json()
+    const username = data.username
+    
+    if (username) {
+      console.log('✅ Got Instagram username:', `@${username}`)
+      return username
+    }
+    
+    return null
+  } catch (error) {
+    console.error('❌ Error fetching Instagram username:', error)
+    return null
+  }
+}
+
 async function processInstagramMessage(entry: any, request: NextRequest) {
   if (!entry.messaging || entry.messaging.length === 0) {
     return
@@ -220,27 +256,87 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         text: textContent
       }
 
-      // Store the conversation
-      const { data: conversation, error: conversationError } = await supabase
+      // Find or create conversation with Instagram ID in the correct field
+      let conversation
+      let conversationError = null
+
+      // First, try to find existing conversation for this Instagram user and bot
+      const { data: existingConversation } = await supabase
         .from('conversations')
-        .upsert({
-          bot_id: bot.id,
-          user_id: bot.user_id,
-          client_phone: senderInstagramId, // Using client_phone for Instagram ID
-          client_name: `Instagram User ${senderInstagramId}`,
-          platform: 'instagram',
-          status: 'active',
-          last_message_at: new Date(parseInt(timestamp)).toISOString()
-        }, {
-          onConflict: 'bot_id,client_phone',
-          ignoreDuplicates: false
-        })
-        .select()
+        .select('*')
+        .eq('bot_id', bot.id)
+        .eq('client_instagram_id', senderInstagramId)
+        .eq('platform', 'instagram')
+        .eq('status', 'active')
         .single()
+
+      if (existingConversation) {
+        // Update existing conversation
+        const { data: updatedConversation, error: updateError } = await supabase
+          .from('conversations')
+          .update({
+            last_message_at: new Date(parseInt(timestamp)).toISOString()
+          })
+          .eq('id', existingConversation.id)
+          .select()
+          .single()
+        
+        conversation = updatedConversation
+        conversationError = updateError
+      } else {
+        // Create new conversation
+        const { data: newConversation, error: createError } = await supabase
+          .from('conversations')
+          .insert({
+            bot_id: bot.id,
+            user_id: bot.user_id,
+            client_instagram_id: senderInstagramId, // Correctly using client_instagram_id for Instagram
+            client_name: `@instagram_${senderInstagramId}`, // Temporary name until user provides real name
+            platform: 'instagram',
+            status: 'active',
+            last_message_at: new Date(parseInt(timestamp)).toISOString()
+          })
+          .select()
+          .single()
+        
+        conversation = newConversation
+        conversationError = createError
+      }
 
       if (conversationError) {
         console.error('Error upserting conversation:', conversationError)
         continue
+      }
+
+      // Get Instagram username if we don't have it yet
+      let instagramUsername = null
+      
+      // Try to get username if:
+      // 1. It's a new conversation OR
+      // 2. Existing conversation doesn't have a real username (still has @instagram_ format)
+      const needsUsername = !existingConversation || 
+        conversation.client_name?.startsWith('@instagram_') || 
+        conversation.client_name?.startsWith('Instagram User')
+      
+      if (needsUsername) {
+        console.log('📸 Attempting to get Instagram username...')
+        instagramUsername = await getInstagramUsername(senderInstagramId, integration.config.access_token)
+        
+        if (instagramUsername) {
+          // Update conversation with real username
+          await supabase
+            .from('conversations')
+            .update({
+              client_name: `@${instagramUsername}`
+            })
+            .eq('id', conversation.id)
+          
+          // Update the conversation object for later use
+          conversation.client_name = `@${instagramUsername}`
+          console.log('✅ Updated conversation with username:', `@${instagramUsername}`)
+        }
+      } else {
+        console.log('📸 Conversation already has username:', conversation.client_name)
       }
 
       // Store the message
@@ -273,7 +369,7 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         const protocol = request.headers.get('x-forwarded-proto') || 'http'
         const baseUrl = `${protocol}://${host}`
 
-        // Call Gemini API
+        // Call Gemini API with Instagram-specific parameters
         const aiResponse = await fetch(`${baseUrl}/api/chat/webhook`, {
           method: 'POST',
           headers: {
@@ -283,8 +379,10 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
             botId: bot.id,
             message: textContent,
             conversationId: conversation.id,
-            senderPhone: senderInstagramId,
-            senderName: `Instagram User ${senderInstagramId}`
+            senderPhone: null, // Instagram doesn't have phone numbers
+            senderName: conversation.client_name, // Use the conversation name (will be updated if user provides real name)
+            senderInstagramId: senderInstagramId, // Add Instagram ID as separate parameter
+            platform: 'instagram' // Add platform identifier
           })
         })
 
