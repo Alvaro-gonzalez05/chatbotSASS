@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const platform = searchParams.get('platform') // 'whatsapp', 'instagram', 'gmail', 'all'
     const botId = searchParams.get('bot_id')
+    const businessAccountId = searchParams.get('business_account_id') // Para Instagram
+    const accessToken = searchParams.get('access_token') // Token temporal
 
     let allTemplates: any[] = []
 
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
       // Obtener plantillas de todas las plataformas
       const [whatsappTemplates, instagramTemplates, gmailTemplates] = await Promise.all([
         fetchWhatsAppTemplates(supabase, userId, botId),
-        fetchInstagramTemplates(supabase, userId, botId),
+        fetchInstagramTemplates(supabase, userId, botId, businessAccountId, accessToken),
         fetchGmailTemplates(supabase, userId, botId)
       ])
       
@@ -38,7 +40,7 @@ export async function GET(request: NextRequest) {
           allTemplates = await fetchWhatsAppTemplates(supabase, userId, botId)
           break
         case 'instagram':
-          allTemplates = await fetchInstagramTemplates(supabase, userId, botId)
+          allTemplates = await fetchInstagramTemplates(supabase, userId, botId, businessAccountId, accessToken)
           break
         case 'gmail':
           allTemplates = await fetchGmailTemplates(supabase, userId, botId)
@@ -58,7 +60,7 @@ export async function GET(request: NextRequest) {
       return acc
     }, {})
 
-    return NextResponse.json({
+    const response = {
       success: true,
       data: {
         templates: allTemplates,
@@ -66,7 +68,16 @@ export async function GET(request: NextRequest) {
         total_count: allTemplates.length,
         platforms: Object.keys(templatesByPlatform)
       }
+    }
+
+    console.log('📤 API Response structure:', {
+      success: response.success,
+      templatesCount: response.data.templates.length,
+      templateNames: response.data.templates.map((t: any) => t.name),
+      platforms: response.data.platforms
     })
+
+    return NextResponse.json(response)
 
   } catch (error) {
     console.error('Error fetching message templates:', error)
@@ -106,19 +117,7 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
         // Verificar que tenga configuración de integración
         const integrationConfig = bot.integrations
         if (!integrationConfig?.business_account_id || !integrationConfig?.access_token) {
-          // Agregar plantilla informativa sobre configuración faltante
-          templates.push({
-            id: `config-error-${bot.id}`,
-            name: '⚠️ Configuración Incompleta',
-            platform: 'whatsapp',
-            bot_id: bot.id,
-            bot_name: bot.name,
-            status: 'ERROR',
-            body_content: `Bot "${bot.name}" necesita configuración completa. Campos faltantes: ${!integrationConfig?.access_token ? 'access_token ' : ''}${!integrationConfig?.business_account_id ? 'business_account_id' : ''}`,
-            variables: [],
-            can_use: false,
-            source: 'config_error'
-          })
+          console.log(`Bot ${bot.id} missing configuration`)
           continue
         }
 
@@ -149,7 +148,6 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
                 category: template.category,
                 components: template.components,
                 quality_score: template.quality_score,
-                // Extraer el cuerpo del mensaje principal
                 body_content: extractWhatsAppTemplateBody(template.components),
                 variables: extractWhatsAppTemplateVariables(template.components),
                 can_use: template.status === 'APPROVED',
@@ -159,22 +157,7 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
             })
           }
         } else {
-          const errorText = await response.text()
-          console.error(`Failed to fetch WhatsApp templates for bot ${bot.id}:`, errorText)
-          
-          // Agregar plantilla de error informativa
-          templates.push({
-            id: `api-error-${bot.id}`,
-            name: '❌ Error de API',
-            platform: 'whatsapp',
-            bot_id: bot.id,
-            bot_name: bot.name,
-            status: 'API_ERROR',
-            body_content: `Error al obtener plantillas de Meta API para "${bot.name}". Código: ${response.status}. Verifica que el token y business_account_id sean válidos.`,
-            variables: [],
-            can_use: false,
-            source: 'api_error'
-          })
+          console.error(`Failed to fetch WhatsApp templates for bot ${bot.id}:`, response.status)
         }
       } catch (error) {
         console.error(`Error fetching WhatsApp templates for bot ${bot.id}:`, error)
@@ -189,8 +172,98 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
 }
 
 // Obtener plantillas de Instagram Business desde Meta API
-async function fetchInstagramTemplates(supabase: any, userId: string, botId?: string | null) {
+async function fetchInstagramTemplates(supabase: any, userId: string, botId?: string | null, businessAccountId?: string | null, accessToken?: string | null) {
+  console.log('🚀 fetchInstagramTemplates called with:', { userId, botId, businessAccountId: businessAccountId || 'none', accessToken: accessToken ? 'provided' : 'none' })
+  
   try {
+    const templates: any[] = []
+
+    // Si se proporcionan businessAccountId y accessToken, hacer llamada directa a Meta API
+    if (businessAccountId && accessToken) {
+      console.log('✅ Using provided parameters for direct Meta API call')
+      console.log(`🎯 WABA ID: ${businessAccountId}`)
+      console.log(`🔑 Access Token: ${accessToken.substring(0, 20)}...`)
+      
+      try {
+        const response = await fetch(
+          `https://graph.facebook.com/v18.0/${businessAccountId}/message_templates?fields=name,status,language,category,components,quality_score`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        console.log(`📡 Meta API Response status: ${response.status}`)
+        
+        if (response.ok) {
+          const result = await response.json()
+          console.log(`📊 Templates found: ${result.data?.length || 0}`)
+          
+          if (result.data && result.data.length > 0) {
+            result.data.forEach((template: any) => {
+              templates.push({
+                id: template.id || `instagram_${template.name}`,
+                name: `${template.name} (WhatsApp)`,
+                platform: 'instagram',
+                bot_id: botId || 'temp',
+                bot_name: 'Instagram Bot',
+                status: template.status,
+                language: template.language,
+                category: template.category,
+                components: template.components,
+                quality_score: template.quality_score,
+                body_content: extractWhatsAppTemplateBody(template.components),
+                variables: extractWhatsAppTemplateVariables(template.components),
+                can_use: template.status === 'APPROVED',
+                source: 'whatsapp_shared',
+                last_synced: new Date().toISOString()
+              })
+            })
+            console.log(`✅ Successfully processed ${templates.length} templates`)
+          }
+        } else {
+          const errorData = await response.text()
+          console.error(`❌ Meta API Error ${response.status}:`, errorData)
+          
+          templates.push({
+            id: 'api_error_template',
+            name: 'Error: No se pudieron obtener plantillas',
+            platform: 'instagram',
+            bot_id: botId || 'temp',
+            bot_name: 'Instagram Bot',
+            status: 'ERROR',
+            body_content: `Error ${response.status}: ${errorData}`,
+            variables: [],
+            can_use: false,
+            source: 'api_error',
+            last_synced: new Date().toISOString()
+          })
+        }
+      } catch (fetchError) {
+        console.error('❌ Error calling Meta API:', fetchError)
+        templates.push({
+          id: 'fetch_error_template',
+          name: 'Error: Fallo en la conexión',
+          platform: 'instagram',
+          bot_id: botId || 'temp',
+          bot_name: 'Instagram Bot',
+          status: 'ERROR',
+          body_content: `Error de conexión: ${fetchError}`,
+          variables: [],
+          can_use: false,
+          source: 'fetch_error',
+          last_synced: new Date().toISOString()
+        })
+      }
+      
+      return templates
+    }
+
+    // Si no se proporcionan parámetros, buscar en la configuración guardada (flujo original)
+    console.log('📂 No direct parameters provided, checking saved bot configuration')
+    
     // Obtener configuraciones de Instagram del usuario desde la tabla bots
     let query = supabase
       .from('bots')
@@ -204,63 +277,89 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
     }
 
     const { data: bots } = await query
+    console.log('📊 Query result:', { botsFound: bots?.length || 0, bots: bots?.map((b: any) => ({ id: b.id, name: b.name })) })
 
     if (!bots || bots.length === 0) {
+      console.log('❌ No Instagram bots found - returning empty array')
       return []
     }
-
-    const templates: any[] = []
 
     // Para cada bot de Instagram, obtener plantillas
     for (const bot of bots) {
       try {
         // Verificar que tenga configuración de integración
-        const integrationConfig = bot.integrations
-        if (!integrationConfig?.instagram_business_account_id || !integrationConfig?.access_token) {
-          // Agregar plantilla informativa sobre configuración faltante
-          const missingFields = []
-          if (!integrationConfig?.access_token) missingFields.push('access_token')
-          if (!integrationConfig?.instagram_business_account_id) missingFields.push('instagram_business_account_id')
-          if (!integrationConfig?.app_id) missingFields.push('app_id')
-          if (!integrationConfig?.app_secret) missingFields.push('app_secret')
-
-          templates.push({
-            id: `config-error-${bot.id}`,
-            name: '⚠️ Configuración Incompleta',
-            platform: 'instagram',
-            bot_id: bot.id,
-            bot_name: bot.name,
-            status: 'ERROR',
-            body_content: `Bot "${bot.name}" necesita configuración completa. Campos faltantes: ${missingFields.join(', ')}`,
-            variables: [],
-            can_use: false,
-            source: 'config_error'
-          })
-          continue
+        let integrationConfig = bot.integrations
+        
+        // Si se proporciona businessAccountId como parámetro, usarlo temporalmente
+        const accountIdToUse = businessAccountId || integrationConfig?.business_account_id
+        
+        if (!integrationConfig?.access_token) {
+          console.log(`Instagram bot ${bot.id} missing access token`)
+          
+          // Si se proporciona accessToken como parámetro, usarlo temporalmente
+          if (accessToken) {
+            console.log('Using temporary access token provided in request')
+            integrationConfig = { 
+              ...integrationConfig,
+              access_token: accessToken
+            }
+          } else {
+            continue
+          }
         }
 
-        // Para Instagram, las plantillas de mensaje funcionan diferente
-        // Instagram usa principalmente plantillas de WhatsApp Business API cuando está conectado a una página
-        // Primero intentamos obtener plantillas de message templates si tiene business_account_id
-        if (integrationConfig.business_account_id) {
+        // Si tenemos un business_account_id (temporal o guardado), obtener plantillas de WhatsApp
+        if (accountIdToUse) {
+          console.log(`Fetching templates for business account: ${accountIdToUse}`)
+          console.log(`Access token provided via parameter: ${accessToken ? 'Yes' : 'No'}`)
+          console.log(`Integration config token: ${integrationConfig?.access_token ? 'Yes' : 'No'}`)
+          
+          // Intentar obtener plantillas incluso sin access token para debugging
+          let authHeader = ''
+          if (integrationConfig?.access_token) {
+            authHeader = `Bearer ${integrationConfig.access_token}`
+            console.log(`Using access token from config`)
+          } else {
+            console.log(`Warning: No access token found for bot ${bot.id}`)
+            // Crear un template de ejemplo para mostrar que el business_account_id funciona
+            templates.push({
+              id: 'debug_template',
+              name: 'Debug: Configuración requerida',
+              platform: 'instagram',
+              bot_id: bot.id,
+              bot_name: bot.name,
+              status: 'PENDING',
+              body_content: `Para obtener plantillas reales, necesitas:\n1. Access Token válido de Meta\n2. Permisos: whatsapp_business_management\n3. Business Account ID: ${accountIdToUse}`,
+              variables: [],
+              can_use: false,
+              source: 'debug_info',
+              last_synced: new Date().toISOString()
+            })
+            continue
+          }
+
           const response = await fetch(
-            `https://graph.facebook.com/v18.0/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
+            `https://graph.facebook.com/v18.0/${accountIdToUse}/message_templates?fields=name,status,language,category,components,quality_score`,
             {
               headers: {
-                'Authorization': `Bearer ${integrationConfig.access_token}`,
+                'Authorization': authHeader,
                 'Content-Type': 'application/json'
               }
             }
           )
 
+          console.log(`API Response status: ${response.status}`)
+          
           if (response.ok) {
             const result = await response.json()
+            console.log(`Templates found: ${result.data?.length || 0}`)
+            console.log('Template names:', result.data?.map((t: any) => t.name).join(', ') || 'None')
             
-            if (result.data) {
+            if (result.data && result.data.length > 0) {
               result.data.forEach((template: any) => {
                 templates.push({
                   id: template.id || `instagram_${template.name}`,
-                  name: template.name,
+                  name: `${template.name} (WhatsApp)`,
                   platform: 'instagram',
                   bot_id: bot.id,
                   bot_name: bot.name,
@@ -272,56 +371,56 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
                   body_content: extractWhatsAppTemplateBody(template.components),
                   variables: extractWhatsAppTemplateVariables(template.components),
                   can_use: template.status === 'APPROVED',
-                  source: 'meta_api',
+                  source: 'whatsapp_shared',
                   last_synced: new Date().toISOString()
                 })
               })
             }
+          } else {
+            // Error en la respuesta de la API
+            const errorData = await response.text()
+            console.error(`API Error ${response.status}:`, errorData)
+            
+            templates.push({
+              id: 'api_error_template',
+              name: 'Error: No se pudieron obtener plantillas',
+              platform: 'instagram',
+              bot_id: bot.id,
+              bot_name: bot.name,
+              status: 'ERROR',
+              body_content: `Error ${response.status}: ${errorData}`,
+              variables: [],
+              can_use: false,
+              source: 'api_error',
+              last_synced: new Date().toISOString()
+            })
           }
         }
 
-        // También obtener configuraciones específicas de Instagram como ice breakers, quick replies, etc.
-        const instagramResponse = await fetch(
-          `https://graph.facebook.com/v18.0/${integrationConfig.instagram_business_account_id}?fields=name,biography,profile_picture_url`,
-          {
-            headers: {
-              'Authorization': `Bearer ${integrationConfig.access_token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        )
+        // Obtener plantillas locales de Instagram
+        const { data: localTemplates } = await supabase
+          .from('message_templates')
+          .select('*')
+          .eq('bot_id', bot.id)
+          .eq('platform', 'instagram')
+          .eq('status', 'active')
 
-        if (instagramResponse.ok) {
-          const result = await instagramResponse.json()
-          
-          // También obtener plantillas personalizadas almacenadas localmente para Instagram
-          const { data: localTemplates } = await supabase
-            .from('message_templates')
-            .select('*')
-            .eq('bot_id', bot.id)
-            .eq('platform', 'instagram')
-            .eq('status', 'active')
-
-          if (localTemplates) {
-            localTemplates.forEach((template: any) => {
-              templates.push({
-                id: template.id,
-                name: template.template_name,
-                platform: 'instagram',
-                bot_id: bot.id,
-                bot_name: bot.name,
-                status: template.status,
-                language: template.language || 'es',
-                category: template.category || 'utility',
-                body_content: template.body_content,
-                variables: template.variables_used || [],
-                can_use: template.status === 'approved',
-                source: 'local_db',
-                created_at: template.created_at,
-                updated_at: template.updated_at
-              })
+        if (localTemplates) {
+          localTemplates.forEach((template: any) => {
+            templates.push({
+              id: template.id,
+              name: template.template_name,
+              platform: 'instagram',
+              bot_id: bot.id,
+              bot_name: bot.name,
+              status: 'APPROVED',
+              body_content: template.body_content,
+              variables: template.variables || [],
+              can_use: true,
+              source: 'local_db',
+              last_synced: new Date().toISOString()
             })
-          }
+          })
         }
       } catch (error) {
         console.error(`Error fetching Instagram templates for bot ${bot.id}:`, error)

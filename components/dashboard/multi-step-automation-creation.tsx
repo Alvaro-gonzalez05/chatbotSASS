@@ -37,7 +37,7 @@ import {
 
 interface AutomationFormData {
   name: string
-  trigger_type: "birthday" | "inactive_client" | "new_promotion" | ""
+  trigger_type: "birthday" | "inactive_client" | "new_promotion" | "comment_reply" | ""
   trigger_config: Record<string, any>
   message_template: string
   template_id?: string
@@ -103,18 +103,28 @@ const triggerTypes = {
     label: "Cumpleaños de Clientes",
     description: "Envía felicitaciones automáticas",
     color: "bg-pink-500",
+    platforms: ["whatsapp", "instagram", "email"]
   },
   inactive_client: {
     icon: UserX,
     label: "Cliente Inactivo",
     description: "Reactiva clientes que no compran",
     color: "bg-orange-500",
+    platforms: ["whatsapp", "instagram", "email"]
   },
   new_promotion: {
     icon: Gift,
     label: "Nueva Promoción",
     description: "Notifica sobre ofertas especiales",
     color: "bg-purple-500",
+    platforms: ["whatsapp", "instagram", "email"]
+  },
+  comment_reply: {
+    icon: MessageSquare,
+    label: "Respuesta a Comentario",
+    description: "Responde automáticamente a comentarios (Instagram)",
+    color: "bg-pink-500",
+    platforms: ["instagram"]
   },
 }
 
@@ -153,6 +163,9 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null)
   const [currentAutomationCount, setCurrentAutomationCount] = useState(0)
   const [canCreateAutomation, setCanCreateAutomation] = useState(true)
+  const [needsBusinessAccountId, setNeedsBusinessAccountId] = useState(false)
+  const [businessAccountId, setBusinessAccountId] = useState("")
+  const [accessToken, setAccessToken] = useState("")
   const supabase = createClient()
 
   const [formData, setFormData] = useState<AutomationFormData>({
@@ -331,6 +344,9 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     if (!botId) return
 
     setLoadingTemplates(true)
+    setNeedsBusinessAccountId(false)
+    setAccessToken("") // Limpiar token temporal
+    
     try {
       const selectedBot = bots.find(b => b.id === botId)
       if (!selectedBot) return
@@ -338,12 +354,19 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       setSelectedBotPlatform(selectedBot.platform)
       setCanCreateCustomTemplate(selectedBot.platform === 'email')
 
+      // La API ya maneja plantillas de Meta para Instagram y WhatsApp
       const response = await fetch(`/api/templates?bot_id=${botId}&platform=${selectedBot.platform}`)
       if (!response.ok) throw new Error('Failed to fetch templates')
 
       const data = await response.json()
       if (data.success) {
-        setTemplates(data.templates || [])
+        const templates = data.templates || []
+        setTemplates(templates)
+
+        // Si es Instagram y no hay plantillas, mostrar input para business_account_id
+        if (selectedBot.platform === 'instagram' && templates.length === 0) {
+          setNeedsBusinessAccountId(true)
+        }
       }
     } catch (error) {
       console.error('Error fetching templates:', error)
@@ -391,6 +414,55 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         plan_type: "trial",
         max_automations: 0,
       })
+    }
+  }
+
+  const fetchTemplatesWithBusinessId = async () => {
+    if (!businessAccountId.trim() || !formData.bot_id || !accessToken.trim()) {
+      toast.error('Por favor ingresa el WABA ID y el Access Token')
+      return
+    }
+
+    try {
+      setLoadingTemplates(true)
+      
+      const selectedBot = bots.find(b => b.id === formData.bot_id)
+      if (!selectedBot) return
+
+      // Obtener plantillas pasando tanto el business_account_id como el access_token como parámetros
+      const url = `/api/templates?bot_id=${formData.bot_id}&platform=${selectedBot.platform}&business_account_id=${businessAccountId.trim()}&access_token=${encodeURIComponent(accessToken.trim())}`
+      console.log('Fetching templates with URL:', url.replace(accessToken.trim(), 'TOKEN_HIDDEN'))
+      
+      const response = await fetch(url)
+      console.log('Response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('API Error:', errorText)
+        throw new Error(`API Error ${response.status}: ${errorText}`)
+      }
+
+      const data = await response.json()
+      console.log('API Response:', data)
+      
+      if (data.success) {
+        const templates = data.data?.templates || []
+        console.log(`Found ${templates.length} templates:`, templates.map((t: any) => t.name))
+        setTemplates(templates)
+        toast.success(`Se encontraron ${templates.length} plantillas`)
+        setNeedsBusinessAccountId(false)
+        setBusinessAccountId("")
+        setAccessToken("")
+      } else {
+        console.error('API returned success=false:', data)
+        toast.error(data.error || 'No se pudieron obtener las plantillas')
+      }
+      
+    } catch (error) {
+      console.error('Error fetching templates with business ID:', error)
+      toast.error('Error al obtener plantillas')
+    } finally {
+      setLoadingTemplates(false)
     }
   }
 
@@ -650,6 +722,56 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
           </div>
         )
 
+      case "comment_reply":
+        return (
+          <div className="space-y-4">
+            <div className="p-3 bg-pink-50 rounded-lg border border-pink-200">
+              <h4 className="font-medium text-sm text-pink-800 mb-1">¿Cómo funciona?</h4>
+              <p className="text-xs text-pink-700">
+                Se activará cuando alguien comente en tus posts de Instagram. 
+                Puedes responder automáticamente y convertir el comentario en una conversación privada.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="comment_keywords" className="text-sm font-medium">
+                Palabras clave en comentarios (opcional)
+              </Label>
+              <Input
+                id="comment_keywords"
+                value={formData.trigger_config.comment_keywords || ""}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    trigger_config: { ...formData.trigger_config, comment_keywords: e.target.value },
+                  })
+                }
+                placeholder="ej: precio, info, disponible (separar con comas)"
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Si está vacío, responderá a todos los comentarios. Si especificas palabras, solo responderá a comentarios que las contengan.
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="move_to_dm"
+                checked={formData.trigger_config.move_to_dm || true}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    trigger_config: { ...formData.trigger_config, move_to_dm: e.target.checked },
+                  })
+                }
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="move_to_dm" className="text-sm">
+                Mover conversación a mensaje privado
+              </Label>
+            </div>
+          </div>
+        )
+
       default:
         return null
     }
@@ -870,7 +992,14 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="grid gap-3 sm:gap-4">
-                        {Object.entries(triggerTypes).map(([key, config]) => {
+                        {Object.entries(triggerTypes)
+                          .filter(([key, config]) => {
+                            // Si no hay bot seleccionado, mostrar todos
+                            if (!selectedBotPlatform) return true
+                            // Filtrar por plataforma del bot seleccionado
+                            return config.platforms.includes(selectedBotPlatform)
+                          })
+                          .map(([key, config]) => {
                           const Icon = config.icon
                           const isSelected = formData.trigger_type === key
 
@@ -899,6 +1028,13 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                                     <div className="flex-1">
                                       <h4 className="font-medium text-sm sm:text-base">{config.label}</h4>
                                       <p className="text-xs sm:text-sm text-muted-foreground">{config.description}</p>
+                                      <div className="flex gap-1 mt-1">
+                                        {config.platforms.map(platform => (
+                                          <Badge key={platform} variant="outline" className="text-xs">
+                                            {platform}
+                                          </Badge>
+                                        ))}
+                                      </div>
                                     </div>
                                     {isSelected && (
                                       <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
@@ -1157,11 +1293,85 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
                             {(formData.template_source === "local_db" || formData.template_source === "meta_api") && (
                               <div className="space-y-2 max-h-60 overflow-y-auto">
-                                {templates.length === 0 ? (
+                                {needsBusinessAccountId ? (
+                                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                    <h4 className="font-medium text-blue-800 mb-2">📋 Configuración necesaria para Instagram</h4>
+                                    <p className="text-sm text-blue-700 mb-3">
+                                      Para usar plantillas de WhatsApp en Instagram, necesitas el Business Account ID de Meta.
+                                    </p>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <Label htmlFor="business_account_id" className="text-sm font-medium">
+                                          WABA ID (WhatsApp Business Account ID)
+                                        </Label>
+                                        <Input
+                                          id="business_account_id"
+                                          value={businessAccountId}
+                                          onChange={(e) => setBusinessAccountId(e.target.value)}
+                                          placeholder="ej: 1336468254699469"
+                                          className="mt-1"
+                                        />
+                                      </div>
+                                      
+                                      <div>
+                                        <Label htmlFor="access_token" className="text-sm font-medium">
+                                          Access Token
+                                        </Label>
+                                        <Input
+                                          id="access_token"
+                                          type="password"
+                                          value={accessToken}
+                                          onChange={(e) => setAccessToken(e.target.value)}
+                                          placeholder="EAAjYLYimS1E..."
+                                          className="mt-1"
+                                        />
+                                        <div className="text-xs text-blue-600 mt-1">
+                                          <p>Token temporal con permisos: whatsapp_business_management</p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="text-xs text-green-600 space-y-1">
+                                        <p><strong>✅ Datos verificados:</strong></p>
+                                        <p>WABA ID: 1336468254699469</p>
+                                        <p>Phone Number ID: 851036181423627</p>
+                                        <p>Plantillas disponibles: bienvenido, hello_world</p>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Button 
+                                          onClick={fetchTemplatesWithBusinessId}
+                                          disabled={!businessAccountId.trim() || !accessToken.trim() || loadingTemplates}
+                                          size="sm"
+                                          className="w-full"
+                                        >
+                                          {loadingTemplates ? (
+                                            <>
+                                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                              Obteniendo plantillas...
+                                            </>
+                                          ) : (
+                                            'Obtener Plantillas'
+                                          )}
+                                        </Button>
+                                        <Button 
+                                          onClick={() => {
+                                            setBusinessAccountId("1336468254699469")
+                                            setAccessToken("EAAjYLYimS1EBP2j6oILI48x55aSeaZC5KgIz46aco6sKZAAGqplZAO1Jd2ZAKmaunKv1PqDXmFZClLQSYbq8mmQvmKmJtdIDYlNrJLhZBQahJJjT1haSiB5tZBjroqkrBegZCAM8zHrbWeqjWZC4NgPS6eqIfSuCJZBjzp2iZByxbPbnDu2PGsGZCqVIo87KXXR0zeZC3V0ZADTYCnx3vuNuhuIlV4564rGmZBfDhojpf00BnzZBXrJv3nENZB7wgO9gtoMJiRIfV64BHUZBBT7wLZBBxJk1YnQbXSG")
+                                          }}
+                                          disabled={loadingTemplates}
+                                          size="sm"
+                                          variant="outline"
+                                          className="w-full"
+                                        >
+                                          🚀 Usar datos verificados
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : templates.length === 0 ? (
                                   <div className="text-center py-8 text-muted-foreground">
                                     {selectedBotPlatform === 'email' 
                                       ? 'No tienes plantillas de email. Crea una personalizada arriba.'
-                                      : 'No hay plantillas aprobadas. Crea plantillas en Meta Business Manager primero.'
+                                      : 'No hay plantillas disponibles.'
                                     }
                                   </div>
                                 ) : (

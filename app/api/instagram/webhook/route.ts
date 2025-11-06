@@ -1,6 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
+// Helper function to find or create conversation
+async function findOrCreateConversation(bot: any, clientId: string, platform: string, supabase: any) {
+  // Find existing conversation
+  const { data: conversation, error: conversationError } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('client_phone', clientId) // Using client_phone field for Instagram ID
+    .eq('bot_id', bot.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (conversation) {
+    return conversation
+  }
+
+  // Create new conversation
+  const { data: newConversation, error: createError } = await supabase
+    .from('conversations')
+    .insert({
+      user_id: bot.user_id,
+      bot_id: bot.id,
+      client_phone: clientId, // Using client_phone field for Instagram ID
+      client_name: `Instagram User ${clientId}`,
+      platform: platform,
+      status: 'active'
+    })
+    .select()
+    .single()
+
+  if (createError) {
+    console.error('Error creating conversation:', createError)
+    throw createError
+  }
+
+  return newConversation
+}
+
 // Webhook verification (GET request)
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
@@ -83,6 +121,16 @@ export async function POST(request: NextRequest) {
         // Instagram usa 'messaging' en lugar de 'changes'
         if (entry.messaging && entry.messaging.length > 0) {
           await processInstagramMessage(entry, request)
+        }
+        
+        // Manejar comentarios en posts (diferente estructura)
+        if (entry.changes && entry.changes.length > 0) {
+          for (const change of entry.changes) {
+            if (change.field === 'comments') {
+              // Comentario en post de Instagram
+              await processInstagramComment(change.value, request)
+            }
+          }
         }
       }
     }
@@ -484,5 +532,174 @@ async function sendInstagramMessage(accessToken: string, instagramBusinessAccoun
   } catch (error) {
     console.error('Error sending Instagram message:', error)
     throw error
+  }
+}
+
+// Función para manejar comentarios en posts
+async function processInstagramComment(commentData: any, request: NextRequest) {
+  console.log('📸 Processing Instagram comment:', JSON.stringify(commentData, null, 2))
+  
+  const supabase = createAdminClient()
+  
+  // Datos del comentario
+  const commentId = commentData.id
+  const commentText = commentData.text
+  const commenterId = commentData.from?.id
+  const commenterUsername = commentData.from?.username
+  const mediaId = commentData.media?.id // ID del post donde se comentó
+  const mediaType = commentData.media?.media_type // IMAGE, VIDEO, etc.
+
+  if (!commenterId || !commentText) {
+    console.log('❌ Missing commenter ID or text in comment')
+    return
+  }
+
+  console.log('📸 Comment details:')
+  console.log('- Commenter:', commenterUsername, `(${commenterId})`)
+  console.log('- Text:', commentText)
+  console.log('- Media ID:', mediaId)
+
+  // Buscar todas las automatizaciones de tipo comment_reply activas
+  const { data: automations } = await supabase
+    .from('automations')
+    .select(`
+      *,
+      bots!inner(id, user_id, platform, integrations)
+    `)
+    .eq('trigger_type', 'comment_reply')
+    .eq('is_active', true)
+    .eq('bots.platform', 'instagram')
+
+  if (!automations || automations.length === 0) {
+    console.log('📸 No comment reply automations found')
+    return
+  }
+
+  for (const automation of automations) {
+    try {
+      const bot = automation.bots
+      const triggerConfig = automation.trigger_config || {}
+      
+      // Verificar si hay palabras clave configuradas
+      const keywords = triggerConfig.comment_keywords
+      if (keywords && keywords.trim()) {
+        const keywordList = keywords.toLowerCase().split(',').map((k: string) => k.trim())
+        const commentLower = commentText.toLowerCase()
+        
+        // Solo procesar si el comentario contiene alguna palabra clave
+        const hasKeyword = keywordList.some((keyword: string) => 
+          commentLower.includes(keyword)
+        )
+        
+        if (!hasKeyword) {
+          console.log(`📸 Comment doesn't match keywords for bot ${bot.id}:`, keywordList)
+          continue
+        }
+      }
+
+      console.log(`📸 Triggering comment automation for bot ${bot.id}`)
+
+      // Obtener integración de Instagram
+      const { data: integration } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('user_id', bot.user_id)
+        .eq('platform', 'instagram')
+        .eq('is_active', true)
+        .single()
+
+      if (!integration) {
+        console.log('❌ No Instagram integration found for comment automation')
+        continue
+      }
+
+      // Crear o encontrar conversación
+      let conversation = await findOrCreateConversation(bot, commenterId, 'instagram', supabase)
+      
+      // Actualizar nombre si tenemos username
+      if (commenterUsername && conversation.client_name !== `@${commenterUsername}`) {
+        await supabase
+          .from('conversations')
+          .update({ client_name: `@${commenterUsername}` })
+          .eq('id', conversation.id)
+        
+        conversation.client_name = `@${commenterUsername}`
+      }
+
+      // Preparar mensaje de respuesta
+      let responseMessage = automation.message_template || "¡Hola! Vi tu comentario. Te escribo por mensaje privado 😊"
+      
+      // Reemplazar variables
+      responseMessage = responseMessage
+        .replace(/\{client_name\}/g, commenterUsername || 'usuario')
+        .replace(/\{comment_text\}/g, commentText)
+        .replace(/\{media_id\}/g, mediaId || '')
+
+      // Verificar si debe mover a DM (por defecto true)
+      const moveToDM = triggerConfig.move_to_dm !== false
+
+      if (moveToDM) {
+        // Enviar mensaje privado
+        await sendInstagramDM(integration, commenterId, responseMessage, conversation, supabase)
+      }
+
+      // Log de la automatización ejecutada
+      await supabase
+        .from('automation_executions')
+        .insert({
+          automation_id: automation.id,
+          conversation_id: conversation.id,
+          trigger_data: {
+            comment_id: commentId,
+            comment_text: commentText,
+            commenter_id: commenterId,
+            commenter_username: commenterUsername,
+            media_id: mediaId
+          },
+          status: 'executed',
+          executed_at: new Date().toISOString()
+        })
+
+    } catch (error) {
+      console.error(`❌ Error processing comment automation for bot ${automation.bots.id}:`, error)
+    }
+  }
+}
+
+// Función para enviar mensaje directo de Instagram
+async function sendInstagramDM(integration: any, recipientId: string, message: string, conversation: any, supabase: any) {
+  try {
+    const response = await fetch(`https://graph.instagram.com/v21.0/${integration.config.instagram_business_account_id}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${integration.config.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        recipient: { id: recipientId },
+        message: { text: message }
+      })
+    })
+
+    if (response.ok) {
+      console.log('✅ Instagram DM sent successfully')
+      
+      // Guardar el mensaje en la base de datos
+      await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversation.id,
+          content: { type: 'text', text: message },
+          text_content: message,
+          sender_type: 'bot',
+          message_type: 'comment_reply',
+          created_at: new Date().toISOString()
+        })
+    } else {
+      const errorText = await response.text()
+      console.error('❌ Failed to send Instagram DM:', errorText)
+    }
+  } catch (error) {
+    console.error('❌ Error sending Instagram DM:', error)
   }
 }
