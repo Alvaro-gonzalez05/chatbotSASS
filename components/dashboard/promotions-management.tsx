@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
-import { Plus, Gift, Percent, DollarSign, Star, Users, MoreHorizontal, Trash2, Play, Pause, Award } from "lucide-react"
+import { Plus, Gift, Percent, DollarSign, Star, Users, MoreHorizontal, Trash2, Play, Pause, Award, Upload, Loader2, X } from "lucide-react"
+import { Tabs as UITabs, TabsContent as UITabsContent, TabsList as UITabsList, TabsTrigger as UITabsTrigger } from "@/components/ui/tabs"
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
 
@@ -32,15 +33,12 @@ interface Promotion {
   id: string
   name: string
   description?: string
-  discount_type: "percentage" | "fixed_amount" | "points"
-  discount_value: number
-  points_required: number
-  min_purchase_amount: number
   max_uses?: number
   current_uses: number
   start_date: string
   end_date: string
   is_active: boolean
+  image_url?: string
   created_at: string
 }
 
@@ -63,11 +61,7 @@ interface PromotionsManagementProps {
   userId: string
 }
 
-const discountTypeLabels = {
-  percentage: "Porcentaje",
-  fixed_amount: "Cantidad Fija",
-  points: "Puntos",
-}
+
 
 const rewardTypeLabels = {
   discount: "Descuento",
@@ -86,20 +80,19 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null)
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [imageUploadMethod, setImageUploadMethod] = useState<"url" | "upload">("url")
   const supabase = createClient()
 
   // Form states
   const [promotionForm, setPromotionForm] = useState({
     name: "",
     description: "",
-    discount_type: "" as "percentage" | "fixed_amount" | "points" | "",
-    discount_value: 0,
-    points_required: 0,
-    min_purchase_amount: 0,
     max_uses: "",
     start_date: "",
     end_date: "",
     is_active: true,
+    image_url: "",
   })
 
   const [rewardForm, setRewardForm] = useState({
@@ -116,14 +109,11 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
     setPromotionForm({
       name: "",
       description: "",
-      discount_type: "",
-      discount_value: 0,
-      points_required: 0,
-      min_purchase_amount: 0,
       max_uses: "",
       start_date: "",
       end_date: "",
       is_active: true,
+      image_url: "",
     })
   }
 
@@ -311,6 +301,52 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
     return promotion.is_active && now >= startDate && now <= endDate
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Formato no soportado. Usa JPG, PNG, GIF o WebP")
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("El archivo es muy grande. Máximo 5MB permitido")
+      return
+    }
+
+    setIsUploading(true)
+    toast.loading("Subiendo imagen...", { id: "upload-image" })
+
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+
+      const response = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: formDataUpload,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Error al subir imagen")
+      }
+
+      setPromotionForm(prev => ({ ...prev, image_url: result.url }))
+      toast.success("Imagen subida exitosamente", { id: "upload-image" })
+
+    } catch (error) {
+      console.error("Error uploading image:", error)
+      toast.error(error instanceof Error ? error.message : "Error al subir imagen", { id: "upload-image" })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -436,86 +472,68 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                           rows={3}
                         />
                       </div>
+                      
+                      <div className="grid gap-2">
+                        <Label>Imagen de la promoción (opcional)</Label>
+                        <UITabs value={imageUploadMethod} onValueChange={(value) => setImageUploadMethod(value as "url" | "upload")}>
+                          <UITabsList className="grid w-full grid-cols-2">
+                            <UITabsTrigger value="url">URL</UITabsTrigger>
+                            <UITabsTrigger value="upload">Subir archivo</UITabsTrigger>
+                          </UITabsList>
+                          
+                          <UITabsContent value="url" className="space-y-2">
+                            <Input
+                              type="url"
+                              placeholder="https://ejemplo.com/imagen.jpg"
+                              value={promotionForm.image_url}
+                              onChange={(e) => setPromotionForm(prev => ({ ...prev, image_url: e.target.value }))}
+                            />
+                          </UITabsContent>
+                          
+                          <UITabsContent value="upload" className="space-y-2">
+                            <div className="flex flex-col gap-2">
+                              <Input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageUpload}
+                                disabled={isUploading}
+                              />
+                              {isUploading && (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Subiendo imagen...
+                                </div>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                Formatos: JPG, PNG, GIF, WebP. Máximo 5MB. Se almacena en Supabase Storage.
+                              </p>
+                            </div>
+                          </UITabsContent>
+                        </UITabs>
+                        
+                        {promotionForm.image_url && (
+                          <div className="mt-2 relative inline-block">
+                            <img 
+                              src={promotionForm.image_url} 
+                              alt="Preview" 
+                              className="w-24 h-24 object-cover rounded border"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setPromotionForm(prev => ({ ...prev, image_url: "" }))}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="grid gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="discount-type">Tipo de Descuento *</Label>
-                        <Select
-                          value={promotionForm.discount_type}
-                          onValueChange={(value: "percentage" | "fixed_amount" | "points") =>
-                            setPromotionForm({ ...promotionForm, discount_type: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona el tipo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="percentage">Porcentaje (%)</SelectItem>
-                            <SelectItem value="fixed_amount">Cantidad Fija (€)</SelectItem>
-                            <SelectItem value="points">Puntos</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="discount-value">
-                          Valor del Descuento *{" "}
-                          {promotionForm.discount_type === "percentage"
-                            ? "(%)"
-                            : promotionForm.discount_type === "fixed_amount"
-                              ? "(€)"
-                              : "(puntos)"}
-                        </Label>
-                        <Input
-                          id="discount-value"
-                          type="number"
-                          min="0"
-                          step={promotionForm.discount_type === "fixed_amount" ? "0.01" : "1"}
-                          value={promotionForm.discount_value}
-                          onChange={(e) =>
-                            setPromotionForm({
-                              ...promotionForm,
-                              discount_value: Number.parseFloat(e.target.value) || 0,
-                            })
-                          }
-                          required
-                        />
-                      </div>
-                    </div>
 
-                    <div className="grid gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="points-required">Puntos Requeridos</Label>
-                        <Input
-                          id="points-required"
-                          type="number"
-                          min="0"
-                          value={promotionForm.points_required}
-                          onChange={(e) =>
-                            setPromotionForm({
-                              ...promotionForm,
-                              points_required: Number.parseInt(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="min-purchase">Compra Mínima (€)</Label>
-                        <Input
-                          id="min-purchase"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={promotionForm.min_purchase_amount}
-                          onChange={(e) =>
-                            setPromotionForm({
-                              ...promotionForm,
-                              min_purchase_amount: Number.parseFloat(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
 
                     <div className="grid gap-4">
                       <div className="grid gap-2">
@@ -598,13 +616,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
                     <div className="flex items-center space-x-2 min-w-0 flex-1">
                       <div className="p-1.5 sm:p-2 rounded-md bg-primary/10 flex-shrink-0">
-                        {promotion.discount_type === "percentage" ? (
-                          <Percent className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                        ) : promotion.discount_type === "fixed_amount" ? (
-                          <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                        ) : (
-                          <Star className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                        )}
+                        <Gift className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                       </div>
                       <div className="min-w-0">
                         <CardTitle className="text-sm sm:text-lg truncate">{promotion.name}</CardTitle>
@@ -645,35 +657,28 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                       <Badge variant={isPromotionActive(promotion) ? "default" : "secondary"} className="text-xs">
                         {isPromotionActive(promotion) ? "Activa" : "Inactiva"}
                       </Badge>
-                      <Badge variant="outline" className="text-xs">{discountTypeLabels[promotion.discount_type]}</Badge>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="text-xs sm:text-sm">
-                        <span className="font-medium">Descuento:</span>
-                        <span className="ml-2">
-                          {promotion.discount_type === "percentage"
-                            ? `${promotion.discount_value}%`
-                            : promotion.discount_type === "fixed_amount"
-                              ? formatCurrency(promotion.discount_value)
-                              : `${promotion.discount_value} puntos`}
-                        </span>
+                    {promotion.image_url && (
+                      <div className="w-full">
+                        <img 
+                          src={promotion.image_url} 
+                          alt={promotion.name}
+                          className="w-full h-32 object-cover rounded-md border"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
                       </div>
+                    )}
 
-                      {promotion.points_required > 0 && (
-                        <div className="text-xs sm:text-sm">
-                          <span className="font-medium">Puntos requeridos:</span>
-                          <span className="ml-2">{promotion.points_required}</span>
-                        </div>
-                      )}
+                    {promotion.description && (
+                      <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                        {promotion.description}
+                      </div>
+                    )}
 
-                      {promotion.min_purchase_amount > 0 && (
-                        <div className="text-xs sm:text-sm">
-                          <span className="font-medium">Compra mínima:</span>
-                          <span className="ml-2">{formatCurrency(promotion.min_purchase_amount)}</span>
-                        </div>
-                      )}
-
+                    <div className="space-y-2">
                       <div className="text-xs sm:text-sm">
                         <span className="font-medium">Vigencia:</span>
                         <div className="text-xs text-muted-foreground">

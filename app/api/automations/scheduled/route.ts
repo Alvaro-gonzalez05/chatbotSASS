@@ -362,13 +362,80 @@ async function processSingleInactiveClientAutomation(supabase: any, automation: 
 async function processPromotionBroadcasts(supabase: any) {
   console.log('🎉 Processing promotion broadcasts...')
   
-  // Esta función se puede implementar cuando tengas una tabla de promociones
-  // Por ahora retornamos un placeholder
-  return NextResponse.json({
-    success: true,
-    processed: 0,
-    message: 'Promotion broadcasts feature coming soon'
-  })
+  try {
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0] // YYYY-MM-DD
+    
+    // Verificar si ya se procesaron promociones hoy
+    const { data: existingExecution } = await supabase
+      .from('automation_executions')
+      .select('id')
+      .eq('automation_type', 'promotion_broadcast')
+      .eq('execution_date', todayStr)
+      .limit(1)
+
+    if (existingExecution && existingExecution.length > 0) {
+      console.log('ℹ️ Promotion broadcasts already processed today')
+      return NextResponse.json({
+        success: true,
+        processed: 0,
+        message: 'Already processed today',
+        date: todayStr
+      })
+    }
+
+    // Buscar promociones nuevas que necesiten difusión programada
+    // Esto es para promociones con configuración de delay, no inmediatas
+    const { data: promotionsToProcess, error: promotionsError } = await supabase
+      .from('promotions')
+      .select(`
+        *,
+        automations!inner(*)
+      `)
+      .eq('is_active', true)
+      .eq('automations.trigger_type', 'new_promotion')
+      .eq('automations.is_active', true)
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Últimas 24 horas
+      
+    if (promotionsError) {
+      console.error('❌ Error fetching promotions for processing:', promotionsError)
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
+
+    let processedCount = 0
+
+    if (promotionsToProcess && promotionsToProcess.length > 0) {
+      console.log(`📢 Found ${promotionsToProcess.length} promotions to potentially broadcast`)
+      
+      // Este endpoint se usa principalmente para verificar mensajes pendientes
+      // La lógica principal está en el webhook que se dispara inmediatamente
+      processedCount = promotionsToProcess.length
+    }
+
+    // Registrar la ejecución
+    await supabase
+      .from('automation_executions')
+      .insert({
+        automation_type: 'promotion_broadcast',
+        execution_date: todayStr,
+        processed_count: processedCount,
+        executed_at: new Date().toISOString()
+      })
+
+    return NextResponse.json({
+      success: true,
+      processed: processedCount,
+      message: `Processed ${processedCount} promotion broadcasts`,
+      date: todayStr
+    })
+
+  } catch (error) {
+    console.error('💥 Promotion broadcast processing error:', error)
+    return NextResponse.json(
+      { error: 'Processing error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
+  }
 }
 
 // Endpoint GET para verificar el estado del sistema

@@ -50,6 +50,7 @@ interface AutomationFormData {
     variables?: string[]
   }
   bot_id: string
+  promotion_id?: string
   is_active: boolean
 }
 
@@ -77,6 +78,16 @@ interface UserSubscription {
   subscription_status: string
   plan_type: string
   max_automations: number
+}
+
+interface Promotion {
+  id: string
+  name: string
+  description?: string
+  start_date: string
+  end_date: string
+  is_active: boolean
+  image_url?: string
 }
 
 interface MultiStepAutomationCreationProps {
@@ -110,6 +121,7 @@ const triggerTypes = {
 const steps = [
   { id: "basic", title: "Información Básica", description: "Configura los datos principales" },
   { id: "trigger", title: "Disparador", description: "Define cuándo se ejecuta" },
+  { id: "promotion", title: "Promoción", description: "Vincula una promoción (opcional)" },
   { id: "template", title: "Plantilla", description: "Selecciona o crea el mensaje" },
   { id: "message", title: "Personalización", description: "Ajusta variables del mensaje" },
   { id: "review", title: "Revisión", description: "Confirma la configuración" },
@@ -134,6 +146,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [selectedBotPlatform, setSelectedBotPlatform] = useState<string>("")
+  const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [loadingPromotions, setLoadingPromotions] = useState(false)
   const [canCreateCustomTemplate, setCanCreateCustomTemplate] = useState(false)
   const [showCustomTemplateForm, setShowCustomTemplateForm] = useState(false)
   const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null)
@@ -154,6 +168,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       variables: []
     },
     bot_id: "",
+    promotion_id: "",
     is_active: true,
   })
 
@@ -173,12 +188,14 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
           variables: []
         },
         bot_id: "",
+        promotion_id: "",
         is_active: true,
       })
       setCurrentStep(1)
       setShowSuccess(false)
       
       fetchBots()
+      fetchPromotions()
       fetchUserSubscription()
       checkAutomationLimits()
     }
@@ -222,6 +239,26 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     } catch (error) {
       console.error("Error fetching bots:", error)
       setBots([])
+    }
+  }
+
+  const fetchPromotions = async () => {
+    try {
+      setLoadingPromotions(true)
+      const { data, error } = await supabase
+        .from("promotions")
+        .select("id, name, description, start_date, end_date, is_active, image_url")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      setPromotions(data || [])
+    } catch (error) {
+      console.error("Error fetching promotions:", error)
+      setPromotions([])
+    } finally {
+      setLoadingPromotions(false)
     }
   }
 
@@ -506,14 +543,20 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       case 2:
         return formData.trigger_type !== ""
       case 3:
+        // Paso 3: Selección de promoción (opcional)
+        return true // Siempre válido ya que la promoción es opcional
+      case 4:
+        // Paso 4: Selección de plantilla
         return formData.template_source !== "" && (
           formData.template_source === "create_new" ? 
             formData.custom_template?.body_content.trim() !== "" : 
             formData.selected_template !== null
         )
-      case 4:
-        return formData.message_template.trim() !== ""
       case 5:
+        // Paso 5: Personalización de mensaje
+        return formData.message_template.trim() !== ""
+      case 6:
+        // Paso 6: Revisión final
         return true
       default:
         return false
@@ -889,8 +932,107 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                 </motion.div>
               )}
 
-              {/* Step 3: Template Selection */}
+              {/* Step 3: Promotion Selection (Optional) */}
               {currentStep === 3 && (
+                <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                        <Gift className="h-4 w-4 sm:h-5 sm:w-5" />
+                        Promoción (Opcional)
+                      </CardTitle>
+                      <CardDescription className="text-xs sm:text-sm">
+                        Vincula una promoción específica con esta automatización. Esto es opcional.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-4">
+                        <Label className="text-sm font-medium">Seleccionar Promoción</Label>
+                        
+                        {/* Option: No promotion */}
+                        <div className="space-y-3">
+                          <div
+                            className={cn(
+                              "p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md",
+                              !formData.promotion_id 
+                                ? "border-primary bg-primary/5" 
+                                : "border-border hover:border-primary/50"
+                            )}
+                            onClick={() => setFormData({ ...formData, promotion_id: "" })}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted">
+                                <Settings className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-sm">Sin promoción específica</h4>
+                                <p className="text-xs text-muted-foreground">
+                                  La automatización no estará vinculada a ninguna promoción
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Promotions grid */}
+                          {loadingPromotions ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Loader2 className="h-6 w-6 animate-spin" />
+                              <span className="ml-2 text-sm text-muted-foreground">Cargando promociones...</span>
+                            </div>
+                          ) : promotions.length > 0 ? (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                              {promotions.map((promotion) => (
+                                <div
+                                  key={promotion.id}
+                                  className={cn(
+                                    "p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md",
+                                    formData.promotion_id === promotion.id
+                                      ? "border-primary bg-primary/5"
+                                      : "border-border hover:border-primary/50"
+                                  )}
+                                  onClick={() => setFormData({ ...formData, promotion_id: promotion.id })}
+                                >
+                                  <div className="space-y-2">
+                                    {promotion.image_url && (
+                                      <img 
+                                        src={promotion.image_url} 
+                                        alt={promotion.name}
+                                        className="w-full h-24 object-cover rounded"
+                                      />
+                                    )}
+                                    <h4 className="font-medium text-sm truncate">{promotion.name}</h4>
+                                    {promotion.description && (
+                                      <div className="text-xs text-muted-foreground line-clamp-2">
+                                        {promotion.description}
+                                      </div>
+                                    )}
+                                    <Badge 
+                                      variant={promotion.is_active ? "default" : "secondary"}
+                                      className="text-xs"
+                                    >
+                                      {promotion.is_active ? "Activa" : "Inactiva"}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <Gift className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                              <p className="text-sm text-muted-foreground">
+                                No tienes promociones activas. Puedes crear la automatización sin vincular una promoción.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Step 4: Template Selection */}
+              {currentStep === 4 && (
                 <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
                   <Card>
                     <CardHeader>
@@ -1222,8 +1364,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                 </motion.div>
               )}
 
-              {/* Step 4: Message Personalization */}
-              {currentStep === 4 && (
+              {/* Step 5: Message Personalization */}
+              {currentStep === 5 && (
                 <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
                   <Card>
                     <CardHeader>
@@ -1377,8 +1519,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                 </motion.div>
               )}
 
-              {/* Step 5: Review */}
-              {currentStep === 5 && (
+              {/* Step 6: Review */}
+              {currentStep === 6 && (
                 <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
                   <Card>
                     <CardHeader>

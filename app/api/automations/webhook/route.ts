@@ -45,6 +45,12 @@ export async function POST(request: NextRequest) {
         }
         break
         
+      case 'promotions':
+        if (type === 'INSERT') {
+          await handleNewPromotion(supabase, record)
+        }
+        break
+        
       default:
         console.log(`ℹ️ Unhandled table: ${table}`)
     }
@@ -259,5 +265,138 @@ async function handleReservationStatusChange(supabase: any, reservation: any, ol
   // Si la reserva se confirma
   if (reservation.status === 'confirmed' && oldReservation?.status !== 'confirmed') {
     console.log('✅ Reservation confirmation would be sent')
+  }
+}
+
+// Manejar nueva promoción → Difusión a todos los clientes del negocio
+async function handleNewPromotion(supabase: any, promotion: any) {
+  console.log('🎉 Processing new promotion broadcast:', promotion.id)
+  
+  try {
+    // Buscar automatizaciones de nueva promoción activas para este usuario
+    const { data: automations, error: automationsError } = await supabase
+      .from('automations')
+      .select('*, bots!inner(*)')
+      .eq('user_id', promotion.user_id)
+      .eq('trigger_type', 'new_promotion')
+      .eq('is_active', true)
+      .eq('bots.is_active', true)
+
+    if (automationsError) {
+      console.error('❌ Error fetching promotion automations:', automationsError)
+      return
+    }
+
+    if (!automations || automations.length === 0) {
+      console.log('ℹ️ No active promotion automations found for user:', promotion.user_id)
+      return
+    }
+
+    // Obtener TODOS los clientes (activos e inactivos) de este usuario/negocio
+    const { data: clients, error: clientsError } = await supabase
+      .from('clients')
+      .select('id, name, phone, user_id')
+      .eq('user_id', promotion.user_id)
+      .not('phone', 'is', null)
+
+    if (clientsError || !clients || clients.length === 0) {
+      console.log('ℹ️ No active clients found for promotion broadcast')
+      return
+    }
+
+    console.log(`📢 Broadcasting to ${clients.length} clients for promotion: ${promotion.name}`)
+
+    // Procesar cada automatización de promoción
+    for (const automation of automations) {
+      const bot = automation.bots
+
+      // Determinar timing de envío
+      const sendImmediately = automation.trigger_config?.send_immediately || false
+      const delayHours = automation.trigger_config?.delay_hours || 0
+
+      let scheduledFor = new Date()
+      if (!sendImmediately && delayHours > 0) {
+        scheduledFor.setHours(scheduledFor.getHours() + delayHours)
+      } else {
+        // Envío inmediato con pequeño delay para evitar spam
+        scheduledFor.setMinutes(scheduledFor.getMinutes() + 2)
+      }
+
+      // Programar mensaje para TODOS los clientes
+      for (const client of clients) {
+        try {
+          // Generar mensaje personalizado
+          let messageContent = automation.message_template
+          messageContent = messageContent.replace('{nombre}', client.name || 'Cliente')
+          messageContent = messageContent.replace('{promocion}', promotion.name)
+          
+          // Obtener información del negocio si está disponible
+          const { data: businessInfo } = await supabase
+            .from('business_info')
+            .select('name')
+            .eq('user_id', promotion.user_id)
+            .single()
+          
+          messageContent = messageContent.replace('{negocio}', businessInfo?.name || 'nuestro negocio')
+
+          // Si la promoción tiene imagen, incluir referencia
+          if (promotion.image_url) {
+            messageContent += '\n\n📸 Ve la imagen de la promoción en nuestros canales.'
+          }
+
+          // Insertar en cola de mensajes programados
+          const { data: scheduledMessage, error: scheduleError } = await supabase
+            .from('scheduled_messages')
+            .insert({
+              user_id: promotion.user_id,
+              automation_id: automation.id,
+              client_id: client.id,
+              bot_id: bot.id,
+              message_content: messageContent,
+              recipient_phone: client.phone,
+              recipient_name: client.name,
+              scheduled_for: scheduledFor.toISOString(),
+              automation_type: 'new_promotion',
+              priority: 3, // Prioridad media para promociones
+              metadata: {
+                promotion_id: promotion.id,
+                promotion_name: promotion.name
+              }
+            })
+            .select()
+            .single()
+
+          if (scheduleError) {
+            console.error(`❌ Error scheduling promotion message for client ${client.id}:`, scheduleError)
+            continue
+          }
+
+          // Log de la automatización
+          await supabase
+            .from('automation_logs')
+            .insert({
+              automation_id: automation.id,
+              client_id: client.id,
+              scheduled_message_id: scheduledMessage.id,
+              log_type: 'queued',
+              message_content: messageContent,
+              recipient_phone: client.phone,
+              success: true,
+              metadata: {
+                promotion_id: promotion.id,
+                broadcast_type: 'new_promotion'
+              }
+            })
+
+        } catch (clientError) {
+          console.error(`💥 Error processing client ${client.id} for promotion:`, clientError)
+        }
+      }
+
+      console.log(`✅ Promotion broadcast scheduled: ${automation.name} to ${clients.length} clients`)
+    }
+    
+  } catch (error) {
+    console.error('💥 Error in handleNewPromotion:', error)
   }
 }

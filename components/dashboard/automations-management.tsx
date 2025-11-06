@@ -56,12 +56,17 @@ interface Automation {
   template_id?: string
   template_variables?: Record<string, any>
   bot_id: string
+  promotion_id?: string
   is_active: boolean
   created_at: string
   bots?: {
     id: string
     name: string
     platform: string
+  }
+  promotions?: {
+    id: string
+    name: string
   }
 }
 
@@ -190,6 +195,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
     template_id: "",
     template_variables: {} as Record<string, any>,
     bot_id: "",
+    promotion_id: "",
     is_active: true,
   })
 
@@ -290,6 +296,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
       template_id: "",
       template_variables: {},
       bot_id: "",
+      promotion_id: "",
       is_active: true,
     })
   }
@@ -385,6 +392,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
       template_id: automation.template_id || "",
       template_variables: automation.template_variables || {},
       bot_id: automation.bot_id,
+      promotion_id: automation.promotion_id || "",
       is_active: automation.is_active,
     })
     setIsEditDialogOpen(true)
