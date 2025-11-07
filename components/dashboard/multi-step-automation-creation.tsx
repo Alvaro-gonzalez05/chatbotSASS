@@ -33,11 +33,20 @@ import {
   Eye,
   Send,
   Users,
+  Info,
+  Plus,
 } from "lucide-react"
+import { 
+  extractVariablesFromText, 
+  validateVariables, 
+  getAllAvailableVariables, 
+  getVariableSuggestions,
+  type TemplateVariable 
+} from "@/lib/template-variables"
 
 interface AutomationFormData {
   name: string
-  trigger_type: "birthday" | "inactive_client" | "new_promotion" | "comment_reply" | ""
+  trigger_type: "birthday" | "inactive_client" | "new_promotion" | "comment_reply" | "new_order" | "order_ready" | ""
   trigger_config: Record<string, any>
   message_template: string
   template_id?: string
@@ -133,7 +142,6 @@ const steps = [
   { id: "trigger", title: "Disparador", description: "Define cuándo se ejecuta" },
   { id: "promotion", title: "Promoción", description: "Vincula una promoción (opcional)" },
   { id: "template", title: "Plantilla", description: "Selecciona o crea el mensaje" },
-  { id: "message", title: "Personalización", description: "Ajusta variables del mensaje" },
   { id: "review", title: "Revisión", description: "Confirma la configuración" },
 ]
 
@@ -166,6 +174,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   const [needsBusinessAccountId, setNeedsBusinessAccountId] = useState(false)
   const [businessAccountId, setBusinessAccountId] = useState("")
   const [accessToken, setAccessToken] = useState("")
+  const [detectedVariables, setDetectedVariables] = useState<string[]>([])
+  const [availableVariables, setAvailableVariables] = useState<TemplateVariable[]>([])
   const supabase = createClient()
 
   const [formData, setFormData] = useState<AutomationFormData>({
@@ -238,6 +248,42 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     }
   }, [formData.selected_template, formData.template_source, formData.custom_template])
 
+  // Detectar variables automáticamente cuando cambie el contenido
+  useEffect(() => {
+    const content = formData.template_source === "create_new" 
+      ? formData.custom_template?.body_content || ""
+      : formData.selected_template?.body_content || ""
+    
+    if (content) {
+      const variables = extractVariablesFromText(content)
+      setDetectedVariables(variables)
+      
+      // Actualizar variables disponibles según el contexto
+      const available = getAllAvailableVariables(
+        formData.trigger_type, 
+        !!formData.promotion_id
+      )
+      setAvailableVariables(available)
+      
+      // Actualizar las variables en el custom_template si es una plantilla personalizada
+      if (formData.template_source === "create_new" && formData.custom_template) {
+        setFormData(prev => ({
+          ...prev,
+          custom_template: {
+            ...prev.custom_template!,
+            variables
+          }
+        }))
+      }
+    }
+  }, [
+    formData.custom_template?.body_content, 
+    formData.selected_template?.body_content, 
+    formData.template_source,
+    formData.trigger_type,
+    formData.promotion_id
+  ])
+
   const fetchBots = async () => {
     try {
       const { data, error } = await supabase
@@ -279,17 +325,17 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   // Crear plantilla personalizada de email
   const createCustomTemplate = async (customTemplate: any, botId: string) => {
     try {
-      const response = await fetch('/api/templates', {
+      const response = await fetch('/api/templates/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           bot_id: botId,
-          platform: 'email',
+          platform: selectedBotPlatform,
           name: `Plantilla_${formData.name}_${Date.now()}`,
           subject: customTemplate.subject,
-          body_content: customTemplate.body_content,
+          body_text: customTemplate.body_content,
           html_content: customTemplate.html_content,
           variables: customTemplate.variables || []
         })
@@ -352,7 +398,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       if (!selectedBot) return
 
       setSelectedBotPlatform(selectedBot.platform)
-      setCanCreateCustomTemplate(selectedBot.platform === 'email')
+      setCanCreateCustomTemplate(selectedBot.platform === 'email' || selectedBot.platform === 'instagram')
 
       // La API ya maneja plantillas de Meta para Instagram y WhatsApp
       const response = await fetch(`/api/templates?bot_id=${botId}&platform=${selectedBot.platform}`)
@@ -479,6 +525,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       setCurrentAutomationCount(automationCount)
 
       const maxAutomations = userSubscription?.max_automations || 0
+
       setCanCreateAutomation(maxAutomations === -1 || automationCount < maxAutomations)
     } catch (error) {
       console.error("Error checking automation limits:", error)
@@ -537,8 +584,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     try {
       let templateId = formData.template_id
       
-      // Si es una plantilla personalizada de email, crearla primero
-      if (formData.template_source === "create_new" && formData.custom_template && selectedBotPlatform === 'email') {
+      // Si es una plantilla personalizada, crearla primero
+      if (formData.template_source === "create_new" && formData.custom_template && (selectedBotPlatform === 'email' || selectedBotPlatform === 'instagram')) {
         try {
           templateId = await createCustomTemplate(formData.custom_template, formData.bot_id)
         } catch (error) {
@@ -546,19 +593,14 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         }
       }
 
-      // Generar el mensaje final basado en la plantilla y personalización
+      // Generar el mensaje final basado en la plantilla seleccionada
       let finalMessage = ""
       
-      // Agregar personalización adicional si existe
-      if (formData.message_template.trim()) {
-        finalMessage += formData.message_template.trim() + "\n\n"
-      }
-      
-      // Agregar contenido de la plantilla
+      // Usar directamente el contenido de la plantilla
       if (formData.template_source === "create_new" && formData.custom_template?.body_content) {
-        finalMessage += formData.custom_template.body_content
+        finalMessage = formData.custom_template.body_content
       } else if (formData.selected_template?.body_content) {
-        finalMessage += formData.selected_template.body_content
+        finalMessage = formData.selected_template.body_content
       }
 
       const automationData = {
@@ -569,10 +611,10 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         template_id: templateId || formData.selected_template?.id,
         template_variables: {
           source: formData.template_source,
-          original_template: formData.selected_template || formData.custom_template,
-          customization: formData.message_template
+          template_data: formData.selected_template || formData.custom_template,
         },
         bot_id: formData.bot_id,
+        promotion_id: formData.promotion_id || null,
         is_active: formData.is_active,
         user_id: userId,
         created_at: new Date().toISOString(),
@@ -625,10 +667,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
             formData.selected_template !== null
         )
       case 5:
-        // Paso 5: Personalización de mensaje
-        return formData.message_template.trim() !== ""
-      case 6:
-        // Paso 6: Revisión final
+        // Paso 5: Revisión final
+
         return true
       default:
         return false
@@ -781,25 +821,23 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     const triggerConfig = triggerTypes[formData.trigger_type as keyof typeof triggerTypes]
     const selectedBot = bots.find(b => b.id === formData.bot_id)
     
-    // Generar vista previa del mensaje final
+    // Generar vista previa del mensaje final directamente de la plantilla
     let finalMessage = ""
     
-    // Agregar personalización adicional si existe
-    if (formData.message_template.trim()) {
-      finalMessage += formData.message_template.trim() + "\n\n"
-    }
-    
-    // Agregar contenido de la plantilla
+    // Usar directamente el contenido de la plantilla
     if (formData.template_source === "create_new" && formData.custom_template?.body_content) {
-      finalMessage += formData.custom_template.body_content
+      finalMessage = formData.custom_template.body_content
     } else if (formData.selected_template?.body_content) {
-      finalMessage += formData.selected_template.body_content
+      finalMessage = formData.selected_template.body_content
     }
     
     // Reemplazar variables comunes para la vista previa
     const messagePreview = finalMessage
-      .replace(/\{nombre\}/g, "María")
-      .replace(/\{email\}/g, "maria@ejemplo.com")
+      .replace(/\{nombre\}/g, "María González")
+      .replace(/\{email\}/g, "maria.gonzalez@email.com")
+      .replace(/\{instagram_usuario\}/g, "@mariagonzalez")
+      .replace(/\{puntos\}/g, "250 puntos")
+      .replace(/\{nombre_promocion\}/g, "Black Friday Especial")
       .replace(/\{\{1\}\}/g, "María")  // Meta templates
       .replace(/\{\{2\}\}/g, "20%")    // Meta templates
     
@@ -1218,30 +1256,36 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                               {showCustomTemplateForm && formData.template_source === "create_new" && (
                                 <Card className="bg-muted/50">
                                   <CardHeader>
-                                    <CardTitle className="text-sm">Nueva Plantilla de Email</CardTitle>
+                                    <CardTitle className="text-sm">
+                                      Nueva Plantilla {selectedBotPlatform === 'email' ? 'de Email' : 'de Instagram'}
+                                    </CardTitle>
                                   </CardHeader>
                                   <CardContent className="space-y-4">
+                                    {selectedBotPlatform === 'email' && (
+                                      <div>
+                                        <Label htmlFor="email-subject">Asunto del Email</Label>
+                                        <Input
+                                          id="email-subject"
+                                          value={formData.custom_template?.subject || ""}
+                                          onChange={(e) => setFormData({
+                                            ...formData,
+                                            custom_template: {
+                                              ...formData.custom_template,
+                                              subject: e.target.value,
+                                              body_content: formData.custom_template?.body_content || "",
+                                              variables: formData.custom_template?.variables || []
+                                            }
+                                          })}
+                                          placeholder="Ej: ¡Feliz Cumpleaños {nombre}!"
+                                        />
+                                      </div>
+                                    )}
                                     <div>
-                                      <Label htmlFor="email-subject">Asunto del Email</Label>
-                                      <Input
-                                        id="email-subject"
-                                        value={formData.custom_template?.subject || ""}
-                                        onChange={(e) => setFormData({
-                                          ...formData,
-                                          custom_template: {
-                                            ...formData.custom_template,
-                                            subject: e.target.value,
-                                            body_content: formData.custom_template?.body_content || "",
-                                            variables: formData.custom_template?.variables || []
-                                          }
-                                        })}
-                                        placeholder="Ej: ¡Feliz Cumpleaños {nombre}!"
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label htmlFor="email-body">Contenido del Email</Label>
+                                      <Label htmlFor="template-body">
+                                        {selectedBotPlatform === 'email' ? 'Contenido del Email' : 'Mensaje de Instagram'}
+                                      </Label>
                                       <Textarea
-                                        id="email-body"
+                                        id="template-body"
                                         rows={6}
                                         value={formData.custom_template?.body_content || ""}
                                         onChange={(e) => setFormData({
@@ -1253,11 +1297,336 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                                             variables: formData.custom_template?.variables || []
                                           }
                                         })}
-                                        placeholder="Hola {nombre}, ¡esperamos que tengas un cumpleaños increíble! Como regalo especial, tienes un 20% de descuento..."
+                                        onDrop={(e) => {
+                                          e.preventDefault()
+                                          const variable = e.dataTransfer.getData('text/plain')
+                                          if (variable) {
+                                            const textarea = e.target as HTMLTextAreaElement
+                                            const start = textarea.selectionStart
+                                            const end = textarea.selectionEnd
+                                            const currentValue = textarea.value
+                                            const newValue = currentValue.substring(0, start) + variable + currentValue.substring(end)
+                                            
+                                            setFormData({
+                                              ...formData,
+                                              custom_template: {
+                                                ...formData.custom_template,
+                                                subject: formData.custom_template?.subject || "",
+                                                body_content: newValue,
+                                                variables: formData.custom_template?.variables || []
+                                              }
+                                            })
+                                            
+                                            // Restaurar foco y posición del cursor
+                                            setTimeout(() => {
+                                              textarea.focus()
+                                              textarea.setSelectionRange(start + variable.length, start + variable.length)
+                                            }, 0)
+                                          }
+                                        }}
+                                        onDragOver={(e) => {
+                                          e.preventDefault()
+                                          e.currentTarget.classList.add('ring-2', 'ring-blue-500')
+                                        }}
+                                        onDragLeave={(e) => {
+                                          e.currentTarget.classList.remove('ring-2', 'ring-blue-500')
+                                        }}
+                                        placeholder={
+                                          selectedBotPlatform === 'email' 
+                                            ? "Arrastra variables aquí o escribe tu mensaje... Ejemplo: Hola {nombre}, ¡esperamos que tengas un cumpleaños increíble!"
+                                            : "Arrastra variables aquí o escribe tu mensaje... Ejemplo: ¡Hola {nombre}! 🎉 Como regalo especial, tienes un {descuento} de descuento."
+                                        }
+                                        className="min-h-[120px] transition-all duration-200"
                                       />
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        Usa <code className="bg-muted px-1 rounded">{"{nombre}"}</code>, <code className="bg-muted px-1 rounded">{"{email}"}</code> para personalizar
-                                      </p>
+                                      {/* Panel de Variables Drag & Drop */}
+                                      <div className="mt-3 space-y-3">
+                                        <div className="flex items-center gap-2">
+                                          <Sparkles className="h-4 w-4 text-blue-600" />
+                                          <span className="text-sm font-medium text-gray-800">
+                                            Variables disponibles - Arrastra al mensaje
+                                          </span>
+                                        </div>
+                                        
+                                        {/* Variables por categoría */}
+                                        <div className="grid gap-4">
+                                          {/* Variables del Cliente */}
+                                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                            <h4 className="text-xs font-medium text-blue-800 mb-2 flex items-center gap-1">
+                                              <Users className="h-3 w-3" />
+                                              Datos del Cliente
+                                            </h4>
+                                            <div className="flex flex-wrap gap-2">
+                                              {availableVariables
+                                                .filter(v => v.type === 'client')
+                                                .map((variable) => (
+                                                  <div
+                                                    key={variable.name}
+                                                    draggable
+                                                    className="inline-flex items-center gap-1 bg-white px-2 py-1 rounded border border-blue-300 cursor-move hover:bg-blue-100 transition-colors text-xs"
+                                                    onDragStart={(e) => {
+                                                      e.dataTransfer.setData('text/plain', `{${variable.name}}`)
+                                                    }}
+                                                    onClick={() => {
+                                                      const textarea = document.getElementById('template-body') as HTMLTextAreaElement
+                                                      if (textarea) {
+                                                        const start = textarea.selectionStart
+                                                        const end = textarea.selectionEnd
+                                                        const currentValue = textarea.value
+                                                        const newValue = currentValue.substring(0, start) + `{${variable.name}}` + currentValue.substring(end)
+                                                        
+                                                        setFormData({
+                                                          ...formData,
+                                                          custom_template: {
+                                                            ...formData.custom_template,
+                                                            subject: formData.custom_template?.subject || "",
+                                                            body_content: newValue,
+                                                            variables: formData.custom_template?.variables || []
+                                                          }
+                                                        })
+                                                        
+                                                        // Restaurar foco y posición del cursor
+                                                        setTimeout(() => {
+                                                          textarea.focus()
+                                                          textarea.setSelectionRange(start + `{${variable.name}}`.length, start + `{${variable.name}}`.length)
+                                                        }, 0)
+                                                      }
+                                                    }}
+                                                    title={`${variable.description} - Ejemplo: ${variable.example}`}
+                                                  >
+                                                    <span className="text-blue-700">{variable.name}</span>
+                                                    <code className="text-xs text-blue-500">({variable.example})</code>
+                                                  </div>
+                                                ))}
+                                            </div>
+                                          </div>
+
+                                          {/* Variables del Negocio */}
+                                          <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                            <h4 className="text-xs font-medium text-purple-800 mb-2 flex items-center gap-1">
+                                              <Bot className="h-3 w-3" />
+                                              Datos del Negocio
+                                            </h4>
+                                            <div className="flex flex-wrap gap-2">
+                                              {availableVariables
+                                                .filter(v => v.type === 'business')
+                                                .map((variable) => (
+                                                  <div
+                                                    key={variable.name}
+                                                    draggable
+                                                    className="inline-flex items-center gap-1 bg-white px-2 py-1 rounded border border-purple-300 cursor-move hover:bg-purple-100 transition-colors text-xs"
+                                                    onDragStart={(e) => {
+                                                      e.dataTransfer.setData('text/plain', `{${variable.name}}`)
+                                                    }}
+                                                    onClick={() => {
+                                                      const textarea = document.getElementById('template-body') as HTMLTextAreaElement
+                                                      if (textarea) {
+                                                        const start = textarea.selectionStart
+                                                        const end = textarea.selectionEnd
+                                                        const currentValue = textarea.value
+                                                        const newValue = currentValue.substring(0, start) + `{${variable.name}}` + currentValue.substring(end)
+                                                        
+                                                        setFormData({
+                                                          ...formData,
+                                                          custom_template: {
+                                                            ...formData.custom_template,
+                                                            subject: formData.custom_template?.subject || "",
+                                                            body_content: newValue,
+                                                            variables: formData.custom_template?.variables || []
+                                                          }
+                                                        })
+                                                        
+                                                        setTimeout(() => {
+                                                          textarea.focus()
+                                                          textarea.setSelectionRange(start + `{${variable.name}}`.length, start + `{${variable.name}}`.length)
+                                                        }, 0)
+                                                      }
+                                                    }}
+                                                    title={`${variable.description} - Ejemplo: ${variable.example}`}
+                                                  >
+                                                    <span className="text-purple-700">{variable.name}</span>
+                                                    <code className="text-xs text-purple-500">({variable.example})</code>
+                                                  </div>
+                                                ))}
+                                            </div>
+                                          </div>
+
+                                          {/* Variables de Promoción (solo si hay promoción vinculada) */}
+                                          {formData.promotion_id && (
+                                            <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                                              <h4 className="text-xs font-medium text-green-800 mb-2 flex items-center gap-1">
+                                                <Gift className="h-3 w-3" />
+                                                Datos de la Promoción
+                                              </h4>
+                                              <div className="flex flex-wrap gap-2">
+                                                {availableVariables
+                                                  .filter(v => v.type === 'promotion')
+                                                  .map((variable) => (
+                                                    <div
+                                                      key={variable.name}
+                                                      draggable
+                                                      className="inline-flex items-center gap-1 bg-white px-2 py-1 rounded border border-green-300 cursor-move hover:bg-green-100 transition-colors text-xs"
+                                                      onDragStart={(e) => {
+                                                        e.dataTransfer.setData('text/plain', `{${variable.name}}`)
+                                                      }}
+                                                      onClick={() => {
+                                                        const textarea = document.getElementById('template-body') as HTMLTextAreaElement
+                                                        if (textarea) {
+                                                          const start = textarea.selectionStart
+                                                          const end = textarea.selectionEnd
+                                                          const currentValue = textarea.value
+                                                          const newValue = currentValue.substring(0, start) + `{${variable.name}}` + currentValue.substring(end)
+                                                          
+                                                          setFormData({
+                                                            ...formData,
+                                                            custom_template: {
+                                                              ...formData.custom_template,
+                                                              subject: formData.custom_template?.subject || "",
+                                                              body_content: newValue,
+                                                              variables: formData.custom_template?.variables || []
+                                                            }
+                                                          })
+                                                          
+                                                          setTimeout(() => {
+                                                            textarea.focus()
+                                                            textarea.setSelectionRange(start + `{${variable.name}}`.length, start + `{${variable.name}}`.length)
+                                                          }, 0)
+                                                        }
+                                                      }}
+                                                      title={`${variable.description} - Ejemplo: ${variable.example}`}
+                                                    >
+                                                      <span className="text-green-700">{variable.name}</span>
+                                                      <code className="text-xs text-green-500">({variable.example})</code>
+                                                    </div>
+                                                  ))}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Variables de Pedido (solo para triggers relacionados) */}
+                                          {(formData.trigger_type === 'new_order' || formData.trigger_type === 'order_ready') && (
+                                            <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                                              <h4 className="text-xs font-medium text-orange-800 mb-2 flex items-center gap-1">
+                                                <Send className="h-3 w-3" />
+                                                Datos del Pedido
+                                              </h4>
+                                              <div className="flex flex-wrap gap-2">
+                                                {availableVariables
+                                                  .filter(v => v.type === 'order')
+                                                  .map((variable) => (
+                                                    <div
+                                                      key={variable.name}
+                                                      draggable
+                                                      className="inline-flex items-center gap-1 bg-white px-2 py-1 rounded border border-orange-300 cursor-move hover:bg-orange-100 transition-colors text-xs"
+                                                      onDragStart={(e) => {
+                                                        e.dataTransfer.setData('text/plain', `{${variable.name}}`)
+                                                      }}
+                                                      onClick={() => {
+                                                        const textarea = document.getElementById('template-body') as HTMLTextAreaElement
+                                                        if (textarea) {
+                                                          const start = textarea.selectionStart
+                                                          const end = textarea.selectionEnd
+                                                          const currentValue = textarea.value
+                                                          const newValue = currentValue.substring(0, start) + `{${variable.name}}` + currentValue.substring(end)
+                                                          
+                                                          setFormData({
+                                                            ...formData,
+                                                            custom_template: {
+                                                              ...formData.custom_template,
+                                                              subject: formData.custom_template?.subject || "",
+                                                              body_content: newValue,
+                                                              variables: formData.custom_template?.variables || []
+                                                            }
+                                                          })
+                                                          
+                                                          setTimeout(() => {
+                                                            textarea.focus()
+                                                            textarea.setSelectionRange(start + `{${variable.name}}`.length, start + `{${variable.name}}`.length)
+                                                          }, 0)
+                                                        }
+                                                      }}
+                                                      title={`${variable.description} - Ejemplo: ${variable.example}`}
+                                                    >
+                                                      <span className="text-orange-700">{variable.name}</span>
+                                                      <code className="text-xs text-orange-500">({variable.example})</code>
+                                                    </div>
+                                                  ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Variables detectadas en el texto */}
+                                        {detectedVariables.length > 0 && (
+                                          <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <CheckCircle className="h-4 w-4 text-green-600" />
+                                              <span className="text-sm font-medium text-gray-800">
+                                                Variables usadas en tu mensaje ({detectedVariables.length})
+                                              </span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                              {detectedVariables.map((variable) => {
+                                                const isValid = availableVariables.some(v => v.name === variable)
+                                                return (
+                                                  <Badge
+                                                    key={variable}
+                                                    variant={isValid ? "default" : "destructive"}
+                                                    className="text-xs"
+                                                  >
+                                                    {variable}
+                                                    {!isValid && " ⚠️"}
+                                                  </Badge>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200">
+                                          <div className="text-xs text-gray-500">
+                                            💡 <strong>Tip:</strong> Puedes hacer clic en las variables para insertarlas en la posición del cursor, o arrastrarlas al texto.
+                                          </div>
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={async () => {
+                                              if (!formData.custom_template?.body_content) {
+                                                toast.error("Escribe un mensaje primero")
+                                                return
+                                              }
+                                              
+                                              try {
+                                                const response = await fetch('/api/templates/preview', {
+                                                  method: 'POST',
+                                                  headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({
+                                                    template: formData.custom_template.body_content,
+                                                    platform: selectedBotPlatform,
+                                                    promotionId: formData.promotion_id
+                                                  })
+                                                })
+                                                
+                                                const result = await response.json()
+                                                if (result.success) {
+                                                  toast.success("Vista previa", {
+                                                    description: result.resolved,
+                                                    duration: 6000
+                                                  })
+                                                } else {
+                                                  throw new Error(result.error)
+                                                }
+                                              } catch (error) {
+                                                toast.error("Error generando preview")
+                                              }
+                                            }}
+                                            className="text-xs"
+                                          >
+                                            <Eye className="h-3 w-3 mr-1" />
+                                            Vista Previa
+                                          </Button>
+                                        </div>
+                                      </div>
                                     </div>
                                   </CardContent>
                                 </Card>
@@ -1286,7 +1655,9 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                               <Label htmlFor="existing-template" className="text-sm font-medium">
                                 {selectedBotPlatform === 'email' 
                                   ? 'Usar plantilla existente' 
-                                  : 'Usar plantilla aprobada de Meta'
+                                  : selectedBotPlatform === 'instagram' 
+                                    ? 'Usar plantillas de Meta o locales'
+                                    : 'Usar plantilla aprobada de Meta'
                                 }
                               </Label>
                             </div>
@@ -1438,135 +1809,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                             )}
                           </div>
 
-                          {/* Información adicional según la plataforma */}
-                          {selectedBotPlatform !== 'email' && (
-                            <div className="space-y-4">
-                              <div className="bg-blue-50 p-4 rounded-lg">
-                                <div className="flex items-start gap-2">
-                                  <div className="bg-blue-500 rounded-full p-1">
-                                    <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                    </svg>
-                                  </div>
-                                  <div>
-                                    <h4 className="text-sm font-medium text-blue-800">Plantillas de Meta Business</h4>
-                                    <p className="text-xs text-blue-600 mt-1">
-                                      Para {selectedBotPlatform === 'whatsapp' ? 'WhatsApp' : 'Instagram'}, las plantillas deben estar aprobadas por Meta. 
-                                    </p>
-                                    <div className="text-xs text-blue-600 mt-2">
-                                      <strong>Configuración requerida del bot:</strong>
-                                      <ul className="list-disc ml-4 mt-1">
-                                        <li>Token de acceso (access_token)</li>
-                                        {selectedBotPlatform === 'whatsapp' && (
-                                          <>
-                                            <li>ID del número de teléfono (phone_number_id)</li>
-                                            <li>ID de cuenta business (business_account_id)</li>
-                                          </>
-                                        )}
-                                        {selectedBotPlatform === 'instagram' && (
-                                          <>
-                                            <li>ID de cuenta de Instagram Business (instagram_business_account_id)</li>
-                                            <li>ID de la aplicación (app_id)</li>
-                                            <li>Clave secreta de la app (app_secret)</li>
-                                            <li>ID de cuenta business (business_account_id) - Opcional para templates</li>
-                                          </>
-                                        )}
-                                      </ul>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
 
-                              {/* Guía para crear plantillas */}
-                              {templates.length === 0 && (
-                                <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200">
-                                  <CardHeader>
-                                    <CardTitle className="text-sm flex items-center gap-2">
-                                      <Sparkles className="h-4 w-4 text-purple-600" />
-                                      Cómo crear plantillas en Meta Business Manager
-                                    </CardTitle>
-                                  </CardHeader>
-                                  <CardContent className="space-y-3">
-                                    <div className="space-y-2">
-                                      <div className="flex items-start gap-2 text-xs">
-                                        <span className="bg-purple-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold mt-0.5">1</span>
-                                        <div>
-                                          <p className="font-medium">Accede a Meta Business Manager</p>
-                                          <p className="text-muted-foreground">Ve a business.facebook.com e inicia sesión</p>
-                                        </div>
-                                      </div>
-                                      
-                                      <div className="flex items-start gap-2 text-xs">
-                                        <span className="bg-purple-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold mt-0.5">2</span>
-                                        <div>
-                                          <p className="font-medium">Navega a las plantillas</p>
-                                          <p className="text-muted-foreground">
-                                            {selectedBotPlatform === 'whatsapp' 
-                                              ? 'WhatsApp Manager → Plantillas de mensaje' 
-                                              : 'Configuración → Plantillas de Instagram'
-                                            }
-                                          </p>
-                                        </div>
-                                      </div>
-                                      
-                                      <div className="flex items-start gap-2 text-xs">
-                                        <span className="bg-purple-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold mt-0.5">3</span>
-                                        <div>
-                                          <p className="font-medium">Crea una nueva plantilla</p>
-                                          <p className="text-muted-foreground">Haz clic en "Crear plantilla" y completa los campos</p>
-                                        </div>
-                                      </div>
-                                      
-                                      <div className="flex items-start gap-2 text-xs">
-                                        <span className="bg-purple-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold mt-0.5">4</span>
-                                        <div>
-                                          <p className="font-medium">Espera la aprobación</p>
-                                          <p className="text-muted-foreground">Meta revisará tu plantilla (generalmente 24-48 horas)</p>
-                                        </div>
-                                      </div>
-                                      
-                                      <div className="flex items-start gap-2 text-xs">
-                                        <span className="bg-green-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold mt-0.5">5</span>
-                                        <div>
-                                          <p className="font-medium">Recarga las plantillas</p>
-                                          <p className="text-muted-foreground">Una vez aprobada, haz clic en "Actualizar plantillas" aquí</p>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="pt-2 border-t border-purple-200">
-                                      <div className="flex items-center justify-between">
-                                        <Button
-                                          type="button"
-                                          variant="outline" 
-                                          size="sm"
-                                          onClick={() => fetchTemplatesForBot(formData.bot_id)}
-                                          disabled={loadingTemplates}
-                                        >
-                                          {loadingTemplates ? (
-                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                          ) : (
-                                            <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                          )}
-                                          Actualizar plantillas
-                                        </Button>
-                                        
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          onClick={() => window.open('https://business.facebook.com', '_blank')}
-                                        >
-                                          Ir a Meta Business
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              )}
-                            </div>
-                          )}
                         </>
                       )}
                     </CardContent>
@@ -1574,163 +1817,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                 </motion.div>
               )}
 
-              {/* Step 5: Message Personalization */}
+              {/* Step 5: Review */}
               {currentStep === 5 && (
-                <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                        <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
-                        Personalización del Mensaje
-                      </CardTitle>
-                      <CardDescription className="text-xs sm:text-sm">
-                        {formData.template_source === "create_new" 
-                          ? "Revisa y ajusta tu plantilla personalizada"
-                          : "Configura las variables de la plantilla seleccionada"
-                        }
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {/* Mostrar plantilla seleccionada o creada */}
-                      {formData.template_source === "create_new" && formData.custom_template ? (
-                        <div className="space-y-4">
-                          <div className="bg-muted/50 p-4 rounded-lg">
-                            <h4 className="font-medium text-sm mb-2">Tu Plantilla Personalizada:</h4>
-                            {formData.custom_template.subject && (
-                              <div className="mb-2">
-                                <Label className="text-xs text-muted-foreground">Asunto:</Label>
-                                <p className="text-sm font-medium">{formData.custom_template.subject}</p>
-                              </div>
-                            )}
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Contenido:</Label>
-                              <p className="text-sm whitespace-pre-wrap">{formData.custom_template.body_content}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <Label htmlFor="final-message" className="text-sm font-medium">
-                              Mensaje Final para Automatización *
-                            </Label>
-                            <Textarea
-                              id="final-message"
-                              value={formData.message_template}
-                              onChange={(e) => setFormData({ ...formData, message_template: e.target.value })}
-                              placeholder={formData.custom_template.body_content}
-                              rows={5}
-                              className="text-sm"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Puedes ajustar el contenido de la plantilla para esta automatización específica
-                            </p>
-                          </div>
-                        </div>
-                      ) : formData.selected_template ? (
-                        <div className="space-y-4">
-                          <div className="bg-muted/50 p-4 rounded-lg">
-                            <h4 className="font-medium text-sm mb-2">Plantilla Seleccionada:</h4>
-                            <p className="text-sm font-medium">{formData.selected_template.name}</p>
-                            {formData.selected_template.subject && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                <strong>Asunto:</strong> {formData.selected_template.subject}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-2">
-                              {formData.selected_template.body_content}
-                            </p>
-                            {formData.selected_template.variables.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                <span className="text-xs text-muted-foreground">Variables:</span>
-                                {formData.selected_template.variables.map((variable, idx) => (
-                                  <code key={idx} className="bg-background px-1 rounded text-xs">
-                                    {variable}
-                                  </code>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label htmlFor="final-message" className="text-sm font-medium">
-                              Personalización Adicional
-                            </Label>
-                            <Textarea
-                              id="final-message"
-                              value={formData.message_template}
-                              onChange={(e) => setFormData({ ...formData, message_template: e.target.value })}
-                              placeholder="Agrega texto personalizado adicional (opcional)"
-                              rows={3}
-                              className="text-sm"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Texto adicional que se agregará antes de la plantilla principal
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p>Selecciona una plantilla en el paso anterior</p>
-                        </div>
-                      )}
-
-                      {/* Vista previa del mensaje final */}
-                      {(formData.template_source === "create_new" || formData.selected_template) && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ duration: 0.3 }}
-                        >
-                          <Card className="bg-muted/50">
-                            <CardHeader className="pb-2">
-                              <CardTitle className="text-sm flex items-center gap-2">
-                                <Eye className="h-4 w-4" />
-                                Vista Previa del Mensaje Final
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="bg-white p-3 rounded-lg border text-sm space-y-2">
-                                {selectedBotPlatform === 'email' && formData.template_source === "create_new" && formData.custom_template?.subject && (
-                                  <div>
-                                    <strong>Asunto:</strong> {formData.custom_template.subject.replace("{nombre}", "María")}
-                                  </div>
-                                )}
-                                <div className="whitespace-pre-wrap">
-                                  {(() => {
-                                    let finalMessage = ""
-                                    
-                                    // Agregar personalización adicional si existe
-                                    if (formData.message_template.trim()) {
-                                      finalMessage += formData.message_template.trim() + "\n\n"
-                                    }
-                                    
-                                    // Agregar contenido de la plantilla
-                                    if (formData.template_source === "create_new" && formData.custom_template?.body_content) {
-                                      finalMessage += formData.custom_template.body_content
-                                    } else if (formData.selected_template?.body_content) {
-                                      finalMessage += formData.selected_template.body_content
-                                    }
-                                    
-                                    // Reemplazar variables comunes para la vista previa
-                                    return finalMessage
-                                      .replace(/\{nombre\}/g, "María")
-                                      .replace(/\{email\}/g, "maria@ejemplo.com")
-                                      .replace(/\{\{1\}\}/g, "María")  // Meta templates
-                                      .replace(/\{\{2\}\}/g, "20%")    // Meta templates
-                                  })()}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
-
-              {/* Step 6: Review */}
-              {currentStep === 6 && (
                 <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
                   <Card>
                     <CardHeader>

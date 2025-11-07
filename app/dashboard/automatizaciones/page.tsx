@@ -13,7 +13,11 @@ export default async function AutomationsPage() {
   // Get automations for this user
   const { data: automations } = await supabase
     .from("automations")
-    .select("*")
+    .select(`
+      *,
+      bots(id, name, platform),
+      promotions(id, name)
+    `)
     .eq("user_id", data.user.id)
     .order("created_at", { ascending: false })
 

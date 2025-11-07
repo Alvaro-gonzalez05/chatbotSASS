@@ -50,7 +50,7 @@ import { MultiStepAutomationCreation } from "./multi-step-automation-creation"
 interface Automation {
   id: string
   name: string
-  trigger_type: "birthday" | "inactive_client" | "new_promotion" | "welcome" | "new_order" | "order_ready" | "reservation_reminder"
+  trigger_type: "birthday" | "inactive_client" | "new_promotion" | "comment_reply"
   trigger_config: Record<string, any>
   message_template: string
   template_id?: string
@@ -108,53 +108,32 @@ interface AutomationsManagementProps {
 
 const triggerTypes = {
   birthday: {
-    label: "Cumpleaños",
     icon: Calendar,
-    description: "Envía mensajes automáticos en el cumpleaños del cliente",
-    color: "bg-blue-500",
-    category: "marketing"
+    label: "Cumpleaños de Clientes",
+    description: "Envía felicitaciones automáticas",
+    color: "bg-pink-500",
+    platforms: ["whatsapp", "instagram", "email"]
   },
   inactive_client: {
-    label: "Cliente Inactivo",
     icon: UserX,
-    description: "Reactiva clientes que no han comprado en un tiempo",
+    label: "Cliente Inactivo",
+    description: "Reactiva clientes que no compran",
     color: "bg-orange-500",
-    category: "marketing"
+    platforms: ["whatsapp", "instagram", "email"]
   },
   new_promotion: {
-    label: "Nueva Promoción",
     icon: Gift,
-    description: "Notifica sobre nuevas promociones disponibles",
-    color: "bg-green-500",
-    category: "marketing"
-  },
-  welcome: {
-    label: "Bienvenida",
-    icon: Bot,
-    description: "Mensaje automático para nuevos clientes",
+    label: "Nueva Promoción",
+    description: "Notifica sobre ofertas especiales",
     color: "bg-purple-500",
-    category: "utility"
+    platforms: ["whatsapp", "instagram", "email"]
   },
-  new_order: {
-    label: "Nuevo Pedido",
-    icon: ShoppingCart,
-    description: "Confirmación automática de pedidos",
-    color: "bg-indigo-500",
-    category: "utility"
-  },
-  order_ready: {
-    label: "Pedido Listo",
-    icon: Send,
-    description: "Notifica cuando el pedido está listo",
-    color: "bg-cyan-500",
-    category: "utility"
-  },
-  reservation_reminder: {
-    label: "Recordatorio de Reserva",
-    icon: CalendarDays,
-    description: "Recordatorios automáticos de reservas",
+  comment_reply: {
+    icon: MessageSquare,
+    label: "Respuesta a Comentario",
+    description: "Responde automáticamente a comentarios (Instagram)",
     color: "bg-pink-500",
-    category: "utility"
+    platforms: ["instagram"]
   },
 }
 
@@ -163,6 +142,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
   const [bots, setBots] = useState<Bot[]>([])
   const [systemTemplates, setSystemTemplates] = useState<SystemTemplate[]>([])
   const [userTemplates, setUserTemplates] = useState<MessageTemplate[]>([])
+  const [promotions, setPromotions] = useState<{ id: string; name: string }[]>([])
   const [stats, setStats] = useState<AutomationStats>({
     total_automations: 0,
     active_automations: 0,
@@ -203,6 +183,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
     fetchBots()
     fetchSystemTemplates()
     fetchUserTemplates()
+    fetchPromotions()
     fetchStats()
   }, [userId])
 
@@ -243,8 +224,8 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
   const fetchUserTemplates = async () => {
     try {
       const { data, error } = await supabase
-        .from("message_templates")
-        .select("id, template_name, body_content, status, platform")
+        .from("user_templates")
+        .select("*")
         .eq("user_id", userId)
         .eq("status", "approved")
 
@@ -252,6 +233,22 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
       setUserTemplates(data || [])
     } catch (error) {
       console.error("Error fetching user templates:", error)
+    }
+  }
+
+  const fetchPromotions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("promotions")
+        .select("id, name")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      setPromotions(data || [])
+    } catch (error) {
+      console.error("Error fetching promotions:", error)
     }
   }
 
@@ -436,84 +433,62 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
         return (
           <div className="grid gap-2">
             <Label htmlFor="days_before">Días antes del cumpleaños</Label>
-            <Input
-              id="days_before"
-              type="number"
-              min="0"
-              max="30"
-              value={formData.trigger_config.days_before || 0}
-              onChange={(e) => handleTriggerConfigChange("days_before", Number.parseInt(e.target.value) || 0)}
-            />
-            <p className="text-xs text-muted-foreground">
-              0 = el día del cumpleaños, 1 = un día antes, etc.
-            </p>
+            <Select
+              value={formData.trigger_config.days_before?.toString() || "0"}
+              onValueChange={(value) => handleTriggerConfigChange("days_before", parseInt(value))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar días" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">El mismo día</SelectItem>
+                <SelectItem value="1">1 día antes</SelectItem>
+                <SelectItem value="3">3 días antes</SelectItem>
+                <SelectItem value="7">7 días antes</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )
       case "inactive_client":
         return (
           <div className="grid gap-2">
             <Label htmlFor="inactive_days">Días de inactividad</Label>
-            <Input
-              id="inactive_days"
-              type="number"
-              min="1"
-              max="365"
-              value={formData.trigger_config.inactive_days || 30}
-              onChange={(e) => handleTriggerConfigChange("inactive_days", Number.parseInt(e.target.value) || 30)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Días sin compras para considerar cliente inactivo
-            </p>
+            <Select
+              value={formData.trigger_config.inactive_days?.toString() || "30"}
+              onValueChange={(value) => handleTriggerConfigChange("inactive_days", parseInt(value))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar días" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="15">15 días</SelectItem>
+                <SelectItem value="30">30 días</SelectItem>
+                <SelectItem value="60">60 días</SelectItem>
+                <SelectItem value="90">90 días</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )
-      case "welcome":
+      case "new_promotion":
         return (
           <div className="grid gap-2">
-            <Label htmlFor="delay_minutes">Retraso (minutos)</Label>
-            <Input
-              id="delay_minutes"
-              type="number"
-              min="0"
-              max="1440"
-              value={formData.trigger_config.delay_minutes || 5}
-              onChange={(e) => handleTriggerConfigChange("delay_minutes", Number.parseInt(e.target.value) || 5)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Minutos después del registro para enviar bienvenida
-            </p>
-          </div>
-        )
-      case "new_order":
-      case "order_ready":
-        return (
-          <div className="grid gap-2">
-            <Label htmlFor="send_immediately">Envío inmediato</Label>
             <div className="flex items-center space-x-2">
               <Switch
                 id="send_immediately"
-                checked={formData.trigger_config.send_immediately !== false}
+                checked={formData.trigger_config.send_immediately || false}
                 onCheckedChange={(checked) => handleTriggerConfigChange("send_immediately", checked)}
               />
               <Label htmlFor="send_immediately" className="text-sm">
-                Enviar inmediatamente cuando cambie el estado
+                Enviar inmediatamente al crear promoción
               </Label>
             </div>
           </div>
         )
-      case "reservation_reminder":
+      case "comment_reply":
         return (
-          <div className="grid gap-2">
-            <Label htmlFor="hours_before">Horas antes de la reserva</Label>
-            <Input
-              id="hours_before"
-              type="number"
-              min="1"
-              max="168"
-              value={formData.trigger_config.hours_before || 24}
-              onChange={(e) => handleTriggerConfigChange("hours_before", Number.parseInt(e.target.value) || 24)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Horas antes de la reserva para enviar recordatorio
+          <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+            <p className="text-sm text-blue-800">
+              <strong>Respuesta automática a comentarios:</strong> Se activa cuando un usuario comenta en tus publicaciones de Instagram.
             </p>
           </div>
         )
@@ -528,6 +503,41 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
 
   const getMessagePreview = (template: string) => {
     return template.length > 100 ? template.substring(0, 100) + "..." : template
+  }
+
+  const getTriggerInfo = (triggerType: string) => {
+    return triggerTypes[triggerType as keyof typeof triggerTypes] || {
+      icon: Zap,
+      label: triggerType,
+      description: "Tipo de trigger desconocido",
+      color: "bg-gray-500",
+      platforms: []
+    }
+  }
+
+  const getTriggerConfigDescription = (triggerType: string, config: Record<string, any>) => {
+    switch (triggerType) {
+      case "birthday":
+        const daysBefore = config.days_before || 0
+        return daysBefore === 0 
+          ? "El día del cumpleaños"
+          : `${daysBefore} día${daysBefore > 1 ? 's' : ''} antes del cumpleaños`
+      
+      case "inactive_client":
+        const inactiveDays = config.inactive_days || 30
+        return `Después de ${inactiveDays} días sin actividad`
+      
+      case "new_promotion":
+        return config.send_immediately 
+          ? "Inmediatamente al crear promoción"
+          : "Programado al crear promoción"
+      
+      case "comment_reply":
+        return "Al recibir comentario en Instagram"
+      
+      default:
+        return "Sin configuración adicional"
+    }
   }
 
   const getAvailableTemplates = () => {
@@ -656,7 +666,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
               </CardHeader>
               <CardContent>
                 {automations.slice(0, 3).map((automation) => {
-                  const config = triggerTypes[automation.trigger_type]
+                  const config = getTriggerInfo(automation.trigger_type)
                   const Icon = config.icon
                   return (
                     <div key={automation.id} className="flex items-center gap-3 py-2">
@@ -704,7 +714,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
               </div>
             ) : (
               automations.map((automation) => {
-                const triggerConfig = triggerTypes[automation.trigger_type]
+                const triggerConfig = getTriggerInfo(automation.trigger_type)
                 const TriggerIcon = triggerConfig.icon
                 return (
                   <ScrollStaggerChild key={automation.id}>
@@ -768,6 +778,32 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
                               <span className="text-sm text-muted-foreground">Bot</span>
                               <span className="text-sm">{automation.bots?.name || "Sin bot"}</span>
                             </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Promoción</span>
+                              <span className="text-sm">{automation.promotions?.name || "Sin promoción"}</span>
+                            </div>
+                            <div>
+                              <span className="text-sm text-muted-foreground">Disparador</span>
+                              <div className="flex items-center gap-2 mt-1">
+                                {(() => {
+                                  const triggerConfig = getTriggerInfo(automation.trigger_type)
+                                  const Icon = triggerConfig.icon
+                                  return (
+                                    <>
+                                      <Badge variant="outline" className="flex items-center gap-1">
+                                        <Icon className="h-3 w-3" />
+                                        <span className="text-xs">{triggerConfig.label}</span>
+                                      </Badge>
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                              {automation.trigger_config && Object.keys(automation.trigger_config).length > 0 && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  {getTriggerConfigDescription(automation.trigger_type, automation.trigger_config)}
+                                </div>
+                              )}
+                            </div>
                             <div>
                               <span className="text-sm text-muted-foreground">Mensaje</span>
                               <p className="text-sm mt-1 line-clamp-2">{getMessagePreview(automation.message_template)}</p>
@@ -823,6 +859,42 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
                   required
                 />
               </div>
+
+              {/* Tipo de Trigger */}
+              <div className="grid gap-2">
+                <Label htmlFor="edit_trigger_type">Tipo de Disparador *</Label>
+                <Select 
+                  value={formData.trigger_type || ""} 
+                  onValueChange={(value) => setFormData({ ...formData, trigger_type: value as keyof typeof triggerTypes })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un disparador" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(triggerTypes).map(([key, config]) => {
+                      const Icon = config.icon
+                      return (
+                        <SelectItem key={key} value={key}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4" />
+                            <span>{config.label}</span>
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Configuración del Trigger */}
+              {formData.trigger_type && (
+                <div className="grid gap-2">
+                  <Label>Configuración del Disparador</Label>
+                  <div className="p-3 border rounded-md bg-gray-50">
+                    {renderTriggerConfig()}
+                  </div>
+                </div>
+              )}
               
               <div className="grid gap-2">
                 <Label htmlFor="edit_message_template">Mensaje *</Label>
@@ -833,6 +905,32 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
                   rows={4}
                   required
                 />
+              </div>
+
+              {/* Promoción vinculada (opcional) */}
+              <div className="grid gap-2">
+                <Label htmlFor="edit_promotion">Promoción vinculada (opcional)</Label>
+                <Select 
+                  value={formData.promotion_id || "none"} 
+                  onValueChange={(value) => setFormData({ ...formData, promotion_id: value === "none" ? "" : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una promoción (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin promoción</SelectItem>
+                    {promotions.map((promotion) => (
+                      <SelectItem key={promotion.id} value={promotion.id}>
+                        {promotion.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {promotions.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No hay promociones disponibles. Crea una promoción primero.
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center space-x-2">

@@ -397,16 +397,48 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
           }
         }
 
-        // Obtener plantillas locales de Instagram
-        const { data: localTemplates } = await supabase
+        // Obtener plantillas locales de Instagram (nueva tabla templates)
+        const { data: newLocalTemplates } = await supabase
+          .from('templates')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('platform', 'instagram')
+          .eq('source', 'local')
+          .eq('status', 'active')
+          .or(`bot_id.eq.${bot.id},bot_id.is.null`)
+
+        if (newLocalTemplates) {
+          newLocalTemplates.forEach((template: any) => {
+            templates.push({
+              id: template.id,
+              name: template.name,
+              platform: 'instagram',
+              bot_id: bot.id,
+              bot_name: bot.name,
+              status: 'APPROVED',
+              body_content: template.body_text,
+              subject: template.subject,
+              html_content: template.html_content,
+              variables: Array.isArray(template.variables) 
+                ? template.variables.map((v: any) => typeof v === 'string' ? v : `{${v}}`) 
+                : [],
+              can_use: true,
+              source: 'local_db',
+              last_synced: new Date().toISOString()
+            })
+          })
+        }
+
+        // Obtener plantillas locales de Instagram (tabla legacy message_templates)
+        const { data: legacyLocalTemplates } = await supabase
           .from('message_templates')
           .select('*')
           .eq('bot_id', bot.id)
           .eq('platform', 'instagram')
           .eq('status', 'active')
 
-        if (localTemplates) {
-          localTemplates.forEach((template: any) => {
+        if (legacyLocalTemplates) {
+          legacyLocalTemplates.forEach((template: any) => {
             templates.push({
               id: template.id,
               name: template.template_name,
@@ -417,7 +449,7 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
               body_content: template.body_content,
               variables: template.variables || [],
               can_use: true,
-              source: 'local_db',
+              source: 'legacy_local_db',
               last_synced: new Date().toISOString()
             })
           })
@@ -439,8 +471,47 @@ async function fetchGmailTemplates(supabase: any, userId: string, botId?: string
   try {
     const templates: any[] = []
 
-    // Solo obtener plantillas locales - no necesitamos APIs externas
-    let query = supabase
+    // Obtener plantillas de la nueva tabla templates
+    let newQuery = supabase
+      .from('templates')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('platform', 'gmail')
+      .eq('source', 'local')
+      .eq('status', 'active')
+
+    if (botId) {
+      newQuery = newQuery.or(`bot_id.eq.${botId},bot_id.is.null`)
+    }
+
+    const { data: newLocalTemplates } = await newQuery
+
+    if (newLocalTemplates) {
+      newLocalTemplates.forEach((template: any) => {
+        templates.push({
+          id: template.id,
+          name: template.name,
+          platform: 'gmail',
+          bot_id: template.bot_id,
+          bot_name: 'Gmail Bot', // Podríamos obtener el nombre del bot si es necesario
+          status: template.status,
+          language: 'es',
+          category: template.category || 'transactional',
+          body_text: template.body_text,
+          html_content: template.html_content,
+          subject: template.subject,
+          variables: Array.isArray(template.variables) 
+            ? template.variables.map((v: any) => typeof v === 'string' ? v : `{${v}}`) 
+            : [],
+          source: 'local_db',
+          created_at: template.created_at,
+          updated_at: template.updated_at
+        })
+      })
+    }
+
+    // Obtener plantillas de la tabla legacy message_templates
+    let legacyQuery = supabase
       .from('message_templates')
       .select(`
         *,
@@ -451,13 +522,13 @@ async function fetchGmailTemplates(supabase: any, userId: string, botId?: string
       .eq('status', 'active')
 
     if (botId) {
-      query = query.eq('bot_id', botId)
+      legacyQuery = legacyQuery.eq('bot_id', botId)
     }
 
-    const { data: localTemplates } = await query
+    const { data: legacyLocalTemplates } = await legacyQuery
 
-    if (localTemplates) {
-      localTemplates.forEach((template: any) => {
+    if (legacyLocalTemplates) {
+      legacyLocalTemplates.forEach((template: any) => {
         templates.push({
           id: template.id,
           name: template.template_name,
@@ -471,7 +542,7 @@ async function fetchGmailTemplates(supabase: any, userId: string, botId?: string
           html_content: template.html_content,
           subject: template.subject,
           variables: template.variables_used || [],
-          source: 'local_db',
+          source: 'legacy_local_db',
           created_at: template.created_at,
           updated_at: template.updated_at
         })
