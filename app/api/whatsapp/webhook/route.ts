@@ -294,7 +294,10 @@ async function generateAndSendAIResponse(
 ) {
   try {
     // Generate AI response using webhook-specific chat API
-    const chatApiUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/chat/webhook`
+    const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000'
+    const chatApiUrl = `${baseUrl}/api/chat/webhook`
     
     const response = await fetch(chatApiUrl, {
       method: 'POST',
