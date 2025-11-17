@@ -628,6 +628,38 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
       if (error) throw error
 
+      // Si es una automatización de tipo new_promotion y tiene promoción asignada,
+      // disparar el broadcast inmediatamente
+      if (automation.trigger_type === 'new_promotion' && automation.promotion_id && automation.is_active) {
+        try {
+          // Obtener datos de la promoción
+          const { data: promotion } = await supabase
+            .from('promotions')
+            .select('*')
+            .eq('id', automation.promotion_id)
+            .single()
+
+          if (promotion) {
+            // Llamar al endpoint de webhook para procesar el broadcast
+            await fetch('/api/automations/webhook', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'INSERT',
+                table: 'automations',
+                record: {
+                  ...automation,
+                  promotion: promotion
+                }
+              })
+            })
+          }
+        } catch (webhookError) {
+          console.error('Error triggering promotion broadcast:', webhookError)
+          // No lanzamos error para no bloquear la creación de la automatización
+        }
+      }
+
       setShowSuccess(true)
 
       setTimeout(() => {

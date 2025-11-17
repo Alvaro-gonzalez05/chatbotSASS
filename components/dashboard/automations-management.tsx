@@ -21,7 +21,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import {
   Plus,
@@ -154,7 +153,6 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedAutomation, setSelectedAutomation] = useState<Automation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState("overview")
   
   // Mock user subscription (en una app real esto vendría de la base de datos)
   const userSubscription = {
@@ -571,133 +569,65 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
         </ScrollFadeIn>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Vista General</TabsTrigger>
-          <TabsTrigger value="automations">Automatizaciones</TabsTrigger>
-          <TabsTrigger value="analytics">Estadísticas</TabsTrigger>
-        </TabsList>
+      {/* Stats Cards */}
+      <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-4">
+        <ScrollStaggerChild>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total</CardTitle>
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total_automations}</div>
+              <p className="text-xs text-muted-foreground">Automatizaciones</p>
+            </CardContent>
+          </Card>
+        </ScrollStaggerChild>
+        
+        <ScrollStaggerChild>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Activas</CardTitle>
+              <Play className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.active_automations}</div>
+              <p className="text-xs text-muted-foreground">En funcionamiento</p>
+            </CardContent>
+          </Card>
+        </ScrollStaggerChild>
+        
+        <ScrollStaggerChild>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
+              <Clock className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.pending_messages}</div>
+              <p className="text-xs text-muted-foreground">Mensajes en cola</p>
+            </CardContent>
+          </Card>
+        </ScrollStaggerChild>
+        
+        <ScrollStaggerChild>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Enviados Hoy</CardTitle>
+              <TrendingUp className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.sent_today}</div>
+              <p className="text-xs text-muted-foreground">Mensajes enviados</p>
+            </CardContent>
+          </Card>
+        </ScrollStaggerChild>
+      </ScrollStaggeredChildren>
 
-        <TabsContent value="overview" className="space-y-6">
-          {/* Stats Cards */}
-          <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-4">
-            <ScrollStaggerChild>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total</CardTitle>
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.total_automations}</div>
-                  <p className="text-xs text-muted-foreground">Automatizaciones</p>
-                </CardContent>
-              </Card>
-            </ScrollStaggerChild>
-            
-            <ScrollStaggerChild>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Activas</CardTitle>
-                  <Play className="h-4 w-4 text-green-500" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.active_automations}</div>
-                  <p className="text-xs text-muted-foreground">En funcionamiento</p>
-                </CardContent>
-              </Card>
-            </ScrollStaggerChild>
-            
-            <ScrollStaggerChild>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
-                  <Clock className="h-4 w-4 text-orange-500" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.pending_messages}</div>
-                  <p className="text-xs text-muted-foreground">Mensajes en cola</p>
-                </CardContent>
-              </Card>
-            </ScrollStaggerChild>
-            
-            <ScrollStaggerChild>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Enviados Hoy</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-blue-500" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.sent_today}</div>
-                  <p className="text-xs text-muted-foreground">Mensajes enviados</p>
-                </CardContent>
-              </Card>
-            </ScrollStaggerChild>
-          </ScrollStaggeredChildren>
-
-          {/* Quick Actions */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  Acciones Rápidas
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nueva Automatización
-                </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Ver Cola de Mensajes
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Automatizaciones Recientes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {automations.slice(0, 3).map((automation) => {
-                  const config = getTriggerInfo(automation.trigger_type)
-                  const Icon = config.icon
-                  return (
-                    <div key={automation.id} className="flex items-center gap-3 py-2">
-                      <div className={`p-2 rounded-md ${config.color}`}>
-                        <Icon className="h-3 w-3 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{automation.name}</p>
-                        <p className="text-xs text-muted-foreground">{config.label}</p>
-                      </div>
-                      <Badge variant={automation.is_active ? "default" : "secondary"}>
-                        {automation.is_active ? "Activa" : "Inactiva"}
-                      </Badge>
-                    </div>
-                  )
-                })}
-                {automations.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    No hay automatizaciones creadas aún
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="automations" className="space-y-6">
-          {/* Automatizaciones Grid */}
-          <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {automations.length === 0 ? (
-              <div className="col-span-full">
+      {/* Automatizaciones Grid */}
+      <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {automations.length === 0 ? (
+          <div className="col-span-full">
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center py-12">
                     <Zap className="h-12 w-12 text-muted-foreground mb-4" />
@@ -820,25 +750,6 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
               })
             )}
           </ScrollStaggeredChildren>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Estadísticas Detalladas</CardTitle>
-              <CardDescription>
-                Próximamente: análisis completo del rendimiento de tus automatizaciones
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">Panel de análisis en desarrollo</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
