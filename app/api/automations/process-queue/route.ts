@@ -188,14 +188,44 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{success: bo
   try {
     // Obtener configuración de WhatsApp del bot
     const supabase = createAdminClient()
-    const { data: whatsappConfig, error: configError } = await supabase
+    
+    // Buscar primero en whatsapp_integrations (tabla específica que usa bot_id)
+    let whatsappConfig = null
+    let configError = null
+    
+    const { data: specificConfig, error: specificError } = await supabase
       .from('whatsapp_integrations')
       .select('*')
       .eq('bot_id', bot.id)
       .eq('is_active', true)
       .single()
 
-    if (configError || !whatsappConfig) {
+    if (specificConfig) {
+      whatsappConfig = specificConfig
+    } else {
+      // Si no está en whatsapp_integrations, buscar en integrations (tabla consolidada que usa user_id)
+      const { data: genericConfig, error: genericError } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('user_id', message.user_id) // Usar user_id en lugar de bot_id
+        .eq('platform', 'whatsapp')
+        .eq('is_active', true)
+        .single()
+      
+      if (genericConfig && genericConfig.config) {
+        // Extraer la configuración del JSONB
+        whatsappConfig = {
+          phone_number_id: genericConfig.config.phone_number_id,
+          access_token: genericConfig.config.access_token,
+          ...genericConfig.config
+        }
+      } else {
+        configError = genericError
+      }
+    }
+
+    if (!whatsappConfig) {
+      console.error('[WhatsApp] Configuration not found:', specificError, configError)
       return { success: false, error: 'WhatsApp integration not found or inactive' }
     }
 
@@ -246,14 +276,41 @@ async function sendInstagramMessage(message: any, bot: any): Promise<{success: b
   try {
     // Obtener configuración de Instagram del bot
     const supabase = createAdminClient()
-    const { data: instagramConfig, error: configError } = await supabase
+    
+    // Buscar primero en instagram_integrations (tabla específica que usa bot_id)
+    let instagramConfig = null
+    
+    const { data: specificConfig, error: specificError } = await supabase
       .from('instagram_integrations')
       .select('*')
       .eq('bot_id', bot.id)
       .eq('is_active', true)
       .single()
 
-    if (configError || !instagramConfig) {
+    if (specificConfig) {
+      instagramConfig = specificConfig
+    } else {
+      // Si no está en instagram_integrations, buscar en integrations (tabla consolidada que usa user_id)
+      const { data: genericConfig, error: genericError } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('user_id', message.user_id) // Usar user_id en lugar de bot_id
+        .eq('platform', 'instagram')
+        .eq('is_active', true)
+        .single()
+      
+      if (genericConfig && genericConfig.config) {
+        // Extraer la configuración del JSONB
+        instagramConfig = {
+          page_id: genericConfig.config.page_id,
+          access_token: genericConfig.config.access_token,
+          ...genericConfig.config
+        }
+      }
+    }
+
+    if (!instagramConfig) {
+      console.error('[Instagram] Configuration not found:', specificError)
       return { success: false, error: 'Instagram integration not found or inactive' }
     }
 
