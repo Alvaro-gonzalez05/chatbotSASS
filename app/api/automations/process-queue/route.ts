@@ -186,47 +186,28 @@ async function sendMessage(message: any, bot: any): Promise<{success: boolean, m
 // Función para enviar mensaje por WhatsApp
 async function sendWhatsAppMessage(message: any, bot: any): Promise<{success: boolean, messageId?: string, error?: string}> {
   try {
-    // Obtener configuración de WhatsApp del bot
+    // Obtener configuración de WhatsApp desde integrations
     const supabase = createAdminClient()
     
-    // Buscar primero en whatsapp_integrations (tabla específica que usa bot_id)
-    let whatsappConfig = null
-    let configError = null
-    
-    const { data: specificConfig, error: specificError } = await supabase
-      .from('whatsapp_integrations')
+    const { data: integration, error: configError } = await supabase
+      .from('integrations')
       .select('*')
-      .eq('bot_id', bot.id)
+      .eq('user_id', message.user_id)
+      .eq('platform', 'whatsapp')
       .eq('is_active', true)
       .single()
 
-    if (specificConfig) {
-      whatsappConfig = specificConfig
-    } else {
-      // Si no está en whatsapp_integrations, buscar en integrations (tabla consolidada que usa user_id)
-      const { data: genericConfig, error: genericError } = await supabase
-        .from('integrations')
-        .select('*')
-        .eq('user_id', message.user_id) // Usar user_id en lugar de bot_id
-        .eq('platform', 'whatsapp')
-        .eq('is_active', true)
-        .single()
-      
-      if (genericConfig && genericConfig.config) {
-        // Extraer la configuración del JSONB
-        whatsappConfig = {
-          phone_number_id: genericConfig.config.phone_number_id,
-          access_token: genericConfig.config.access_token,
-          ...genericConfig.config
-        }
-      } else {
-        configError = genericError
-      }
+    if (configError || !integration || !integration.config) {
+      console.error('[WhatsApp] Configuration not found:', configError)
+      return { success: false, error: 'WhatsApp integration not found or inactive' }
     }
 
-    if (!whatsappConfig) {
-      console.error('[WhatsApp] Configuration not found:', specificError, configError)
-      return { success: false, error: 'WhatsApp integration not found or inactive' }
+    // Extraer la configuración del JSONB
+    const whatsappConfig = integration.config
+
+    if (!whatsappConfig.phone_number_id || !whatsappConfig.access_token) {
+      console.error('[WhatsApp] Missing required config fields:', whatsappConfig)
+      return { success: false, error: 'WhatsApp configuration incomplete' }
     }
 
     // Preparar el mensaje para WhatsApp Business API
@@ -274,50 +255,34 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{success: bo
 // Función para enviar mensaje por Instagram
 async function sendInstagramMessage(message: any, bot: any): Promise<{success: boolean, messageId?: string, error?: string}> {
   try {
-    // Obtener configuración de Instagram del bot
+    // Obtener configuración de Instagram desde integrations
     const supabase = createAdminClient()
     
-    // Buscar primero en instagram_integrations (tabla específica que usa bot_id)
-    let instagramConfig = null
-    
-    const { data: specificConfig, error: specificError } = await supabase
-      .from('instagram_integrations')
+    const { data: integration, error: configError } = await supabase
+      .from('integrations')
       .select('*')
-      .eq('bot_id', bot.id)
+      .eq('user_id', message.user_id)
+      .eq('platform', 'instagram')
       .eq('is_active', true)
       .single()
 
-    if (specificConfig) {
-      instagramConfig = specificConfig
-    } else {
-      // Si no está en instagram_integrations, buscar en integrations (tabla consolidada que usa user_id)
-      const { data: genericConfig, error: genericError } = await supabase
-        .from('integrations')
-        .select('*')
-        .eq('user_id', message.user_id) // Usar user_id en lugar de bot_id
-        .eq('platform', 'instagram')
-        .eq('is_active', true)
-        .single()
-      
-      if (genericConfig && genericConfig.config) {
-        // Extraer la configuración del JSONB
-        instagramConfig = {
-          page_id: genericConfig.config.page_id,
-          access_token: genericConfig.config.access_token,
-          ...genericConfig.config
-        }
-      }
+    if (configError || !integration || !integration.config) {
+      console.error('[Instagram] Configuration not found:', configError)
+      return { success: false, error: 'Instagram integration not found or inactive' }
     }
 
-    if (!instagramConfig) {
-      console.error('[Instagram] Configuration not found:', specificError)
-      return { success: false, error: 'Instagram integration not found or inactive' }
+    // Extraer la configuración del JSONB
+    const instagramConfig = integration.config
+
+    if (!instagramConfig.page_id || !instagramConfig.access_token) {
+      console.error('[Instagram] Missing required config fields:', instagramConfig)
+      return { success: false, error: 'Instagram configuration incomplete' }
     }
 
     // Preparar el mensaje para Instagram Messaging API
     const messagePayload = {
       recipient: {
-        id: message.recipient_instagram_id // Necesitarás almacenar el Instagram ID del cliente
+        id: message.recipient_instagram_id
       },
       message: {
         text: message.message_content
