@@ -155,20 +155,35 @@ async function processSingleBirthdayAutomation(supabase: any, automation: any, t
       const scheduledFor = new Date()
       scheduledFor.setMinutes(scheduledFor.getMinutes() + Math.floor(Math.random() * 30)) // Distribuir en 30 minutos
 
+      const messageData: any = {
+        user_id: automation.user_id,
+        automation_id: automation.id,
+        client_id: client.id,
+        bot_id: automation.bots.id,
+        message_content: messageContent,
+        recipient_name: client.name,
+        scheduled_for: scheduledFor.toISOString(),
+        automation_type: 'birthday',
+        priority: 3
+      }
+
+      // Agregar identificador según plataforma del bot
+      const botPlatform = automation.bots.platform
+      if (botPlatform === 'whatsapp' && client.phone) {
+        messageData.recipient_phone = client.phone
+      } else if (botPlatform === 'instagram' && client.instagram) {
+        messageData.recipient_instagram_id = client.instagram
+      } else if (botPlatform === 'gmail' && client.email) {
+        messageData.recipient_email = client.email
+      } else {
+        // Si el cliente no tiene el campo necesario para la plataforma, saltar
+        console.log(`⚠️ Client ${client.id} doesn't have contact info for ${botPlatform}`)
+        continue
+      }
+
       await supabase
         .from('scheduled_messages')
-        .insert({
-          user_id: automation.user_id,
-          automation_id: automation.id,
-          client_id: client.id,
-          bot_id: automation.bots.id,
-          message_content: messageContent,
-          recipient_phone: client.phone,
-          recipient_name: client.name,
-          scheduled_for: scheduledFor.toISOString(),
-          automation_type: 'birthday',
-          priority: 3
-        })
+        .insert(messageData)
 
       messagesQueued++
     }
@@ -319,20 +334,35 @@ async function processSingleInactiveClientAutomation(supabase: any, automation: 
       const scheduledFor = new Date()
       scheduledFor.setHours(scheduledFor.getHours() + Math.floor(Math.random() * 8) + 1) // Distribuir en las próximas 8 horas
 
+      const messageData: any = {
+        user_id: automation.user_id,
+        automation_id: automation.id,
+        client_id: client.id,
+        bot_id: automation.bots.id,
+        message_content: messageContent,
+        recipient_name: client.name,
+        scheduled_for: scheduledFor.toISOString(),
+        automation_type: 'inactive_client',
+        priority: 4
+      }
+
+      // Agregar identificador según plataforma del bot
+      const botPlatform = automation.bots.platform
+      if (botPlatform === 'whatsapp' && client.phone) {
+        messageData.recipient_phone = client.phone
+      } else if (botPlatform === 'instagram' && client.instagram) {
+        messageData.recipient_instagram_id = client.instagram
+      } else if (botPlatform === 'gmail' && client.email) {
+        messageData.recipient_email = client.email
+      } else {
+        // Si el cliente no tiene el campo necesario para la plataforma, saltar
+        console.log(`⚠️ Client ${client.id} doesn't have contact info for ${botPlatform}`)
+        continue
+      }
+
       await supabase
         .from('scheduled_messages')
-        .insert({
-          user_id: automation.user_id,
-          automation_id: automation.id,
-          client_id: client.id,
-          bot_id: automation.bots.id,
-          message_content: messageContent,
-          recipient_phone: client.phone,
-          recipient_name: client.name,
-          scheduled_for: scheduledFor.toISOString(),
-          automation_type: 'inactive_client',
-          priority: 4
-        })
+        .insert(messageData)
 
       messagesQueued++
     }

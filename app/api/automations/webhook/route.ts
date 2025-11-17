@@ -202,14 +202,25 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
     }
 
     // Obtener todos los clientes activos del usuario
-    const { data: clients, error: clientsError } = await supabase
+    // Filtrar según la plataforma del bot
+    let clientsQuery = supabase
       .from('clients')
       .select('*')
       .eq('user_id', automation.user_id)
-      .not('phone', 'is', null)
+
+    // Filtrar clientes según la plataforma del bot
+    if (bot.platform === 'whatsapp') {
+      clientsQuery = clientsQuery.not('phone', 'is', null)
+    } else if (bot.platform === 'instagram') {
+      clientsQuery = clientsQuery.not('instagram', 'is', null)
+    } else if (bot.platform === 'gmail') {
+      clientsQuery = clientsQuery.not('email', 'is', null)
+    }
+
+    const { data: clients, error: clientsError } = await clientsQuery
 
     if (clientsError || !clients || clients.length === 0) {
-      console.log('ℹ️ No active clients found for promotion broadcast')
+      console.log(`ℹ️ No active clients found for ${bot.platform} promotion broadcast`)
       return
     }
 
@@ -259,24 +270,34 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
         clientScheduledFor.setSeconds(clientScheduledFor.getSeconds() + (messagesQueued * 10)) // 10 seg entre mensajes
 
         // Insertar en cola de mensajes programados
+        const messageData: any = {
+          user_id: automation.user_id,
+          automation_id: automation.id,
+          client_id: client.id,
+          bot_id: bot.id,
+          message_content: messageContent,
+          recipient_name: client.name,
+          scheduled_for: clientScheduledFor.toISOString(),
+          automation_type: 'new_promotion',
+          priority: 3, // Prioridad media para promociones
+          metadata: {
+            promotion_id: promotion.id,
+            promotion_name: promotion.name
+          }
+        }
+
+        // Agregar el campo correcto según la plataforma
+        if (bot.platform === 'whatsapp') {
+          messageData.recipient_phone = client.phone
+        } else if (bot.platform === 'instagram') {
+          messageData.recipient_instagram_id = client.instagram // Instagram ID
+        } else if (bot.platform === 'gmail') {
+          messageData.recipient_email = client.email
+        }
+
         const { error: scheduleError } = await supabase
           .from('scheduled_messages')
-          .insert({
-            user_id: automation.user_id,
-            automation_id: automation.id,
-            client_id: client.id,
-            bot_id: bot.id,
-            message_content: messageContent,
-            recipient_phone: client.phone,
-            recipient_name: client.name,
-            scheduled_for: clientScheduledFor.toISOString(),
-            automation_type: 'new_promotion',
-            priority: 3, // Prioridad media para promociones
-            metadata: {
-              promotion_id: promotion.id,
-              promotion_name: promotion.name
-            }
-          })
+          .insert(messageData)
 
         if (scheduleError) {
           console.error(`❌ Error scheduling promotion message for client ${client.id}:`, scheduleError)
@@ -286,20 +307,31 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
         messagesQueued++
 
         // Log de la automatización
+        const logData: any = {
+          automation_id: automation.id,
+          client_id: client.id,
+          log_type: 'queued',
+          message_content: messageContent,
+          success: true,
+          metadata: {
+            promotion_id: promotion.id,
+            broadcast_type: 'new_promotion',
+            platform: bot.platform
+          }
+        }
+
+        // Agregar identificador según plataforma
+        if (bot.platform === 'whatsapp') {
+          logData.recipient_phone = client.phone
+        } else if (bot.platform === 'instagram') {
+          logData.recipient_phone = client.instagram // Usar el mismo campo para Instagram ID
+        } else if (bot.platform === 'gmail') {
+          logData.recipient_phone = client.email // Usar el mismo campo para email
+        }
+
         await supabase
           .from('automation_logs')
-          .insert({
-            automation_id: automation.id,
-            client_id: client.id,
-            log_type: 'queued',
-            message_content: messageContent,
-            recipient_phone: client.phone,
-            success: true,
-            metadata: {
-              promotion_id: promotion.id,
-              broadcast_type: 'new_promotion'
-            }
-          })
+          .insert(logData)
 
       } catch (clientError) {
         console.error(`💥 Error processing client ${client.id} for automation:`, clientError)

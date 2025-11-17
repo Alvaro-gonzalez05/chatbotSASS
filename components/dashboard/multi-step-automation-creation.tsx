@@ -112,28 +112,28 @@ const triggerTypes = {
     label: "Cumpleaños de Clientes",
     description: "Envía felicitaciones automáticas",
     color: "bg-pink-500",
-    platforms: ["whatsapp", "instagram", "email"]
+    platforms: ["whatsapp", "gmail"] // Instagram no permite mensajes proactivos
   },
   inactive_client: {
     icon: UserX,
     label: "Cliente Inactivo",
     description: "Reactiva clientes que no compran",
     color: "bg-orange-500",
-    platforms: ["whatsapp", "instagram", "email"]
+    platforms: ["whatsapp", "gmail"] // Instagram no permite mensajes proactivos
   },
   new_promotion: {
     icon: Gift,
     label: "Nueva Promoción",
     description: "Notifica sobre ofertas especiales",
     color: "bg-purple-500",
-    platforms: ["whatsapp", "instagram", "email"]
+    platforms: ["whatsapp", "gmail"] // Instagram no permite broadcast masivo
   },
   comment_reply: {
     icon: MessageSquare,
     label: "Respuesta a Comentario",
     description: "Responde automáticamente a comentarios (Instagram)",
     color: "bg-pink-500",
-    platforms: ["instagram"]
+    platforms: ["instagram"] // Exclusivo de Instagram
   },
 }
 
@@ -1080,6 +1080,38 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* Mensaje informativo según plataforma */}
+                      {selectedBotPlatform === 'instagram' && (
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex gap-2">
+                            <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <h4 className="font-medium text-sm text-blue-800 mb-1">
+                                Limitaciones de Instagram
+                              </h4>
+                              <p className="text-xs text-blue-700">
+                                Instagram solo permite <strong>respuestas automáticas a comentarios</strong>. 
+                                No es posible enviar mensajes masivos proactivos como cumpleaños o promociones.
+                                Para esos casos, usa un bot de WhatsApp o Email.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {selectedBotPlatform === 'whatsapp' && (
+                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                          <div className="flex gap-2">
+                            <Check className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-green-700">
+                                <strong>WhatsApp Business API</strong> permite todos los tipos de automatizaciones 
+                                incluyendo mensajes proactivos y broadcasts masivos.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="grid gap-3 sm:gap-4">
                         {Object.entries(triggerTypes)
                           .filter(([key, config]) => {
