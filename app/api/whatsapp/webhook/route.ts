@@ -120,7 +120,7 @@ async function processWhatsAppMessage(messageData: any) {
       // Find the integration for WhatsApp with matching phone_number_id
       const { data: integrations, error: integrationsError } = await supabase
         .from('integrations')
-        .select('*, bots!inner(*)')
+        .select('*')
         .eq('platform', 'whatsapp')
         .eq('is_active', true)
 
@@ -134,12 +134,24 @@ async function processWhatsAppMessage(messageData: any) {
         i.config?.phone_number_id === messageData.metadata?.phone_number_id
       )
 
-      if (!integration || !integration.bots) {
+      if (!integration) {
         console.log('No active WhatsApp integration found for phone number:', messageData.metadata?.phone_number_id)
         continue
       }
 
-      const bot = integration.bots
+      // Get the bot for this user and platform
+      const { data: bot, error: botError } = await supabase
+        .from('bots')
+        .select('*')
+        .eq('user_id', integration.user_id)
+        .eq('platform', 'whatsapp')
+        .eq('is_active', true)
+        .single()
+
+      if (botError || !bot) {
+        console.error('No active WhatsApp bot found for user:', integration.user_id, botError)
+        continue
+      }
 
       console.log('🔍 Found bot:', bot.name, 'with ID:', bot.id)
 
