@@ -198,11 +198,11 @@ async function processWhatsAppMessage(messageData: any) {
           textContent = `[${messageType} message]`
       }
 
-      // Check for duplicate messages
+      // Check for duplicate messages (check metadata for whatsapp_message_id)
       const { data: existingMessage } = await supabase
         .from('messages')
         .select('id')
-        .eq('whatsapp_message_id', whatsappMessageId)
+        .filter('metadata->>whatsapp_message_id', 'eq', whatsappMessageId)
         .maybeSingle()
 
       if (existingMessage) {
@@ -258,10 +258,12 @@ async function processWhatsAppMessage(messageData: any) {
         .insert({
           conversation_id: conversationId,
           content: textContent,
-          sender: 'client',
-          whatsapp_message_id: whatsappMessageId,
+          sender_type: 'client',
           message_type: messageType,
-          metadata: messageContent
+          metadata: {
+            whatsapp_message_id: whatsappMessageId,
+            ...messageContent
+          }
         })
 
       if (messageError) {
