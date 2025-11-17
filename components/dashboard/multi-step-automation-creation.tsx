@@ -219,10 +219,17 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       
       fetchBots()
       fetchPromotions()
+      // Primero cargar la suscripción, luego verificar límites se hará automáticamente
       fetchUserSubscription()
-      checkAutomationLimits()
     }
   }, [isOpen, userId])
+
+  // Verificar límites cuando cambie la suscripción
+  useEffect(() => {
+    if (userSubscription && userId) {
+      checkAutomationLimits()
+    }
+  }, [userSubscription, userId])
 
   // Cargar plantillas cuando cambia el bot seleccionado
   useEffect(() => {
@@ -424,6 +431,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
   const fetchUserSubscription = async () => {
     try {
+      console.log("[DEBUG] Fetching subscription for user:", userId)
       const { data, error } = await supabase
         .from("user_profiles")
         .select("subscription_status, plan_type")
@@ -440,6 +448,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         return
       }
 
+      console.log("[DEBUG] User subscription data:", data)
+
       const planLimits = {
         trial: { max_automations: 0 },
         basic: { max_automations: 1 },
@@ -448,11 +458,14 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       }
 
       const limits = planLimits[data.plan_type as keyof typeof planLimits] || planLimits.trial
-
-      setUserSubscription({
+      
+      const subscription = {
         ...data,
         ...limits,
-      })
+      }
+      
+      console.log("[DEBUG] Final subscription object:", subscription)
+      setUserSubscription(subscription)
     } catch (error) {
       console.error("Error fetching subscription:", error)
       setUserSubscription({
@@ -514,6 +527,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
   const checkAutomationLimits = async () => {
     try {
+      console.log("[DEBUG] Checking automation limits...")
       const { data: automations, error } = await supabase
         .from("automations")
         .select("id")
@@ -522,11 +536,16 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       if (error) throw error
 
       const automationCount = automations?.length || 0
+      console.log("[DEBUG] Current automation count:", automationCount)
       setCurrentAutomationCount(automationCount)
 
       const maxAutomations = userSubscription?.max_automations || 0
+      console.log("[DEBUG] Max automations allowed:", maxAutomations)
+      console.log("[DEBUG] User subscription:", userSubscription)
 
-      setCanCreateAutomation(maxAutomations === -1 || automationCount < maxAutomations)
+      const canCreate = maxAutomations === -1 || automationCount < maxAutomations
+      console.log("[DEBUG] Can create automation?", canCreate)
+      setCanCreateAutomation(canCreate)
     } catch (error) {
       console.error("Error checking automation limits:", error)
       setCanCreateAutomation(false)
