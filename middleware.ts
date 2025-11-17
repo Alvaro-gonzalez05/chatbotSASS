@@ -19,6 +19,6 @@ export const config = {
      * - api/chat/webhook (webhook chat API)
      * - api/automations/* (automation endpoints for cron jobs)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/whatsapp/.*|api/instagram/.*|api/debug/.*|api/chat/webhook|api/automations/.*|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/whatsapp|api/instagram|api/debug|api/chat/webhook|api/automations).*)",
   ],
 }
