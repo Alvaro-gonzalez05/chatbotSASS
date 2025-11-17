@@ -198,10 +198,9 @@ async function processWhatsAppMessage(messageData: any) {
           textContent = `[${messageType} message]`
       }
 
-      // Check if we already processed this message
       // Check for duplicate messages
       const { data: existingMessage } = await supabase
-        .from('whatsapp_messages')
+        .from('messages')
         .select('id')
         .eq('whatsapp_message_id', whatsappMessageId)
         .maybeSingle()
@@ -253,70 +252,24 @@ async function processWhatsAppMessage(messageData: any) {
         }
       }
 
-      // Store the WhatsApp message
+      // Store the message
       const { error: messageError } = await supabase
-        .from('whatsapp_messages')
-        .insert({
-          integration_id: integration.id,
-          conversation_id: conversationId,
-          whatsapp_message_id: whatsappMessageId,
-          sender_phone: senderPhone,
-          recipient_phone: recipientPhone,
-          message_type: messageType,
-          message_content: messageContent,
-          direction: 'inbound',
-          whatsapp_timestamp: parseInt(timestamp)
-        })
-
-      if (messageError) {
-        console.error('Error storing WhatsApp message:', messageError)
-        continue
-      }
-
-      // Store the WhatsApp message using UPSERT to handle race conditions
-      const { data: insertedMessage, error: whatsappMessageError } = await supabase
-        .from('whatsapp_messages')
-        .upsert({
-          whatsapp_message_id: whatsappMessageId,
-          integration_id: integration.id,
-          conversation_id: conversationId,
-          sender_phone: senderPhone,
-          recipient_phone: recipientPhone,
-          message_type: messageType,
-          message_content: messageContent,
-          direction: 'inbound',
-          whatsapp_timestamp: parseInt(timestamp)
-        }, {
-          onConflict: 'whatsapp_message_id',
-          ignoreDuplicates: false
-        })
-        .select()
-
-      if (whatsappMessageError) {
-        console.error('Error storing WhatsApp message:', whatsappMessageError)
-        continue
-      }
-
-      // Check if this is a new message or if it was already processed
-      if (!insertedMessage || insertedMessage.length === 0) {
-        continue // Message already processed
-      }
-
-      // Store the message in conversations table for AI context
-      const { error: conversationMessageError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           content: textContent,
-          sender_type: 'client',
+          sender: 'client',
+          whatsapp_message_id: whatsappMessageId,
           message_type: messageType,
-          metadata: { whatsapp_message_id: whatsappMessageId }
+          metadata: messageContent
         })
 
-      if (conversationMessageError) {
-        console.error('Error storing conversation message:', conversationMessageError)
+      if (messageError) {
+        console.error('Error storing message:', messageError)
         continue
       }
+
+      console.log('✅ Message stored successfully')
 
       // Only process AI response for text messages (for now)
       if (messageType === 'text' && textContent.trim()) {
