@@ -321,8 +321,17 @@ async function generateAndSendAIResponse(
     const aiResponse = await response.json()
     
     if (aiResponse.response) {
+      // Extract credentials from config JSONB
+      const accessToken = integration.config?.access_token
+      const phoneNumberId = integration.config?.phone_number_id
+      
+      if (!accessToken || !phoneNumberId) {
+        console.error('Missing WhatsApp credentials in integration config')
+        return
+      }
+      
       // Send response via WhatsApp
-      await sendWhatsAppMessage(integration.access_token, integration.phone_number_id, senderPhone, aiResponse.response)
+      await sendWhatsAppMessage(accessToken, phoneNumberId, senderPhone, aiResponse.response)
     }
 
   } catch (error) {

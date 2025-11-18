@@ -1153,26 +1153,26 @@ ${conversationContext}
 Usuario: ${userMessage}
 Bot: ${aiResponse}
 
-FECHAS DE REFERENCIA:
-- Hoy es: ${new Date().toISOString().split('T')[0]}
-- "Mañana" = ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+DATOS DEL CLIENTE (ya disponibles):
+- Nombre: ${senderName || extractedClientData?.name || 'Usuario de Prueba'}
+- Teléfono: ${senderPhone || extractedClientData?.phone || 'test-user'}
 
 INSTRUCCIONES:
-- Si el bot dice "RESERVA CONFIRMADA" o "confirmada para" o habla de una reserva específica con datos completos, entonces SÍ hay una reserva completa
-- Si la fecha dice "mañana", usar la fecha de mañana
-- Si dice "20hs", "8pm", "viernes", convertir al formato correcto 
-- Si dice "para 3 personas" o "3 personas", extraer el número
-- Extrae el nombre mencionado en la conversación (ej: "alvaro gonzalez")
+1. Si el bot confirma "RESERVA CONFIRMADA", extrae toda la información
+2. Para fechas relativas como "este viernes", "mañana", "el sábado" - usa tu conocimiento de la fecha actual
+3. Si menciona una fecha específica como "18 de noviembre", usa 2025-11-18
+4. Para horas: "22 horas" = "22:00", "8pm" = "20:00"
+5. USA el nombre y teléfono del cliente proporcionados arriba
 
 Si hay una reserva completa, responde SOLO con JSON:
 {
   "hasReservation": true,
-  "customerName": "nombre extraído o Usuario de Prueba",
-  "customerPhone": "teléfono extraído o test-user",
+  "customerName": "${senderName || extractedClientData?.name || 'Usuario de Prueba'}",
+  "customerPhone": "${senderPhone || extractedClientData?.phone || 'test-user'}",
   "reservationDate": "YYYY-MM-DD",
   "reservationTime": "HH:MM",
   "partySize": número_de_personas,
-  "specialRequests": null
+  "specialRequests": "texto o null"
 }
 
 Si NO hay reserva completa, responde: NO_RESERVATION
@@ -1225,7 +1225,10 @@ Si NO hay reserva completa, responde: NO_RESERVATION
           }
           
           const reservationData = JSON.parse(cleanedText)
-          
+
+          // Confiar completamente en la fecha que extrajo la IA
+          console.log('✅ Using AI-extracted reservation data:', reservationData)
+
           if (reservationData.hasReservation) {
             // Use Gemini extracted reservation data (most reliable)
             let customerName = reservationData.customerName || senderName || conversation.client_name
