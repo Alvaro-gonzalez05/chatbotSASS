@@ -213,9 +213,9 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("es-ES", {
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "EUR",
+      currency: "USD",
     }).format(amount)
   }
 
@@ -474,11 +474,17 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
                           )}
                           {(client.instagram_username || client.instagram) && (
                             <a
-                              href={client.instagram_username ? `https://instagram.com/${client.instagram_username}` : `https://instagram.com`}
+                              href={
+                                client.instagram_username 
+                                  ? `https://instagram.com/${client.instagram_username}` 
+                                  : client.instagram 
+                                    ? `https://instagram.com/${client.instagram.replace(/^@/, '')}` 
+                                    : "https://instagram.com"
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center text-sm hover:text-pink-600 transition-colors cursor-pointer"
-                              title={client.instagram_username ? "Ver perfil de Instagram" : "Instagram"}
+                              title="Ver perfil de Instagram"
                             >
                               <Instagram className="h-3 w-3 mr-1" />
                               {client.instagram_username ? `@${client.instagram_username}` : client.instagram}

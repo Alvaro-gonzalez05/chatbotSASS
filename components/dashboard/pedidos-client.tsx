@@ -17,6 +17,7 @@ import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
 import { ProductEditForm } from "./product-edit-form"
 import { toast } from "sonner"
+import { DashboardPagination } from "./dashboard-pagination"
 
 interface Order {
   id: string
@@ -65,13 +66,20 @@ interface PedidosClientProps {
   initialProducts: Product[]
   initialCategories: string[]
   deliverySettings?: DeliverySettings
+  pagination?: {
+    page: number
+    limit: number
+    totalItems: number
+    totalPages: number
+  }
 }
 
 export function PedidosClient({ 
   initialOrders, 
   initialProducts, 
   initialCategories,
-  deliverySettings: initialDeliverySettings 
+  deliverySettings: initialDeliverySettings,
+  pagination
 }: PedidosClientProps) {
   const [orders] = useState<Order[]>(initialOrders)
   const [products, setProducts] = useState<Product[]>(initialProducts)
@@ -361,6 +369,17 @@ export function PedidosClient({
                   ))}
                 </TableBody>
               </Table>
+              {pagination && (
+                <div className="p-4 border-t">
+                  <DashboardPagination
+                    currentPage={pagination.page}
+                    totalPages={pagination.totalPages}
+                    totalItems={pagination.totalItems}
+                    itemsPerPage={pagination.limit}
+                    entityName={{ singular: "pedido", plural: "pedidos" }}
+                  />
+                </div>
+              )}
             </Card>
           )}
         </TabsContent>

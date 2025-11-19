@@ -19,8 +19,19 @@ export function ClientsSearch({
   const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState(defaultValue)
 
+  // Sync with URL changes (e.g. back button)
+  useEffect(() => {
+    const urlSearch = searchParams.get("search") || ""
+    if (searchTerm !== urlSearch) {
+      setSearchTerm(urlSearch)
+    }
+  }, [searchParams])
+
   // Debounce search
   useEffect(() => {
+    const currentSearch = searchParams.get("search") || ""
+    if (searchTerm === currentSearch) return
+
     const timer = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
       
