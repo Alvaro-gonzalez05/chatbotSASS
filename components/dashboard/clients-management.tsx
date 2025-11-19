@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,9 +21,11 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Users, Gift, Calendar, Phone, Mail, Instagram } from "lucide-react"
+import { Plus, MoreHorizontal, Edit, Trash2, Users, Gift, Calendar, Phone, Mail, Instagram } from "lucide-react"
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
+import { ClientsPagination } from "./clients-pagination"
+import { ClientsSearch } from "./clients-search"
 
 interface Client {
   id: string
@@ -42,16 +44,29 @@ interface Client {
 interface ClientsManagementProps {
   initialClients: Client[]
   userId: string
+  pagination: {
+    page: number
+    limit: number
+    totalItems: number
+    totalPages: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  }
+  searchTerm: string
 }
 
-export function ClientsManagement({ initialClients, userId }: ClientsManagementProps) {
+export function ClientsManagement({ initialClients, userId, pagination, searchTerm }: ClientsManagementProps) {
   const [clients, setClients] = useState<Client[]>(initialClients)
-  const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const supabase = createClient()
+
+  // Update clients when initialClients change (when navigating pages)
+  useEffect(() => {
+    setClients(initialClients)
+  }, [initialClients])
 
   // Form state
   const [formData, setFormData] = useState({
@@ -95,13 +110,20 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
 
       if (error) throw error
 
-      setClients([data, ...clients])
+      // If we're on the first page, add the client to the current list
+      if (pagination.page === 1) {
+        setClients([data, ...clients.slice(0, pagination.limit - 1)])
+      }
+      
       setIsAddDialogOpen(false)
       resetForm()
       toast.success("Cliente añadido exitosamente", {
         description: `${formData.name} ha sido añadido a tu lista de clientes.`,
         duration: 4000,
       })
+
+      // Refresh the page to get updated pagination info
+      window.location.reload()
     } catch (error) {
       toast.error("Error al añadir cliente", {
         description: "No se pudo añadir el cliente. Inténtalo de nuevo.",
@@ -158,6 +180,11 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
         description: `${clientName} ha sido eliminado exitosamente.`,
         duration: 4000,
       })
+
+      // If the current page becomes empty, refresh to redirect to appropriate page
+      if (clients.length === 1 && pagination.page > 1) {
+        window.location.reload()
+      }
     } catch (error) {
       toast.error("Error al eliminar cliente", {
         description: "No se pudo eliminar el cliente. Inténtalo de nuevo.",
@@ -179,13 +206,6 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
     })
     setIsEditDialogOpen(true)
   }
-
-  const filteredClients = clients.filter(
-    (client) =>
-      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.phone?.includes(searchTerm),
-  )
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-"
@@ -324,7 +344,7 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
             </CardHeader>
             <CardContent>
               <ScrollScaleIn delay={0.3}>
-                <div className="text-2xl font-bold">{clients.length}</div>
+                <div className="text-2xl font-bold">{pagination.totalItems}</div>
               </ScrollScaleIn>
               <p className="text-xs text-muted-foreground">Clientes registrados</p>
             </CardContent>
@@ -373,15 +393,7 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
         </CardHeader>
         <CardContent>
           <div className="flex items-center space-x-2 mb-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre, email o teléfono..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
-            </div>
+            <ClientsSearch defaultValue={searchTerm} />
           </div>
 
           {/* Clients Table */}
@@ -399,7 +411,7 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredClients.length === 0 ? (
+                {clients.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8">
                       <div className="flex flex-col items-center space-y-2">
@@ -419,7 +431,7 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredClients.map((client, index) => (
+                  clients.map((client, index) => (
                     <motion.tr
                       key={client.id}
                       className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
@@ -513,6 +525,14 @@ export function ClientsManagement({ initialClients, userId }: ClientsManagementP
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination */}
+          <ClientsPagination 
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.totalItems}
+            itemsPerPage={pagination.limit}
+          />
         </CardContent>
         </Card>
       </ScrollFadeIn>
