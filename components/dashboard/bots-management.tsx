@@ -486,7 +486,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                     <PlatformIcon className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
                     <CardTitle className="text-sm sm:text-lg truncate">{bot.name}</CardTitle>
                   </div>
-                  <DropdownMenu>
+                  <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <motion.div
                         whileHover={{ scale: 1.1 }}
@@ -596,24 +596,15 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
         onClose={() => {
           setIsMetaConfigDialogOpen(false)
           setSelectedBot(null)
-          // Recargar página para evitar estados inconsistentes
-          window.location.reload()
         }}
         bot={selectedBot}
         onConfigComplete={() => {
-          // Recargar la página para asegurar que todo esté sincronizado
-          window.location.reload()
+          // Actualizar estado si es necesario
         }}
       />
 
       {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
-        setIsEditDialogOpen(open)
-        if (!open) {
-          // Recargar página cuando se cierra el diálogo (incluyendo clic afuera)
-          window.location.reload()
-        }
-      }}>
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] sm:max-h-[80vh] overflow-y-auto mx-4 sm:mx-0">
           <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
             <DialogTitle className="text-lg sm:text-xl">Editar Bot</DialogTitle>
@@ -737,8 +728,6 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
               >
                 <Button type="button" variant="outline" onClick={() => {
                   setIsEditDialogOpen(false)
-                  // Recargar página al cancelar edición
-                  window.location.reload()
                 }} className="w-full sm:w-auto text-sm sm:text-base">
                   Cancelar
                 </Button>

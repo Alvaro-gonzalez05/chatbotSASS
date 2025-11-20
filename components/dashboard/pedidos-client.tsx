@@ -11,13 +11,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Eye, Settings } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Eye, Settings, MoreHorizontal } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
 import { ProductEditForm } from "./product-edit-form"
 import { toast } from "sonner"
 import { DashboardPagination } from "./dashboard-pagination"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
+import { DialogFooter } from "@/components/ui/dialog"
 
 interface Order {
   id: string
@@ -81,11 +86,18 @@ export function PedidosClient({
   deliverySettings: initialDeliverySettings,
   pagination
 }: PedidosClientProps) {
-  const [orders] = useState<Order[]>(initialOrders)
+  const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [categories, setCategories] = useState<string[]>(initialCategories)
   const [isLoading, setIsLoading] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  
+  // Order management state
+  const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const supabase = createClient()
+  const router = useRouter()
+
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(
     initialDeliverySettings || {
       pickup_enabled: true,
@@ -139,6 +151,76 @@ export function PedidosClient({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleDeleteOrder = (orderId: string) => {
+    toast("¿Estás seguro de eliminar este pedido?", {
+      description: "Esta acción no se puede deshacer.",
+      action: {
+        label: "Eliminar",
+        onClick: () => performDeleteOrder(orderId),
+      },
+    })
+  }
+
+  const performDeleteOrder = async (orderId: string) => {
+    setIsLoading(true)
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", orderId)
+
+      if (error) throw error
+
+      setOrders(orders.filter(o => o.id !== orderId))
+      toast.success("Pedido eliminado correctamente")
+      router.refresh()
+    } catch (error) {
+      console.error("Error deleting order:", error)
+      toast.error("No se pudo eliminar el pedido")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleUpdateOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!selectedOrder) return
+
+    setIsLoading(true)
+    const formData = new FormData(e.currentTarget)
+    
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .update({
+          status: formData.get("status"),
+          total_amount: parseFloat(formData.get("total_amount") as string),
+          delivery_address: formData.get("delivery_address"),
+          customer_notes: formData.get("customer_notes"),
+        })
+        .eq("id", selectedOrder.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setOrders(orders.map(o => o.id === selectedOrder.id ? { ...o, ...data } : o))
+      toast.success("Pedido actualizado correctamente")
+      setIsEditOrderDialogOpen(false)
+      router.refresh()
+    } catch (error) {
+      console.error("Error updating order:", error)
+      toast.error("No se pudo actualizar el pedido")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const openEditOrderDialog = (order: Order) => {
+    setSelectedOrder(order)
+    setIsEditOrderDialogOpen(true)
   }
 
   const getOrderTypeLabel = (orderType?: string) => {
@@ -298,72 +380,93 @@ export function PedidosClient({
                         })}
                       </TableCell>
                       <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-2xl">
-                            <DialogHeader>
-                              <DialogTitle>Detalles del Pedido</DialogTitle>
-                              <DialogDescription>
-                                Información completa del pedido #{order.id.slice(0, 8)}
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label>Cliente</Label>
-                                  <p>{order.client?.name || order.delivery_phone || 'Cliente Anónimo'}</p>
+                        <div className="flex items-center gap-2">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl">
+                              <DialogHeader>
+                                <DialogTitle>Detalles del Pedido</DialogTitle>
+                                <DialogDescription>
+                                  Información completa del pedido #{order.id.slice(0, 8)}
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <Label>Cliente</Label>
+                                    <p>{order.client?.name || order.delivery_phone || 'Cliente Anónimo'}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Teléfono</Label>
+                                    <p>{order.delivery_phone}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Estado</Label>
+                                    <Badge className={`${getStatusColor(order.status)} text-white`}>
+                                      {getStatusText(order.status)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <Label>Modalidad</Label>
+                                    <Badge className={`${getOrderTypeBadgeColor(order.order_type)} text-white`}>
+                                      {getOrderTypeLabel(order.order_type)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <Label>Total</Label>
+                                    <p className="font-medium">${order.total_amount}</p>
+                                  </div>
                                 </div>
+                                {order.delivery_address && (
+                                  <div>
+                                    <Label>Dirección de entrega</Label>
+                                    <p>{order.delivery_address}</p>
+                                  </div>
+                                )}
+                                {order.customer_notes && (
+                                  <div>
+                                    <Label>Notas del cliente</Label>
+                                    <p>{order.customer_notes}</p>
+                                  </div>
+                                )}
                                 <div>
-                                  <Label>Teléfono</Label>
-                                  <p>{order.delivery_phone}</p>
-                                </div>
-                                <div>
-                                  <Label>Estado</Label>
-                                  <Badge className={`${getStatusColor(order.status)} text-white`}>
-                                    {getStatusText(order.status)}
-                                  </Badge>
-                                </div>
-                                <div>
-                                  <Label>Modalidad</Label>
-                                  <Badge className={`${getOrderTypeBadgeColor(order.order_type)} text-white`}>
-                                    {getOrderTypeLabel(order.order_type)}
-                                  </Badge>
-                                </div>
-                                <div>
-                                  <Label>Total</Label>
-                                  <p className="font-medium">${order.total_amount}</p>
+                                  <Label>Productos</Label>
+                                  <div className="mt-2 space-y-2">
+                                    {Array.isArray(order.items) && order.items.map((item: any, index: number) => (
+                                      <div key={index} className="flex justify-between items-center p-2 bg-muted rounded">
+                                        <span>{item.product_name || `Producto ${index + 1}`}</span>
+                                        <span>x{item.quantity} - ${item.price}</span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
-                              {order.delivery_address && (
-                                <div>
-                                  <Label>Dirección de entrega</Label>
-                                  <p>{order.delivery_address}</p>
-                                </div>
-                              )}
-                              {order.customer_notes && (
-                                <div>
-                                  <Label>Notas del cliente</Label>
-                                  <p>{order.customer_notes}</p>
-                                </div>
-                              )}
-                              <div>
-                                <Label>Productos</Label>
-                                <div className="mt-2 space-y-2">
-                                  {Array.isArray(order.items) && order.items.map((item: any, index: number) => (
-                                    <div key={index} className="flex justify-between items-center p-2 bg-muted rounded">
-                                      <span>{item.product_name || `Producto ${index + 1}`}</span>
-                                      <span>x{item.quantity} - ${item.price}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                            </DialogContent>
+                          </Dialog>
+
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menú</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditOrderDialog(order)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDeleteOrder(order.id)} className="text-red-600">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Eliminar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -662,6 +765,77 @@ export function PedidosClient({
           isOpen={!!editingProduct}
         />
       )}
+
+      {/* Edit Order Dialog */}
+      <Dialog open={isEditOrderDialogOpen} onOpenChange={setIsEditOrderDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Pedido</DialogTitle>
+            <DialogDescription>
+              Modifica los detalles del pedido.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrder && (
+            <form onSubmit={handleUpdateOrder} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="status">Estado</Label>
+                  <Select name="status" defaultValue={selectedOrder.status}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendiente</SelectItem>
+                      <SelectItem value="confirmed">Confirmado</SelectItem>
+                      <SelectItem value="preparing">Preparando</SelectItem>
+                      <SelectItem value="ready">Listo</SelectItem>
+                      <SelectItem value="delivered">Entregado</SelectItem>
+                      <SelectItem value="cancelled">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="total_amount">Total ($)</Label>
+                  <Input 
+                    id="total_amount" 
+                    name="total_amount" 
+                    type="number" 
+                    step="0.01"
+                    defaultValue={selectedOrder.total_amount} 
+                    required 
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="delivery_address">Dirección de entrega</Label>
+                <Input 
+                  id="delivery_address" 
+                  name="delivery_address" 
+                  defaultValue={selectedOrder.delivery_address || ''} 
+                  placeholder="Dirección completa"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer_notes">Notas del cliente</Label>
+                <Textarea 
+                  id="customer_notes" 
+                  name="customer_notes" 
+                  defaultValue={selectedOrder.customer_notes || ''} 
+                  placeholder="Notas adicionales..."
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsEditOrderDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? "Guardando..." : "Guardar cambios"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

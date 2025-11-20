@@ -660,7 +660,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
                               <p className="text-sm text-muted-foreground">{triggerConfig.label}</p>
                             </div>
                           </div>
-                          <DropdownMenu>
+                          <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm">
                                 <MoreHorizontal className="h-4 w-4" />

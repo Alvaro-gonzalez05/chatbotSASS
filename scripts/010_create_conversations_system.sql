@@ -108,11 +108,13 @@ CREATE POLICY "products_delete_own" ON public.products FOR DELETE USING (auth.ui
 CREATE POLICY "orders_select_own" ON public.orders FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "orders_insert_own" ON public.orders FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "orders_update_own" ON public.orders FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "orders_delete_own" ON public.orders FOR DELETE USING (auth.uid() = user_id);
 
 -- RLS Policies for reservations
 CREATE POLICY "reservations_select_own" ON public.reservations FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "reservations_insert_own" ON public.reservations FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "reservations_update_own" ON public.reservations FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "reservations_delete_own" ON public.reservations FOR DELETE USING (auth.uid() = user_id);
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS conversations_user_id_idx ON public.conversations(user_id);

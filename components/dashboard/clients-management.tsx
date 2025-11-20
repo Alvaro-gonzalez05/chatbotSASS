@@ -499,7 +499,7 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
                       <TableCell>{formatDate(client.last_purchase_date)}</TableCell>
                       <TableCell>{formatDate(client.birthday)}</TableCell>
                       <TableCell>
-                        <DropdownMenu>
+                        <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
                             <motion.div
                               whileHover={{ scale: 1.1 }}

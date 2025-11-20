@@ -5,12 +5,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calendar, Clock, Users, Phone, Eye } from "lucide-react"
+import { Calendar, Clock, Users, Phone, Eye, MoreHorizontal, Edit, Trash } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { DashboardPagination } from "./dashboard-pagination"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface Reservation {
   id: string
@@ -38,6 +51,87 @@ interface ReservasClientProps {
 }
 
 export function ReservasClient({ reservations, pagination }: ReservasClientProps) {
+  const supabase = createClient()
+  const router = useRouter()
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleDelete = (id: string) => {
+    toast("¿Estás seguro de eliminar esta reserva?", {
+      description: "Esta acción no se puede deshacer.",
+      action: {
+        label: "Eliminar",
+        onClick: () => performDelete(id),
+      },
+    })
+  }
+
+  const performDelete = async (id: string) => {
+    setIsLoading(true)
+    try {
+      const { error } = await supabase
+        .from("reservations")
+        .delete()
+        .eq("id", id)
+
+      if (error) throw error
+
+      toast.success("Reserva eliminada", {
+        description: "La reserva ha sido eliminada correctamente.",
+      })
+      router.refresh()
+    } catch (error) {
+      console.error("Error deleting reservation:", error)
+      toast.error("Error", {
+        description: "No se pudo eliminar la reserva.",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleEdit = (reservation: Reservation) => {
+    setSelectedReservation(reservation)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleUpdateReservation = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!selectedReservation) return
+
+    setIsLoading(true)
+    const formData = new FormData(e.currentTarget)
+    
+    try {
+      const { error } = await supabase
+        .from("reservations")
+        .update({
+          reservation_date: formData.get("date"),
+          reservation_time: formData.get("time"),
+          party_size: formData.get("party_size"),
+          status: formData.get("status"),
+          table_number: formData.get("table_number"),
+        })
+        .eq("id", selectedReservation.id)
+
+      if (error) throw error
+
+      toast.success("Reserva actualizada", {
+        description: "Los cambios se han guardado correctamente.",
+      })
+      setIsEditDialogOpen(false)
+      router.refresh()
+    } catch (error) {
+      console.error("Error updating reservation:", error)
+      toast.error("Error", {
+        description: "No se pudo actualizar la reserva.",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-500'
@@ -175,69 +269,92 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
                         {reservation.table_number || 'No asignada'}
                       </TableCell>
                       <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Detalles de la Reserva</DialogTitle>
-                              <DialogDescription>
-                                Información completa de la reserva
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label>Cliente</Label>
-                                  <p>{reservation.customer_name}</p>
+                        <div className="flex items-center gap-2">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Detalles de la Reserva</DialogTitle>
+                                <DialogDescription>
+                                  Información completa de la reserva
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <Label>Cliente</Label>
+                                    <p>{reservation.customer_name}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Teléfono</Label>
+                                    <p>{reservation.customer_phone}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Fecha</Label>
+                                    <p>{format(new Date(reservation.reservation_date + 'T12:00:00'), 'dd MMMM yyyy', { locale: es })}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Hora</Label>
+                                    <p>{reservation.reservation_time}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Número de personas</Label>
+                                    <p>{reservation.party_size}</p>
+                                  </div>
+                                  <div>
+                                    <Label>Estado</Label>
+                                    <Badge className={`${getStatusColor(reservation.status)} text-white`}>
+                                      {getStatusText(reservation.status)}
+                                    </Badge>
+                                  </div>
                                 </div>
+                                {reservation.table_number && (
+                                  <div>
+                                    <Label>Mesa asignada</Label>
+                                    <p>{reservation.table_number}</p>
+                                  </div>
+                                )}
+                                {reservation.special_requests && (
+                                  <div>
+                                    <Label>Solicitudes especiales</Label>
+                                    <p>{reservation.special_requests}</p>
+                                  </div>
+                                )}
                                 <div>
-                                  <Label>Teléfono</Label>
-                                  <p>{reservation.customer_phone}</p>
-                                </div>
-                                <div>
-                                  <Label>Fecha</Label>
-                                  <p>{format(new Date(reservation.reservation_date + 'T12:00:00'), 'dd MMMM yyyy', { locale: es })}</p>
-                                </div>
-                                <div>
-                                  <Label>Hora</Label>
-                                  <p>{reservation.reservation_time}</p>
-                                </div>
-                                <div>
-                                  <Label>Número de personas</Label>
-                                  <p>{reservation.party_size}</p>
-                                </div>
-                                <div>
-                                  <Label>Estado</Label>
-                                  <Badge className={`${getStatusColor(reservation.status)} text-white`}>
-                                    {getStatusText(reservation.status)}
+                                  <Label>Plataforma</Label>
+                                  <Badge variant="outline">
+                                    {reservation.conversation?.platform || 'N/A'}
                                   </Badge>
                                 </div>
                               </div>
-                              {reservation.table_number && (
-                                <div>
-                                  <Label>Mesa asignada</Label>
-                                  <p>{reservation.table_number}</p>
-                                </div>
-                              )}
-                              {reservation.special_requests && (
-                                <div>
-                                  <Label>Solicitudes especiales</Label>
-                                  <p>{reservation.special_requests}</p>
-                                </div>
-                              )}
-                              <div>
-                                <Label>Plataforma</Label>
-                                <Badge variant="outline">
-                                  {reservation.conversation?.platform || 'N/A'}
-                                </Badge>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                            </DialogContent>
+                          </Dialog>
+
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menú</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => handleEdit(reservation)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleDelete(reservation.id)} className="text-red-600">
+                                <Trash className="mr-2 h-4 w-4" />
+                                Eliminar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -256,6 +373,85 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
           )}
         </CardContent>
       </Card>
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Reserva</DialogTitle>
+            <DialogDescription>
+              Modifica los detalles de la reserva.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReservation && (
+            <form onSubmit={handleUpdateReservation} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="date">Fecha</Label>
+                  <Input 
+                    id="date" 
+                    name="date" 
+                    type="date" 
+                    defaultValue={selectedReservation.reservation_date} 
+                    required 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="time">Hora</Label>
+                  <Input 
+                    id="time" 
+                    name="time" 
+                    type="time" 
+                    defaultValue={selectedReservation.reservation_time} 
+                    required 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="party_size">Personas</Label>
+                  <Input 
+                    id="party_size" 
+                    name="party_size" 
+                    type="number" 
+                    min="1"
+                    defaultValue={selectedReservation.party_size} 
+                    required 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Estado</Label>
+                  <Select name="status" defaultValue={selectedReservation.status}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendiente</SelectItem>
+                      <SelectItem value="confirmed">Confirmada</SelectItem>
+                      <SelectItem value="completed">Completada</SelectItem>
+                      <SelectItem value="cancelled">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="table_number">Número de Mesa</Label>
+                <Input 
+                  id="table_number" 
+                  name="table_number" 
+                  placeholder="Ej: Mesa 5"
+                  defaultValue={selectedReservation.table_number || ''} 
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? "Guardando..." : "Guardar cambios"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

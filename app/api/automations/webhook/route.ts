@@ -54,6 +54,8 @@ export async function POST(request: NextRequest) {
       case 'automations':
         // Nuevo: manejar cuando se crea/activa una automatización de promoción
         if (type === 'INSERT' && record.trigger_type === 'new_promotion' && record.promotion) {
+          // Esperar 5 segundos para permitir que la UI del cliente muestre la confirmación antes de iniciar el procesamiento pesado
+          await new Promise(resolve => setTimeout(resolve, 5000))
           await handlePromotionAutomation(supabase, record)
         }
         break
@@ -238,8 +240,23 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
       scheduledFor.setMinutes(scheduledFor.getMinutes() + 2)
     }
 
+
+    // Obtener información del negocio una sola vez
+    const { data: businessInfo } = await supabase
+      .from('business_info')
+      .select('name')
+      .eq('user_id', automation.user_id)
+      .single()
+    
+    const businessName = businessInfo?.name || 'nuestro negocio'
+
+    // Arrays para inserción por lotes
+    const messagesToInsert: any[] = []
+    const logsToInsert: any[] = []
+
     // Programar mensaje para TODOS los clientes
     let messagesQueued = 0
+    
     for (const client of clients) {
       try {
         // Generar mensaje personalizado
@@ -250,15 +267,8 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
         messageContent = messageContent.replace(/\{promocion\}/g, promotion.name)
         messageContent = messageContent.replace(/\{promotion_name\}/g, promotion.name)
         
-        // Obtener información del negocio si está disponible
-        const { data: businessInfo } = await supabase
-          .from('business_info')
-          .select('name')
-          .eq('user_id', automation.user_id)
-          .single()
-        
-        messageContent = messageContent.replace(/\{negocio\}/g, businessInfo?.name || 'nuestro negocio')
-        messageContent = messageContent.replace(/\{business_name\}/g, businessInfo?.name || 'nuestro negocio')
+        messageContent = messageContent.replace(/\{negocio\}/g, businessName)
+        messageContent = messageContent.replace(/\{business_name\}/g, businessName)
 
         // Si la promoción tiene imagen, incluir referencia
         if (promotion.image_url) {
@@ -266,10 +276,70 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
         }
 
         // Distribuir mensajes en el tiempo (evitar spam)
+        // Reducido a 0.5 segundos entre mensajes para procesar 360 clientes en ~3 minutos
         const clientScheduledFor = new Date(scheduledFor)
-        clientScheduledFor.setSeconds(clientScheduledFor.getSeconds() + (messagesQueued * 10)) // 10 seg entre mensajes
+        clientScheduledFor.setMilliseconds(clientScheduledFor.getMilliseconds() + (messagesQueued * 500)) 
 
-        // Insertar en cola de mensajes programados
+        // Preparar metadata para plantilla de WhatsApp si corresponde
+        let templateMetadata = {};
+        if (bot.platform === 'whatsapp' && automation.template_variables?.meta_template_name) {
+           const mapping = automation.template_variables.variable_mapping || {};
+           const parameters = [];
+           
+           // Ordenar variables numéricas (var_1, var_2...)
+           const sortedKeys = Object.keys(mapping).sort((a, b) => {
+             const numA = parseInt(a.replace('var_', '')) || 0;
+             const numB = parseInt(b.replace('var_', '')) || 0;
+             return numA - numB;
+           });
+
+           for (const key of sortedKeys) {
+             const fieldName = mapping[key];
+             let value = '';
+             
+             // Resolver valor según el campo mapeado
+             switch(fieldName) {
+               case 'nombre':
+               case 'nombre_cliente':
+                 value = client.name || 'Cliente';
+                 break;
+               case 'email':
+                 value = client.email || '';
+                 break;
+               case 'telefono':
+                 value = client.phone || '';
+                 break;
+               case 'nombre_promocion':
+                 value = promotion.name || '';
+                 break;
+               case 'descripcion_promocion':
+                 value = promotion.description || '';
+                 break;
+               case 'fecha_inicio':
+                 value = promotion.start_date ? new Date(promotion.start_date).toLocaleDateString() : '';
+                 break;
+               case 'fecha_fin':
+                 value = promotion.end_date ? new Date(promotion.end_date).toLocaleDateString() : '';
+                 break;
+               default:
+                 value = fieldName; // Fallback
+             }
+             
+             parameters.push({
+               type: "text",
+               text: value
+             });
+           }
+           
+           templateMetadata = {
+             is_meta_template: true,
+             template_name: automation.template_variables.meta_template_name,
+             template_language: automation.template_variables.meta_template_language || 'es',
+             template_parameters: parameters
+           };
+        }
+
+        // Preparar datos del mensaje
         const messageData: any = {
           user_id: automation.user_id,
           automation_id: automation.id,
@@ -282,7 +352,8 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
           priority: 3, // Prioridad media para promociones
           metadata: {
             promotion_id: promotion.id,
-            promotion_name: promotion.name
+            promotion_name: promotion.name,
+            ...templateMetadata
           }
         }
 
@@ -295,18 +366,9 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
           messageData.recipient_email = client.email
         }
 
-        const { error: scheduleError } = await supabase
-          .from('scheduled_messages')
-          .insert(messageData)
+        messagesToInsert.push(messageData)
 
-        if (scheduleError) {
-          console.error(`❌ Error scheduling promotion message for client ${client.id}:`, scheduleError)
-          continue
-        }
-
-        messagesQueued++
-
-        // Log de la automatización
+        // Preparar log
         const logData: any = {
           automation_id: automation.id,
           client_id: client.id,
@@ -320,21 +382,39 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
           }
         }
 
-        // Agregar identificador según plataforma
         if (bot.platform === 'whatsapp') {
           logData.recipient_phone = client.phone
         } else if (bot.platform === 'instagram') {
-          logData.recipient_phone = client.instagram // Usar el mismo campo para Instagram ID
+          logData.recipient_phone = client.instagram
         } else if (bot.platform === 'gmail') {
-          logData.recipient_phone = client.email // Usar el mismo campo para email
+          logData.recipient_phone = client.email
         }
 
-        await supabase
-          .from('automation_logs')
-          .insert(logData)
+        logsToInsert.push(logData)
+        messagesQueued++
 
       } catch (clientError) {
-        console.error(`💥 Error processing client ${client.id} for automation:`, clientError)
+        console.error(`💥 Error preparing client ${client.id} for automation:`, clientError)
+      }
+    }
+
+    // Insertar en lotes de 100 para evitar timeouts y límites de payload
+    const BATCH_SIZE = 100
+    for (let i = 0; i < messagesToInsert.length; i += BATCH_SIZE) {
+      const messageBatch = messagesToInsert.slice(i, i + BATCH_SIZE)
+      const logBatch = logsToInsert.slice(i, i + BATCH_SIZE)
+      
+      const { error: scheduleError } = await supabase
+        .from('scheduled_messages')
+        .insert(messageBatch)
+
+      if (scheduleError) {
+        console.error(`❌ Error scheduling batch ${i/BATCH_SIZE + 1}:`, scheduleError)
+      } else {
+        // Solo insertar logs si los mensajes se programaron correctamente
+        await supabase
+          .from('automation_logs')
+          .insert(logBatch)
       }
     }
 

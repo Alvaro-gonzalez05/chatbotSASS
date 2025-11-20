@@ -64,8 +64,7 @@ export default async function ReservasPage({ searchParams }: ReservasPageProps) 
       conversation:conversation_id(platform)
     `, { count: "exact" })
     .eq("user_id", data.user.id)
-    .order("reservation_date", { ascending: false }) // Order by date descending (newest first)
-    .order("reservation_time", { ascending: false })
+    .order("created_at", { ascending: false }) // Order by creation date (newest first)
     .range(offset, offset + limit - 1)
 
   // Calculate pagination info

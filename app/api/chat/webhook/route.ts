@@ -494,7 +494,7 @@ Estás habilitado para: ${capabilities.join(' y ')}.
 PEDIDOS: producto → modalidad → "PEDIDO CONFIRMADO"
 ` : ''}${features.includes('take_reservations') ? `
         ${features.includes('take_reservations') ? `
-RESERVAS: pedir fecha, hora, personas, nombre, teléfono → "RESERVA CONFIRMADA"
+RESERVAS: pedir fecha, hora, personas, nombre, teléfono → Confirmar con un mensaje natural que incluya la frase clave "RESERVA CONFIRMADA"
 - En el resumen, usa el nombre que te dio el cliente, no "Usuario de Prueba"
 - Acepta formatos naturales de fecha: "mañana", "el viernes", "15 de octubre"  
 - Acepta formatos naturales de hora: "7 pm", "19:00", "siete de la noche", "20 horas"
@@ -521,6 +521,8 @@ MANEJO DE CONTEXTO - MUY IMPORTANTE:
     const features = bot.features || []
 
     const systemPrompt = `Eres ${bot.name}, un asistente virtual amigable y profesional que representa a un negocio.
+
+FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
 
 INFORMACIÓN DEL NEGOCIO:
 ${businessInfo}
@@ -1148,6 +1150,8 @@ async function processReservationFromConversation(
     const extractionPrompt = `
 Analiza esta conversación de un bot de restaurante y extrae la información de la reserva si está completa.
 
+FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
+
 Conversación:
 ${conversationContext}
 Usuario: ${userMessage}
@@ -1159,8 +1163,8 @@ DATOS DEL CLIENTE (ya disponibles):
 
 INSTRUCCIONES:
 1. Si el bot confirma "RESERVA CONFIRMADA", extrae toda la información
-2. Para fechas relativas como "este viernes", "mañana", "el sábado" - usa tu conocimiento de la fecha actual
-3. Si menciona una fecha específica como "18 de noviembre", usa 2025-11-18
+2. Para fechas relativas como "este viernes", "mañana", "el sábado" - CALCULA la fecha exacta basándote en la FECHA Y HORA ACTUAL proporcionada arriba.
+3. Si menciona una fecha específica como "18 de noviembre", usa el año actual (2025)
 4. Para horas: "22 horas" = "22:00", "8pm" = "20:00"
 5. USA el nombre y teléfono del cliente proporcionados arriba
 

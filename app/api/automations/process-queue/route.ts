@@ -4,153 +4,168 @@ import { createAdminClient } from '@/lib/supabase/server'
 // Endpoint para procesar la cola de mensajes programados
 // Se puede llamar manualmente o desde un cron job
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  const MAX_DURATION = 55000; // 55 segundos de límite de seguridad (para evitar timeouts de Vercel)
+
   try {
-    const { batch_size = 50, user_id } = await request.json().catch(() => ({}))
+    const { batch_size = 100, user_id } = await request.json().catch(() => ({}))
     
     console.log('🚀 Processing message queue...', { batch_size, user_id })
     
     const supabase = createAdminClient()
+    
+    let totalProcessed = 0
+    let totalFailed = 0
+    let keepProcessing = true
+    let loopCount = 0
 
-    // Obtener mensajes pendientes para enviar
-    let query = supabase
-      .from('scheduled_messages')
-      .select(`
-        *,
-        automations!inner(*, bots!inner(*)),
-        clients(name, phone)
-      `)
-      .eq('status', 'pending')
-      .lte('scheduled_for', new Date().toISOString())
-      .order('priority', { ascending: true })
-      .order('scheduled_for', { ascending: true })
-      .limit(batch_size)
+    while (keepProcessing) {
+      loopCount++
+      
+      // Verificar límite de tiempo
+      if (Date.now() - startTime > MAX_DURATION) {
+        console.log('⏳ Time limit reached, stopping execution to avoid timeout')
+        break
+      }
 
-    // Filtrar por usuario si se especifica
-    if (user_id) {
-      query = query.eq('user_id', user_id)
-    }
+      // Obtener mensajes pendientes para enviar
+      let query = supabase
+        .from('scheduled_messages')
+        .select(`
+          *,
+          automations!inner(*, bots!inner(*)),
+          clients(name, phone)
+        `)
+        .eq('status', 'pending')
+        .lte('scheduled_for', new Date().toISOString())
+        .order('priority', { ascending: true })
+        .order('scheduled_for', { ascending: true })
+        .limit(batch_size)
 
-    const { data: pendingMessages, error: fetchError } = await query
+      // Filtrar por usuario si se especifica
+      if (user_id) {
+        query = query.eq('user_id', user_id)
+      }
 
-    if (fetchError) {
-      console.error('❌ Error fetching pending messages:', fetchError)
-      return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
-    }
+      const { data: pendingMessages, error: fetchError } = await query
 
-    if (!pendingMessages || pendingMessages.length === 0) {
-      console.log('ℹ️ No pending messages to process')
-      return NextResponse.json({ 
-        processed: 0, 
-        remaining: 0, 
-        message: 'No pending messages' 
-      })
-    }
+      if (fetchError) {
+        console.error('❌ Error fetching pending messages:', fetchError)
+        return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
+      }
 
-    console.log(`📤 Found ${pendingMessages.length} messages to process`)
+      if (!pendingMessages || pendingMessages.length === 0) {
+        console.log('ℹ️ No more pending messages to process')
+        keepProcessing = false
+        break
+      }
 
-    let processed = 0
-    let failed = 0
+      console.log(`Batch #${loopCount}: Found ${pendingMessages.length} messages to process`)
 
-    // Procesar cada mensaje
-    for (const message of pendingMessages) {
-      try {
-        // Marcar como procesando
+      let batchProcessed = 0
+      let batchFailed = 0
+
+      // Procesar mensajes en paralelo con concurrencia limitada
+      const CONCURRENCY = 10;
+      
+      for (let i = 0; i < pendingMessages.length; i += CONCURRENCY) {
+        const chunk = pendingMessages.slice(i, i + CONCURRENCY);
+        
+        // Marcar lote como procesando
         await supabase
           .from('scheduled_messages')
           .update({ status: 'processing', updated_at: new Date().toISOString() })
-          .eq('id', message.id)
+          .in('id', chunk.map(m => m.id));
 
-        // Determinar la plataforma del bot
-        const bot = message.automations.bots
-        const platform = bot.platform
+        // Procesar lote en paralelo
+        const results = await Promise.all(chunk.map(async (message) => {
+          try {
+            // Determinar la plataforma del bot
+            const bot = message.automations.bots
+            const platform = bot.platform
 
-        // Enviar usando la función unificada multi-plataforma
-        console.log(`📤 Processing message for ${platform}:`, {
-          recipient: message.recipient_name,
-          contact: message.recipient_phone || message.recipient_email || message.recipient_instagram_id,
-          automation: message.automations.name
-        })
+            // Enviar usando la función unificada multi-plataforma
+            const result = await sendMessage(message, bot)
+            const success = result.success
+            const externalMessageId = result.messageId || null
+            const errorMessage = result.error || null
 
-        const result = await sendMessage(message, bot)
-        const success = result.success
-        const externalMessageId = result.messageId || null
-        const errorMessage = result.error || null
+            // Crear log de la ejecución (PRIMERO, antes de borrar el mensaje)
+            await supabase
+              .from('automation_logs')
+              .insert({
+                automation_id: message.automation_id,
+                client_id: message.client_id,
+                scheduled_message_id: message.id,
+                log_type: success ? 'sent' : 'failed',
+                message_content: message.message_content,
+                recipient_phone: message.recipient_phone,
+                success: success,
+                error_details: errorMessage,
+                external_message_id: externalMessageId
+              })
 
-        if (success) {
-          console.log(`✅ Message sent successfully via ${platform}:`, externalMessageId)
-        } else {
-          console.error(`❌ Failed to send ${platform} message:`, errorMessage)
-        }
+            if (success) {
+              console.log(`✅ Message sent successfully via ${platform}:`, externalMessageId)
+              
+              // BORRAR mensaje de la cola si se envió correctamente
+              await supabase
+                .from('scheduled_messages')
+                .delete()
+                .eq('id', message.id)
+                
+              return { success: true, id: message.id }
+            } else {
+              console.error(`❌ Failed to send ${platform} message:`, errorMessage)
+              
+              // Actualizar estado a fallido (NO BORRAR)
+              await supabase
+                .from('scheduled_messages')
+                .update({
+                  status: 'failed',
+                  error_message: errorMessage,
+                  retry_count: (message.retry_count || 0) + 1,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', message.id)
+                
+              return { success: false, id: message.id, error: errorMessage }
+            }
 
-        // Actualizar estado del mensaje
-        const updateData: any = {
-          status: success ? 'sent' : 'failed',
-          updated_at: new Date().toISOString()
-        }
-
-        if (success) {
-          updateData.sent_at = new Date().toISOString()
-          updateData.external_message_id = externalMessageId
-          processed++
-        } else {
-          updateData.error_message = errorMessage
-          updateData.retry_count = (message.retry_count || 0) + 1
-          failed++
-        }
-
-        await supabase
-          .from('scheduled_messages')
-          .update(updateData)
-          .eq('id', message.id)
-
-        // Crear log de la ejecución
-        await supabase
-          .from('automation_logs')
-          .insert({
-            automation_id: message.automation_id,
-            client_id: message.client_id,
-            scheduled_message_id: message.id,
-            log_type: success ? 'sent' : 'failed',
-            message_content: message.message_content,
-            recipient_phone: message.recipient_phone,
-            success: success,
-            error_details: errorMessage,
-            external_message_id: externalMessageId
-          })
-
-        console.log(`${success ? '✅' : '❌'} Message ${message.id}: ${success ? 'sent' : 'failed'}`)
-
-      } catch (messageError) {
-        console.error('💥 Error processing message:', message.id, messageError)
-        failed++
+          } catch (messageError) {
+            console.error('💥 Error processing message:', message.id, messageError)
+            return { success: false, id: message.id, error: 'Unknown error' }
+          }
+        }));
         
-        // Marcar mensaje como fallido
-        await supabase
-          .from('scheduled_messages')
-          .update({
-            status: 'failed',
-            error_message: messageError instanceof Error ? messageError.message : 'Unknown error',
-            retry_count: (message.retry_count || 0) + 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', message.id)
+        batchProcessed += results.filter(r => r.success).length;
+        batchFailed += results.filter(r => !r.success).length;
+      }
+      
+      totalProcessed += batchProcessed
+      totalFailed += batchFailed
+
+      // Si obtuvimos menos mensajes que el tamaño del lote, significa que ya no hay más
+      if (pendingMessages.length < batch_size) {
+        keepProcessing = false
       }
     }
 
-    // Contar mensajes restantes
+    // Contar mensajes restantes totales
     const { count: remainingCount } = await supabase
       .from('scheduled_messages')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending')
       .lte('scheduled_for', new Date().toISOString())
 
-    console.log('📊 Processing completed:', { processed, failed, remaining: remainingCount || 0 })
+    console.log('📊 Processing completed:', { totalProcessed, totalFailed, remaining: remainingCount || 0 })
 
     return NextResponse.json({
-      processed,
-      failed,
+      processed: totalProcessed,
+      failed: totalFailed,
       remaining: remainingCount || 0,
-      success: true
+      success: true,
+      loops: loopCount
     })
 
   } catch (error) {
@@ -211,14 +226,34 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{success: bo
     }
 
     // Preparar el mensaje para WhatsApp Business API
-    const messagePayload = {
+    let messagePayload: any = {
       messaging_product: 'whatsapp',
-      to: message.recipient_phone,
-      type: 'text',
-      text: {
-        body: message.message_content
-      }
+      to: message.recipient_phone
     }
+
+    // Verificar si es una plantilla de Meta o mensaje de texto simple
+    if (message.metadata?.is_meta_template) {
+      messagePayload.type = 'template';
+      messagePayload.template = {
+        name: message.metadata.template_name,
+        language: {
+          code: message.metadata.template_language || 'es'
+        },
+        components: [
+          {
+            type: 'body',
+            parameters: message.metadata.template_parameters || []
+          }
+        ]
+      };
+    } else {
+      messagePayload.type = 'text';
+      messagePayload.text = {
+        body: message.message_content
+      };
+    }
+
+    console.log('[WhatsApp] Sending payload:', JSON.stringify(messagePayload, null, 2))
 
     // Enviar via WhatsApp Business API
     const response = await fetch(`https://graph.facebook.com/v18.0/${whatsappConfig.phone_number_id}/messages`, {
@@ -231,6 +266,7 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{success: bo
     })
 
     const result = await response.json()
+    console.log('[WhatsApp] API Response:', JSON.stringify(result, null, 2))
 
     if (response.ok && result.messages && result.messages[0]) {
       return { 

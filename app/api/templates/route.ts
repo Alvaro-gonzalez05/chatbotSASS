@@ -91,10 +91,10 @@ export async function GET(request: NextRequest) {
 // Obtener plantillas de WhatsApp Business desde Meta API
 async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: string | null) {
   try {
-    // Obtener configuraciones de WhatsApp del usuario desde la tabla bots
+    // 1. Obtener los bots de WhatsApp
     let query = supabase
       .from('bots')
-      .select('id, name, platform, integrations')
+      .select('id, name, platform, user_id')
       .eq('user_id', userId)
       .eq('platform', 'whatsapp')
       .eq('is_active', true)
@@ -109,33 +109,46 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
       return []
     }
 
+    // 2. Obtener la configuración de integración de WhatsApp
+    const { data: integration } = await supabase
+      .from('integrations')
+      .select('config')
+      .eq('user_id', userId)
+      .eq('platform', 'whatsapp')
+      .single()
+
+    const integrationConfig = integration?.config
+
+    if (!integrationConfig?.business_account_id || !integrationConfig?.access_token) {
+      console.log('Missing WhatsApp integration configuration')
+      return []
+    }
+
     const templates: any[] = []
 
     // Para cada bot de WhatsApp, obtener plantillas desde Meta API
-    for (const bot of bots) {
-      try {
-        // Verificar que tenga configuración de integración
-        const integrationConfig = bot.integrations
-        if (!integrationConfig?.business_account_id || !integrationConfig?.access_token) {
-          console.log(`Bot ${bot.id} missing configuration`)
-          continue
-        }
-
-        // Llamar a Meta Graph API para obtener message templates
-        const response = await fetch(
-          `https://graph.facebook.com/v18.0/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
-          {
-            headers: {
-              'Authorization': `Bearer ${integrationConfig.access_token}`,
-              'Content-Type': 'application/json'
-            }
+    // Nota: Como la integración es por cuenta (user_id), todos los bots comparten la misma WABA
+    // por lo que las plantillas serán las mismas para todos.
+    
+    try {
+      // Llamar a Meta Graph API para obtener message templates
+      // Usamos v21.0 como versión estable reciente
+      const response = await fetch(
+        `https://graph.facebook.com/v21.0/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
+        {
+          headers: {
+            'Authorization': `Bearer ${integrationConfig.access_token}`,
+            'Content-Type': 'application/json'
           }
-        )
+        }
+      )
 
-        if (response.ok) {
-          const result = await response.json()
-          
-          if (result.data) {
+      if (response.ok) {
+        const result = await response.json()
+        
+        if (result.data) {
+          // Asignamos las plantillas encontradas a cada bot solicitado
+          for (const bot of bots) {
             result.data.forEach((template: any) => {
               templates.push({
                 id: template.id || `whatsapp_${template.name}`,
@@ -156,12 +169,13 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
               })
             })
           }
-        } else {
-          console.error(`Failed to fetch WhatsApp templates for bot ${bot.id}:`, response.status)
         }
-      } catch (error) {
-        console.error(`Error fetching WhatsApp templates for bot ${bot.id}:`, error)
+      } else {
+        const errorText = await response.text()
+        console.error(`Failed to fetch WhatsApp templates: ${response.status}`, errorText)
       }
+    } catch (error) {
+      console.error(`Error fetching WhatsApp templates from Meta API:`, error)
     }
 
     return templates
@@ -285,16 +299,26 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
     }
 
     // Para cada bot de Instagram, obtener plantillas
+    // Obtener la configuración de integración de Instagram
+    const { data: integration } = await supabase
+      .from('integrations')
+      .select('config')
+      .eq('user_id', userId)
+      .eq('platform', 'instagram')
+      .single()
+      
+    let globalIntegrationConfig = integration?.config
+
     for (const bot of bots) {
       try {
-        // Verificar que tenga configuración de integración
-        let integrationConfig = bot.integrations
+        // Usar la configuración global de la tabla integrations
+        let integrationConfig = globalIntegrationConfig
         
         // Si se proporciona businessAccountId como parámetro, usarlo temporalmente
         const accountIdToUse = businessAccountId || integrationConfig?.business_account_id
         
         if (!integrationConfig?.access_token) {
-          console.log(`Instagram bot ${bot.id} missing access token`)
+          console.log(`Instagram bot ${bot.id} missing access token in integrations table`)
           
           // Si se proporciona accessToken como parámetro, usarlo temporalmente
           if (accessToken) {
@@ -304,7 +328,12 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
               access_token: accessToken
             }
           } else {
-            continue
+            // Si no hay token global ni parámetro, intentar con la columna legacy (por si acaso)
+            if (bot.integrations?.access_token) {
+               integrationConfig = bot.integrations
+            } else {
+               continue
+            }
           }
         }
 
@@ -578,8 +607,27 @@ async function fetchGmailTemplates(supabase: any, userId: string, botId?: string
 function extractWhatsAppTemplateBody(components: any[]): string {
   if (!components) return ''
   
+  let parts: string[] = []
+
+  // Header
+  const headerComponent = components.find(comp => comp.type === 'HEADER')
+  if (headerComponent && headerComponent.format === 'TEXT') {
+    parts.push(headerComponent.text)
+  }
+
+  // Body
   const bodyComponent = components.find(comp => comp.type === 'BODY')
-  return bodyComponent ? bodyComponent.text : ''
+  if (bodyComponent) {
+    parts.push(bodyComponent.text)
+  }
+
+  // Footer
+  const footerComponent = components.find(comp => comp.type === 'FOOTER')
+  if (footerComponent) {
+    parts.push(footerComponent.text)
+  }
+
+  return parts.join('\n\n')
 }
 
 // Función auxiliar para extraer variables de WhatsApp
@@ -589,11 +637,14 @@ function extractWhatsAppTemplateVariables(components: any[]): string[] {
   const variables: string[] = []
   components.forEach(comp => {
     if (comp.text) {
-      const matches = comp.text.match(/\{\{(\d+)\}\}/g)
+      // Buscar cualquier contenido entre llaves dobles {{...}}
+      // Esto soporta tanto {{1}} como {{nombre de usuario}}
+      const matches = comp.text.match(/\{\{([^}]+)\}\}/g)
       if (matches) {
         matches.forEach((match: string) => {
-          const varNumber = match.replace(/[{}]/g, '')
-          variables.push(`var_${varNumber}`)
+          // Limpiar llaves y espacios
+          const varContent = match.replace(/[{}]/g, '').trim()
+          variables.push(`var_${varContent}`)
         })
       }
     }

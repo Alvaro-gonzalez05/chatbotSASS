@@ -294,7 +294,7 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
 
   if (isCompleted) {
     return (
-      <Dialog open={isOpen} onOpenChange={() => {}}>
+      <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-md">
           <motion.div 
             className="flex flex-col items-center justify-center py-8 space-y-4"
@@ -351,6 +351,11 @@ export function MetaBusinessConfig({ isOpen, onClose, bot, onConfigComplete }: M
               <p className="text-sm text-muted-foreground">
                 Tu bot de {bot?.platform === 'instagram' ? 'Instagram' : 'WhatsApp'} está listo para recibir mensajes
               </p>
+              <div className="pt-4 w-full">
+                <Button onClick={handleClose} className="w-full bg-green-600 hover:bg-green-700 text-white">
+                  Finalizar
+                </Button>
+              </div>
             </motion.div>
           </motion.div>
         </DialogContent>

@@ -58,6 +58,7 @@ interface AutomationFormData {
     html_content?: string
     variables?: string[]
   }
+  variable_mapping: Record<string, string>
   bot_id: string
   promotion_id?: string
   is_active: boolean
@@ -142,6 +143,7 @@ const steps = [
   { id: "trigger", title: "Disparador", description: "Define cuándo se ejecuta" },
   { id: "promotion", title: "Promoción", description: "Vincula una promoción (opcional)" },
   { id: "template", title: "Plantilla", description: "Selecciona o crea el mensaje" },
+  { id: "variables", title: "Variables", description: "Configura los datos dinámicos" },
   { id: "review", title: "Revisión", description: "Confirma la configuración" },
 ]
 
@@ -190,6 +192,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       body_content: "",
       variables: []
     },
+    variable_mapping: {},
     bot_id: "",
     promotion_id: "",
     is_active: true,
@@ -210,6 +213,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
           body_content: "",
           variables: []
         },
+        variable_mapping: {},
         bot_id: "",
         promotion_id: "",
         is_active: true,
@@ -413,7 +417,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
       const data = await response.json()
       if (data.success) {
-        const templates = data.templates || []
+        // La API devuelve { success: true, data: { templates: [...] } }
+        const templates = data.data?.templates || data.templates || []
         setTemplates(templates)
 
         // Si es Instagram y no hay plantillas, mostrar input para business_account_id
@@ -572,19 +577,57 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     setShowSuccess(false)
   }
 
+  // Agrupar variables por tipo para el selector
+  const groupedVariables = availableVariables.reduce((acc, variable) => {
+    if (!acc[variable.type]) {
+      acc[variable.type] = []
+    }
+    acc[variable.type].push(variable)
+    return acc
+  }, {} as Record<string, TemplateVariable[]>)
+
+  const getVariableTypeLabel = (type: string) => {
+    switch (type) {
+      case 'client': return 'Datos del Cliente'
+      case 'business': return 'Datos del Negocio'
+      case 'promotion': return 'Datos de la Promoción'
+      case 'order': return 'Datos del Pedido'
+      case 'custom': return 'Otros'
+      default: return type
+    }
+  }
+
   const handleClose = () => {
     resetForm()
     onClose()
   }
 
   const nextStep = () => {
-    if (currentStep < steps.length) {
+    if (currentStep === 4) {
+      // Si estamos en el paso de plantilla, verificar si necesitamos ir al paso de variables
+      const hasVariables = formData.selected_template?.variables && formData.selected_template.variables.length > 0
+      
+      if (hasVariables) {
+        setCurrentStep(5) // Ir a variables
+      } else {
+        setCurrentStep(6) // Saltar a revisión
+      }
+    } else if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1)
     }
   }
 
   const prevStep = () => {
-    if (currentStep > 1) {
+    if (currentStep === 6) {
+      // Si estamos en revisión, verificar si venimos de variables o plantilla
+      const hasVariables = formData.selected_template?.variables && formData.selected_template.variables.length > 0
+      
+      if (hasVariables) {
+        setCurrentStep(5) // Volver a variables
+      } else {
+        setCurrentStep(4) // Volver a plantilla
+      }
+    } else if (currentStep > 1) {
       setCurrentStep(currentStep - 1)
     }
   }
@@ -627,10 +670,16 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         trigger_type: formData.trigger_type,
         trigger_config: formData.trigger_config,
         message_template: finalMessage.trim(),
-        template_id: templateId || formData.selected_template?.id,
+        // Solo enviar template_id si es un UUID válido (local), si es de Meta (numérico) enviar null
+        template_id: (templateId && templateId.includes('-')) ? templateId : (formData.selected_template?.id && formData.selected_template.id.includes('-') ? formData.selected_template.id : null),
         template_variables: {
           source: formData.template_source,
           template_data: formData.selected_template || formData.custom_template,
+          variable_mapping: formData.variable_mapping, // Corregido: usar variable_mapping en lugar de mapping
+          meta_template_name: formData.selected_template?.name?.replace(' (WhatsApp)', ''), // Guardar nombre limpio
+          meta_template_language: formData.selected_template?.language,
+          // Guardar el ID externo si existe
+          external_template_id: formData.selected_template?.id
         },
         bot_id: formData.bot_id,
         promotion_id: formData.promotion_id || null,
@@ -660,7 +709,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
           if (promotion) {
             // Llamar al endpoint de webhook para procesar el broadcast
-            await fetch('/api/automations/webhook', {
+            // NO esperar la respuesta (fire and forget) para evitar bloquear la UI
+            fetch('/api/automations/webhook', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -671,10 +721,10 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                   promotion: promotion
                 }
               })
-            })
+            }).catch(err => console.error('Error triggering background webhook:', err))
           }
         } catch (webhookError) {
-          console.error('Error triggering promotion broadcast:', webhookError)
+          console.error('Error preparing promotion broadcast:', webhookError)
           // No lanzamos error para no bloquear la creación de la automatización
         }
       }
@@ -712,14 +762,20 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         return true // Siempre válido ya que la promoción es opcional
       case 4:
         // Paso 4: Selección de plantilla
-        return formData.template_source !== "" && (
-          formData.template_source === "create_new" ? 
-            formData.custom_template?.body_content.trim() !== "" : 
-            formData.selected_template !== null
-        )
+        if (formData.template_source === "create_new") {
+          return formData.custom_template?.body_content.trim() !== ""
+        } else {
+          return formData.selected_template !== null
+        }
       case 5:
-        // Paso 5: Revisión final
-
+        // Paso 5: Variables
+        if (formData.template_source === "meta_api" && formData.selected_template?.variables && formData.selected_template.variables.length > 0) {
+            const mappedCount = Object.keys(formData.variable_mapping).length
+            return mappedCount === formData.selected_template.variables.length
+        }
+        return true
+      case 6:
+        // Paso 6: Revisión final
         return true
       default:
         return false
@@ -871,6 +927,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   const getPreviewData = () => {
     const triggerConfig = triggerTypes[formData.trigger_type as keyof typeof triggerTypes]
     const selectedBot = bots.find(b => b.id === formData.bot_id)
+    const selectedPromotion = promotions.find(p => p.id === formData.promotion_id)
     
     // Generar vista previa del mensaje final directamente de la plantilla
     let finalMessage = ""
@@ -883,14 +940,67 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     }
     
     // Reemplazar variables comunes para la vista previa
-    const messagePreview = finalMessage
+    let messagePreview = finalMessage
       .replace(/\{nombre\}/g, "María González")
       .replace(/\{email\}/g, "maria.gonzalez@email.com")
       .replace(/\{instagram_usuario\}/g, "@mariagonzalez")
       .replace(/\{puntos\}/g, "250 puntos")
-      .replace(/\{nombre_promocion\}/g, "Black Friday Especial")
-      .replace(/\{\{1\}\}/g, "María")  // Meta templates
-      .replace(/\{\{2\}\}/g, "20%")    // Meta templates
+      .replace(/\{total_compras\}/g, "$125.000")
+      .replace(/\{ultima_compra\}/g, new Date().toLocaleDateString())
+      .replace(/\{nombre_negocio\}/g, "MaxiBici")
+      .replace(/\{descripcion_negocio\}/g, "Tu tienda de bicicletas de confianza")
+      .replace(/\{ubicacion\}/g, "Av. San Martín 1234")
+      .replace(/\{enlace_menu\}/g, "https://maxibici.com/catalogo")
+      .replace(/\{fecha_actual\}/g, new Date().toLocaleDateString())
+      .replace(/\{hora_actual\}/g, new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}))
+      .replace(/\{dia_semana\}/g, new Date().toLocaleDateString('es-ES', { weekday: 'long' }))
+
+    // Reemplazar variables de promoción con datos reales si existe
+    if (selectedPromotion) {
+      messagePreview = messagePreview
+        .replace(/\{nombre_promocion\}/g, selectedPromotion.name)
+        .replace(/\{descripcion_promocion\}/g, selectedPromotion.description || "")
+        .replace(/\{fecha_inicio\}/g, new Date(selectedPromotion.start_date).toLocaleDateString())
+        .replace(/\{fecha_fin\}/g, new Date(selectedPromotion.end_date).toLocaleDateString())
+    } else {
+      messagePreview = messagePreview
+        .replace(/\{nombre_promocion\}/g, "Black Friday Especial")
+        .replace(/\{descripcion_promocion\}/g, "Descuentos increíbles en toda la tienda")
+    }
+    
+    // Reemplazar variables mapeadas de Meta
+    if (formData.template_source === "meta_api" && formData.selected_template?.variables) {
+      formData.selected_template.variables.forEach(variable => {
+        const mappedField = formData.variable_mapping[variable]
+        if (mappedField) {
+          // Si el campo mapeado es de promoción y tenemos una seleccionada, usar su valor real
+          if (selectedPromotion && mappedField === 'nombre_promocion') {
+             const varIndex = variable.replace('var_', '')
+             const regex = new RegExp(`\\{\\{${varIndex}\\}\\}`, 'g')
+             messagePreview = messagePreview.replace(regex, selectedPromotion.name)
+             return
+          }
+          if (selectedPromotion && mappedField === 'descripcion_promocion') {
+             const varIndex = variable.replace('var_', '')
+             const regex = new RegExp(`\\{\\{${varIndex}\\}\\}`, 'g')
+             messagePreview = messagePreview.replace(regex, selectedPromotion.description || "")
+             return
+          }
+
+          // Buscar ejemplo para el campo mapeado
+          const varDef = availableVariables.find(v => v.name === mappedField)
+          const exampleValue = varDef ? varDef.example : `[${mappedField}]`
+          
+          // Reemplazar {{X}} donde X es el número extraído de var_X
+          // O reemplazar {{nombre variable}} si es texto
+          const varContent = variable.replace('var_', '')
+          
+          // Intentar reemplazar tanto {{1}} como {{nombre}}
+          let regex = new RegExp(`\\{\\{${varContent}\\}\\}`, 'g')
+          messagePreview = messagePreview.replace(regex, exampleValue)
+        }
+      })
+    }
     
     return {
       triggerConfig,
@@ -1900,8 +2010,96 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                 </motion.div>
               )}
 
-              {/* Step 5: Review */}
+              {/* Step 5: Variables Configuration */}
               {currentStep === 5 && (
+                <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                        <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
+                        Configuración de Variables
+                      </CardTitle>
+                      <CardDescription className="text-xs sm:text-sm">
+                        Asigna los datos del sistema a las variables de tu plantilla
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {formData.template_source === "meta_api" && 
+                       formData.selected_template && 
+                       formData.selected_template.variables.length > 0 ? (
+                        <div className="space-y-6">
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                              <Info className="h-5 w-5 text-yellow-600 mt-0.5" />
+                              <div>
+                                <h4 className="text-sm font-medium text-yellow-800">Variables Dinámicas Detectadas</h4>
+                                <p className="text-xs text-yellow-700 mt-1">
+                                  La plantilla seleccionada <strong>"{formData.selected_template.name}"</strong> utiliza variables dinámicas ({"{{1}}"}, {"{{2}}"}, etc.). 
+                                  Debes asignar qué dato del sistema corresponde a cada una.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            {formData.selected_template.variables.map((variable, idx) => (
+                              <div key={idx} className="space-y-2 p-4 border rounded-lg bg-muted/20">
+                                <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                                    {variable.replace('var_', '')}
+                                  </Badge>
+                                  <span className="text-muted-foreground text-xs">corresponde a:</span>
+                                </Label>
+                                <Select
+                                  value={formData.variable_mapping[variable] || ""}
+                                  onValueChange={(value) => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      variable_mapping: {
+                                        ...prev.variable_mapping,
+                                        [variable]: value
+                                      }
+                                    }))
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Seleccionar dato..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {Object.entries(groupedVariables).map(([type, vars]) => (
+                                      <div key={type}>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 z-10">
+                                          {getVariableTypeLabel(type)}
+                                        </div>
+                                        {vars.map((v) => (
+                                          <SelectItem key={v.name} value={v.name}>
+                                            <div className="flex flex-col py-0.5">
+                                              <span className="font-medium">{v.name}</span>
+                                              <span className="text-xs text-muted-foreground">{v.example}</span>
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                      </div>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                          <p>Esta plantilla no requiere configuración de variables.</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Step 6: Review */}
+              {currentStep === 6 && (
                 <motion.div variants={fadeInUp} className="space-y-4 sm:space-y-6">
                   <Card>
                     <CardHeader>
