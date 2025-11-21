@@ -95,16 +95,18 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
     e.preventDefault()
     setIsLoading(true)
 
+    // Prepare data with default name if empty
+    const clientData = {
+      ...formData,
+      name: formData.name.trim() || "Cliente sin nombre",
+      user_id: userId,
+      total_purchases: 0,
+    }
+
     try {
       const { data, error } = await supabase
         .from("clients")
-        .insert([
-          {
-            ...formData,
-            user_id: userId,
-            total_purchases: 0,
-          },
-        ])
+        .insert([clientData])
         .select()
         .single()
 
@@ -258,12 +260,12 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
             <form onSubmit={handleAddClient}>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="name">Nombre *</Label>
+                  <Label htmlFor="name">Nombre</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
+                    placeholder="Opcional"
                   />
                 </div>
                 <div className="grid gap-2">

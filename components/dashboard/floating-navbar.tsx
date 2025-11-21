@@ -16,6 +16,7 @@ import {
   Package,
   Calendar,
   ShoppingCart,
+  MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -38,6 +39,11 @@ const navigationItems: NavigationItem[] = [
     name: "Dashboard",
     href: "/dashboard",
     icon: BarChart3,
+  },
+  {
+    name: "Mensajes",
+    href: "/dashboard/chat",
+    icon: MessageSquare,
   },
   {
     name: "Clientes", 

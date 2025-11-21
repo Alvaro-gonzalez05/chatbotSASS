@@ -327,15 +327,57 @@ async function generateBotResponse(
       .select("*")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
-      .limit(8) // Last 8 messages for better context
+      .limit(15) // Increased limit to capture full bursts
 
-    // Reverse to get chronological order for AI
-    const recentMessages = messages?.reverse() || []
+    // Reverse to get chronological order
+    const chronologicalMessages = messages?.reverse() || []
 
-    const conversationHistory = recentMessages.map((msg: any) => ({
+    // Separate the "history" from the "current user turn"
+    // We want to group all recent user messages into the "New Message" block
+    // to ensure the AI treats them as a single prompt
+    
+    const historyMessages = []
+    const currentUserMessages = []
+    
+    // Find the split point: where the last continuous block of user messages begins
+    let splitIndex = chronologicalMessages.length;
+    for (let i = chronologicalMessages.length - 1; i >= 0; i--) {
+        if (chronologicalMessages[i].sender_type === 'client') {
+            splitIndex = i;
+        } else {
+            break; // Found a bot message, stop
+        }
+    }
+    
+    // Populate history and current messages
+    for (let i = 0; i < chronologicalMessages.length; i++) {
+        if (i < splitIndex) {
+            historyMessages.push(chronologicalMessages[i]);
+        } else {
+            currentUserMessages.push(chronologicalMessages[i]);
+        }
+    }
+    
+    // Check if the incoming 'message' is already in currentUserMessages
+    // If not, add it (it might be a new message not yet in DB or just written)
+    const lastStoredMessage = currentUserMessages.length > 0 ? currentUserMessages[currentUserMessages.length - 1] : null;
+    const isMessageAlreadyStored = lastStoredMessage && lastStoredMessage.content.trim() === userMessage.trim();
+    
+    if (!isMessageAlreadyStored) {
+        currentUserMessages.push({ sender_type: 'client', content: userMessage });
+    }
+    
+    // Construct the final inputs for the prompt
+    const conversationHistory = historyMessages.map((msg: any) => ({
       role: msg.sender_type === 'client' ? 'user' : 'assistant',
       content: msg.content
-    }))
+    }));
+    
+    // Combine all current user messages into one block
+    const combinedUserMessage = currentUserMessages.map(m => m.content).join('\n');
+    
+    // Update the userMessage variable to be used in the prompt
+    const finalUserMessage = combinedUserMessage || userMessage;
 
     // Prepare the enhanced prompt with business information from user_profiles table
     let businessInfo = 'No hay información del negocio disponible.'
@@ -572,13 +614,23 @@ ${features.includes('register_clients') ? `
 REGISTRO DE CLIENTES:
 ${(() => {
   const currentPlatform = platform || conversation.platform
+  const isNameMissing = !hasExtractedName || extractedClientData.name === 'Cliente sin nombre' || extractedClientData.name === 'Usuario de Prueba';
   
   if (currentPlatform === 'instagram') {
     return `- Para Instagram: Si falta NOMBRE, pregunta de manera natural: "¿Cómo te llamas?" o "¿Cuál es tu nombre?"
 - Si ya tienes nombre: responde normal y usa el nombre en la conversación`
   } else {
-    return `- Para WhatsApp: Si FALTA TELÉFONO: "¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?"
-- Si COMPLETOS: responde normal`
+    // WhatsApp logic
+    if (isNameMissing) {
+        return `- IMPORTANTE: El cliente NO tiene nombre registrado.
+- TU PRIMERA PRIORIDAD es preguntar su nombre de manera amable para poder atenderlo mejor.
+- Ejemplo: "¡Hola! Para poder atenderte mejor, ¿me podrías decir tu nombre?"
+- Una vez que te diga el nombre, continúa con la conversación normal.`
+    } else if (!hasExtractedPhone) {
+        return `- Para WhatsApp: Si FALTA TELÉFONO: "¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?"`
+    } else {
+        return `- Datos COMPLETOS: responde normal`
+    }
   }
 })()}
 ` : ''}
@@ -610,11 +662,11 @@ MENÚ/CARTA:
 
 
 
-    const messages_for_ai = [
-      { role: 'system', content: systemPrompt },
-      ...conversationHistory,
-      { role: 'user', content: userMessage }
-    ]
+    // const messages_for_ai = [
+    //   { role: 'system', content: systemPrompt },
+    //   ...conversationHistory,
+    //   { role: 'user', content: userMessage }
+    // ]
 
     // Generate response using Gemini
     if (!bot.gemini_api_key) {
@@ -640,7 +692,7 @@ MENÚ/CARTA:
               {
                 parts: [
                   {
-                    text: `${systemPrompt}\n\n=== HISTORIAL DE LA CONVERSACIÓN ===\n${conversationHistory.map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Bot'}: ${m.content}`).join('\n')}\n\n=== NUEVO MENSAJE ===\nCliente: ${userMessage}\n\nBot: `
+                    text: `${systemPrompt}\n\n=== HISTORIAL DE LA CONVERSACIÓN ===\n${conversationHistory.map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Bot'}: ${m.content}`).join('\n')}\n\n=== NUEVO MENSAJE ===\nCliente: ${finalUserMessage}\n\nBot: `
                   }
                 ]
               }
@@ -712,7 +764,7 @@ MENÚ/CARTA:
             supabase, 
             bot, 
             conversation, 
-            userMessage, 
+            finalUserMessage, 
             aiResponse, 
             takeOrders, 
             takeReservations,
@@ -1818,12 +1870,23 @@ async function createOrUpdateClient(supabase: any, userId: string, clientData: a
     let existingClient = null
     
     if (clientData.phone) {
+      // Generate phone variations for lookup to handle country codes
+      const phoneVariations = [clientData.phone];
+      
+      // Argentina specific logic (54 9 ...)
+      if (clientData.phone.startsWith('549')) {
+        // Remove 549 to get local number (e.g. 5492616977056 -> 2616977056)
+        phoneVariations.push(clientData.phone.substring(3));
+        // Remove 9 but keep 54 (e.g. 5492616977056 -> 542616977056)
+        phoneVariations.push('54' + clientData.phone.substring(3));
+      }
+      
       const { data: phoneClient } = await supabase
         .from("clients")
         .select("*")
         .eq("user_id", userId)
-        .eq("phone", clientData.phone)
-        .single()
+        .in("phone", phoneVariations)
+        .maybeSingle()
       
       existingClient = phoneClient
       console.log('🔍 Found existing client by phone:', existingClient ? existingClient.id : 'none')

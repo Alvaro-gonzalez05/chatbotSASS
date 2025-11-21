@@ -21,6 +21,7 @@ import {
   Package,
   Calendar,
   ShoppingCart,
+  MessageSquare,
 } from "lucide-react"
 
 interface NavigationItem {
@@ -36,6 +37,11 @@ const baseNavigation: NavigationItem[] = [
     name: "Dashboard",
     href: "/dashboard",
     icon: BarChart3,
+  },
+  {
+    name: "Mensajes",
+    href: "/dashboard/chat",
+    icon: MessageSquare,
   },
   {
     name: "Clientes",

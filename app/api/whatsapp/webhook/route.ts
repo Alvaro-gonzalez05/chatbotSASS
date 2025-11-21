@@ -221,11 +221,22 @@ async function processWhatsAppMessage(messageData: any) {
 
       // UPDATE CLIENT INTERACTION
       // Try to find a client with this phone number for this user
+      // Generate phone variations for lookup
+      const phoneVariations = [senderPhone];
+      
+      // Argentina specific logic
+      if (senderPhone.startsWith('549')) {
+        // Remove 549 to get local number (e.g. 5492616977056 -> 2616977056)
+        phoneVariations.push(senderPhone.substring(3));
+        // Remove 9 but keep 54 (e.g. 5492616977056 -> 542616977056)
+        phoneVariations.push('54' + senderPhone.substring(3));
+      }
+
       const { data: client } = await supabase
         .from('clients')
         .select('id')
         .eq('user_id', bot.user_id)
-        .eq('phone', senderPhone)
+        .in('phone', phoneVariations)
         .maybeSingle()
 
       if (client) {
@@ -275,7 +286,7 @@ async function processWhatsAppMessage(messageData: any) {
       }
 
       // Store the message
-      const { error: messageError } = await supabase
+      const { data: storedMessage, error: messageError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
@@ -287,6 +298,8 @@ async function processWhatsAppMessage(messageData: any) {
             ...messageContent
           }
         })
+        .select()
+        .single()
 
       if (messageError) {
         console.error('Error storing message:', messageError)
@@ -297,6 +310,52 @@ async function processWhatsAppMessage(messageData: any) {
 
       // Only process AI response for text messages (for now)
       if (messageType === 'text' && textContent.trim()) {
+        // Check if conversation is paused
+        if (conversation && conversation.status === 'paused') {
+          // Check if pause has expired
+          if (conversation.paused_until) {
+            const pausedUntil = new Date(conversation.paused_until)
+            const now = new Date()
+            
+            if (now > pausedUntil) {
+              console.log('▶️ Pause expired, reactivating AI...')
+              // Update status to active
+              await supabase
+                .from('conversations')
+                .update({ status: 'active', paused_until: null })
+                .eq('id', conversationId)
+              
+              // Continue to process message as normal
+            } else {
+              console.log('⏸️ Conversation is paused until ' + pausedUntil.toISOString() + ', skipping AI response')
+              continue
+            }
+          } else {
+            // Indefinite pause
+            console.log('⏸️ Conversation is paused indefinitely, skipping AI response')
+            continue
+          }
+        }
+
+        // DEBOUNCE LOGIC: Wait 7 seconds to see if more messages arrive
+        // This allows grouping multiple rapid messages into a single AI response
+        console.log('⏳ Waiting 7s for potential follow-up messages...')
+        await new Promise(resolve => setTimeout(resolve, 7000))
+
+        // Check if any newer messages exist for this conversation
+        const { data: newerMessages } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('conversation_id', conversationId)
+          .gt('created_at', storedMessage.created_at)
+          .limit(1)
+        
+        if (newerMessages && newerMessages.length > 0) {
+          console.log('⏭️ Newer message detected, skipping response for this message')
+          continue
+        }
+
+        console.log('⚡ No newer messages, generating response...')
         await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName)
       }
 

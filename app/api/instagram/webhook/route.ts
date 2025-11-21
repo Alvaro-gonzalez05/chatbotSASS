@@ -410,6 +410,33 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
 
       // Generate AI response if bot is active
       if (bot.is_active && textContent.trim()) {
+        // Check if conversation is paused
+        if (conversation.status === 'paused') {
+           // Check if pause has expired
+           if (conversation.paused_until) {
+             const pausedUntil = new Date(conversation.paused_until)
+             const now = new Date()
+             
+             if (now > pausedUntil) {
+               console.log('▶️ Pause expired, reactivating AI...')
+               // Update status to active
+               await supabase
+                 .from('conversations')
+                 .update({ status: 'active', paused_until: null })
+                 .eq('id', conversation.id)
+               
+               // Continue to process message as normal
+             } else {
+               console.log('⏸️ Conversation is paused until ' + pausedUntil.toISOString() + ', skipping AI response')
+               continue
+             }
+           } else {
+             // Indefinite pause
+             console.log('⏸️ Conversation is paused indefinitely, skipping AI response')
+             continue
+           }
+        }
+
         console.log('🤖 Generating AI response for Instagram message...')
 
         // Get the base URL from the request headers
