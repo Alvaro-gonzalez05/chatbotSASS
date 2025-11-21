@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -40,6 +40,7 @@ interface Conversation {
   id: string
   client_name: string
   client_phone: string
+  client_instagram_id?: string
   platform: string
   last_message_at: string
   status: string
@@ -76,6 +77,7 @@ export function ChatView({ userId }: ChatViewProps) {
   const [isSending, setIsSending] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState<string>("")
   const [pendingPause, setPendingPause] = useState<{ duration: string | null } | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
 
@@ -169,7 +171,22 @@ export function ChatView({ userId }: ChatViewProps) {
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${selectedConversation.id}` }, 
         (payload) => {
-          setMessages(prev => [...prev, payload.new as Message])
+          const newMessage = payload.new as Message
+          setMessages(prev => {
+            // Check if message already exists
+            if (prev.some(m => m.id === newMessage.id)) return prev
+            
+            // Remove optimistic message if it matches content and is recent (simple heuristic)
+            // We assume the optimistic message is at the end
+            const filtered = prev.filter(m => {
+              if (m.id.startsWith('temp-') && m.content === newMessage.content && m.sender_type === newMessage.sender_type) {
+                return false
+              }
+              return true
+            })
+            
+            return [...filtered, newMessage]
+          })
         }
       )
       .subscribe()
@@ -177,7 +194,7 @@ export function ChatView({ userId }: ChatViewProps) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [selectedConversation, supabase])
+  }, [selectedConversation, supabase, refreshKey])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -291,13 +308,41 @@ export function ChatView({ userId }: ChatViewProps) {
     }
 
     setIsSending(true)
+    
+    // Optimistic update
+    const tempId = `temp-${Date.now()}`
+    const optimisticMessage: Message = {
+      id: tempId,
+      content: newMessage,
+      sender_type: 'bot',
+      created_at: new Date().toISOString(),
+      message_type: 'text',
+      metadata: { sent_by: 'agent', status: 'sending' }
+    }
+    
+    setMessages(prev => [...prev, optimisticMessage])
+    const messageToSend = newMessage
+    setNewMessage("")
+
+    // Determine recipient ID based on platform
+    const recipientId = selectedConversation.platform === 'instagram' 
+      ? selectedConversation.client_instagram_id 
+      : selectedConversation.client_phone
+
+    if (!recipientId) {
+      toast.error("Error", {
+        description: "No se encontró el ID del destinatario para esta conversación."
+      })
+      return
+    }
+
     try {
       const response = await fetch('/api/chat/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: selectedConversation.client_phone,
-          message: newMessage,
+          to: recipientId,
+          message: messageToSend,
           conversationId: selectedConversation.id
         })
       })
@@ -309,10 +354,13 @@ export function ChatView({ userId }: ChatViewProps) {
       }
 
       // Message will be added via realtime subscription
-      setNewMessage("")
+      // We keep the optimistic message until the real one arrives
       toast.success("Mensaje enviado")
     } catch (error) {
       console.error("Error sending message:", error)
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+      setNewMessage(messageToSend) // Restore message
       toast.error("Error al enviar mensaje", {
         description: error instanceof Error ? error.message : "Inténtalo de nuevo"
       })
@@ -488,6 +536,9 @@ export function ChatView({ userId }: ChatViewProps) {
                 )}
                 <Button variant="ghost" size="icon">
                   <Phone className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setRefreshKey(prev => prev + 1)} title="Actualizar mensajes">
+                  <RefreshCw className={cn("h-4 w-4", isLoadingMessages && "animate-spin")} />
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

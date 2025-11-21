@@ -249,37 +249,38 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
       console.log('- To:', recipientInstagramId)
       console.log('- Text:', textContent)
 
-      // Find the integration for Instagram with matching instagram_business_account_id
-      const { data: integrations, error: integrationsError } = await supabase
+      // OPTIMIZATION: Parallelize Integration and Duplicate Check
+      
+      // 1. Find integration directly by instagram_business_account_id
+      const integrationPromise = supabase
         .from('integrations')
         .select('*')
         .eq('platform', 'instagram')
         .eq('is_active', true)
+        .eq('config->>instagram_business_account_id', recipientInstagramId)
+        .maybeSingle()
 
-      if (integrationsError || !integrations) {
-        console.error('Error fetching Instagram integrations:', integrationsError)
+      // 2. Check for duplicate messages in DB (in addition to memory cache)
+      const duplicateCheckPromise = supabase
+        .from('messages')
+        .select('id')
+        .eq('metadata->>platform_message_id', messageId)
+        .maybeSingle()
+
+      const [integrationResult, duplicateResult] = await Promise.all([integrationPromise, duplicateCheckPromise])
+      
+      const integration = integrationResult.data
+      const integrationError = integrationResult.error
+      const existingMessage = duplicateResult.data
+
+      if (integrationError || !integration) {
+        console.log('❌ No active Instagram integration found for recipient:', recipientInstagramId)
+        console.log('💡 You need to configure the Instagram Business Account ID in your bot settings.')
         continue
       }
 
-      console.log('📸 Found integrations:', integrations.length)
-      console.log('📸 Looking for recipient ID:', recipientInstagramId)
-      console.log('📸 Available integrations:', integrations.map(i => ({
-        id: i.id,
-        user_id: i.user_id,
-        instagram_id: i.config?.instagram_business_account_id,
-        config_keys: i.config ? Object.keys(i.config) : [],
-        full_config: i.config
-      })))
-
-      // Find integration with matching instagram_business_account_id
-      const integration = integrations.find(i => 
-        i.config?.instagram_business_account_id === recipientInstagramId
-      )
-
-      if (!integration) {
-        console.log('❌ No active Instagram integration found for recipient:', recipientInstagramId)
-        console.log('💡 You need to configure the Instagram Business Account ID in your bot settings.')
-        console.log('💡 Use this ID as Instagram Business Account ID:', recipientInstagramId)
+      if (existingMessage) {
+        console.log('📸 Skipping duplicate message (DB check):', messageId)
         continue
       }
 
@@ -315,22 +316,27 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         .eq('bot_id', bot.id)
         .eq('client_instagram_id', senderInstagramId)
         .eq('platform', 'instagram')
-        .eq('status', 'active')
-        .single()
+        .maybeSingle() // Removed status check to find closed/paused ones too
 
       if (existingConversation) {
-        // Update existing conversation
-        const { data: updatedConversation, error: updateError } = await supabase
+        // Update existing conversation (Fire and forget update if possible, but we need the object)
+        // We update last_message_at but don't wait for it if we don't need the result immediately
+        // However, we need the conversation object.
+        
+        conversation = existingConversation
+        
+        // Update timestamp in background
+        supabase
           .from('conversations')
           .update({
-            last_message_at: new Date(parseInt(timestamp)).toISOString()
+            last_message_at: new Date(parseInt(timestamp)).toISOString(),
+            // Reactivate if it was closed? Maybe not automatically.
           })
           .eq('id', existingConversation.id)
-          .select()
-          .single()
-        
-        conversation = updatedConversation
-        conversationError = updateError
+          .then(({ error }) => {
+             if (error) console.error('Error updating conversation timestamp:', error)
+          })
+
       } else {
         // Create new conversation
         const { data: newConversation, error: createError } = await supabase
@@ -356,35 +362,24 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         continue
       }
 
-      // Get Instagram username if we don't have it yet
-      let instagramUsername = null
-      
-      // Try to get username if:
-      // 1. It's a new conversation OR
-      // 2. Existing conversation doesn't have a real username (still has @instagram_ format)
+      // Get Instagram username if we don't have it yet (Background Task)
       const needsUsername = !existingConversation || 
         conversation.client_name?.startsWith('@instagram_') || 
         conversation.client_name?.startsWith('Instagram User')
       
       if (needsUsername) {
-        console.log('📸 Attempting to get Instagram username...')
-        instagramUsername = await getInstagramUsername(senderInstagramId, integration.config.access_token)
-        
-        if (instagramUsername) {
-          // Update conversation with real username
-          await supabase
-            .from('conversations')
-            .update({
-              client_name: `@${instagramUsername}`
-            })
-            .eq('id', conversation.id)
-          
-          // Update the conversation object for later use
-          conversation.client_name = `@${instagramUsername}`
-          console.log('✅ Updated conversation with username:', `@${instagramUsername}`)
-        }
-      } else {
-        console.log('📸 Conversation already has username:', conversation.client_name)
+        // Run in background, don't await
+        getInstagramUsername(senderInstagramId, integration.config.access_token)
+          .then(async (username) => {
+            if (username) {
+              await supabase
+                .from('conversations')
+                .update({ client_name: `@${username}` })
+                .eq('id', conversation.id)
+              console.log('✅ Updated conversation with username:', `@${username}`)
+            }
+          })
+          .catch(err => console.error('Error fetching username in background:', err))
       }
 
       // Store the message

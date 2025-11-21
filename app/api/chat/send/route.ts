@@ -3,9 +3,12 @@ import { createAdminClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { to, message, conversationId } = await request.json()
+    const body = await request.json()
+    console.log('Send Message Request:', JSON.stringify(body, null, 2))
+    const { to, message, conversationId } = body
 
     if (!to || !message || !conversationId) {
+      console.error('Missing required fields:', { to, message, conversationId })
       return NextResponse.json(
         { error: 'Missing required fields: to, message, conversationId' },
         { status: 400 }
@@ -22,11 +25,14 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (convError || !conversation) {
+      console.error('Conversation not found:', conversationId)
       return NextResponse.json(
         { error: 'Conversation not found' },
         { status: 404 }
       )
     }
+
+    console.log('Found conversation:', { id: conversation.id, platform: conversation.platform, status: conversation.status })
 
     // Enforce rule: Manual messages only allowed when AI is paused
     if (conversation.status !== 'paused') {
@@ -71,29 +77,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let result;
-
-    if (platform === 'whatsapp') {
-        const phoneNumberId = integration.config?.phone_number_id
-        if (!phoneNumberId) {
-             return NextResponse.json({ error: 'Invalid WhatsApp configuration' }, { status: 500 })
-        }
-        result = await sendWhatsAppMessage(accessToken, phoneNumberId, to, message)
-    } else if (platform === 'instagram') {
-        result = await sendInstagramMessage(accessToken, to, message)
-    } else {
-        return NextResponse.json({ error: 'Unsupported platform' }, { status: 400 })
-    }
-
-    if (!result.success) {
+    if (!accessToken) {
       return NextResponse.json(
-        { error: result.error },
+        { error: 'Invalid configuration: missing access token' },
         { status: 500 }
       )
     }
 
-    // Store outbound message in database
-    const { error: msgError } = await supabase
+    // PARALLEL EXECUTION STRATEGY:
+    // We launch the WhatsApp/Instagram request AND the Database Insert simultaneously.
+    // This ensures the message leaves our server towards the client at the earliest possible millisecond.
+    
+    // 1. Prepare DB Insert Promise
+    const dbInsertPromise = supabase
       .from('messages')
       .insert({
         conversation_id: conversationId,
@@ -101,18 +97,80 @@ export async function POST(request: NextRequest) {
         sender_type: 'bot', 
         message_type: 'text',
         metadata: {
-          platform_message_id: result.messageId,
-          sent_by: 'agent'
+          sent_by: 'agent',
+          status: 'sending'
         }
       })
+      .select()
+      .single()
 
-    if (msgError) {
-      console.error('Error storing sent message:', msgError)
+    // 2. Prepare Platform Send Promise
+    let sendPromise;
+    if (platform === 'whatsapp') {
+        const phoneNumberId = integration.config?.phone_number_id
+        if (!phoneNumberId) {
+             return NextResponse.json({ error: 'Invalid WhatsApp configuration' }, { status: 500 })
+        }
+        sendPromise = sendWhatsAppMessage(accessToken, phoneNumberId, to, message)
+    } else if (platform === 'instagram') {
+        sendPromise = sendInstagramMessage(accessToken, to, message)
+    } else {
+        console.error('Unsupported platform:', platform)
+        return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 })
     }
 
+    // 3. FIRE AND FORGET (Ultra-fast response)
+    // We await the DB insert to ensure we have a record, but we do NOT await the WhatsApp API call.
+    // We let it run in the background and update the DB status when it finishes.
+    
+    const dbResult = await dbInsertPromise
+    
+    if (dbResult.error) {
+      console.error('Error storing initial message:', dbResult.error)
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
+    
+    const insertedMessage = dbResult.data
+
+    // Handle Platform Send in Background
+    sendPromise
+      .then(async (result) => {
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to send message')
+        }
+        
+        // Success: Update DB
+        await supabase
+          .from('messages')
+          .update({
+            metadata: {
+              sent_by: 'agent',
+              status: 'sent',
+              platform_message_id: result.messageId
+            }
+          })
+          .eq('id', insertedMessage.id)
+      })
+      .catch(async (error) => {
+        console.error('Background send error:', error)
+        // Failure: Update DB
+        await supabase
+          .from('messages')
+          .update({
+            metadata: {
+              sent_by: 'agent',
+              status: 'failed',
+              error: error.message || 'Unknown error'
+            }
+          })
+          .eq('id', insertedMessage.id)
+      })
+
+    // Return immediately!
     return NextResponse.json({ 
       success: true, 
-      messageId: result.messageId 
+      messageId: 'pending', // We don't have it yet
+      status: 'queued'
     })
 
   } catch (error) {
@@ -167,9 +225,16 @@ async function sendWhatsAppMessage(
 
 async function sendInstagramMessage(accessToken: string, recipientId: string, message: string) {
     try {
-        // Using Graph API for Instagram Messaging
-        // We use 'me/messages' which resolves to the Page associated with the Access Token
-        const response = await fetch(`https://graph.facebook.com/v18.0/me/messages`, {
+        // Detect token type to select correct API endpoint
+        // Facebook Graph API tokens usually start with 'EA'
+        // Instagram Basic Display/Graph tokens usually start with 'IGAA'
+        const isInstagramToken = accessToken.startsWith('IGAA');
+        const host = isInstagramToken ? 'graph.instagram.com' : 'graph.facebook.com';
+        const version = isInstagramToken ? 'v21.0' : 'v18.0'; // Use newer version for Instagram host
+
+        console.log(`Sending Instagram message via ${host} (${version}) to ${recipientId}`);
+
+        const response = await fetch(`https://${host}/${version}/me/messages`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -184,11 +249,11 @@ async function sendInstagramMessage(accessToken: string, recipientId: string, me
         const data = await response.json()
 
         if (!response.ok) {
-            console.error('Instagram API Error:', data)
+            console.error('Instagram API Error:', JSON.stringify(data, null, 2))
             return { success: false, error: data.error?.message || 'Unknown error' }
         }
 
-        return { success: true, messageId: data.message_id }
+        return { success: true, messageId: data.message_id || data.id }
     } catch (error) {
         console.error('Error sending Instagram message:', error)
         return { success: false, error: 'Network error' }

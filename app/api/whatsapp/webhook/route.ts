@@ -117,30 +117,23 @@ async function processWhatsAppMessage(messageData: any) {
 
       const recipientPhone = messageData.metadata?.phone_number_id || messageData.metadata?.display_phone_number
 
-      // Find the integration for WhatsApp with matching phone_number_id
-      const { data: integrations, error: integrationsError } = await supabase
+      // OPTIMIZATION: Filter directly in DB instead of fetching all integrations
+      const { data: integration, error: integrationError } = await supabase
         .from('integrations')
         .select('*')
         .eq('platform', 'whatsapp')
         .eq('is_active', true)
+        .eq('config->>phone_number_id', messageData.metadata?.phone_number_id)
+        .maybeSingle()
 
-      if (integrationsError || !integrations) {
-        console.error('Error fetching WhatsApp integrations:', integrationsError)
-        continue
-      }
-
-      // Find integration with matching phone_number_id
-      const integration = integrations.find(i => 
-        i.config?.phone_number_id === messageData.metadata?.phone_number_id
-      )
-
-      if (!integration) {
+      if (integrationError || !integration) {
         console.log('No active WhatsApp integration found for phone number:', messageData.metadata?.phone_number_id)
         continue
       }
 
       // Get the bot for this user and platform
-      const { data: bot, error: botError } = await supabase
+      // We can do this in parallel with checking for duplicate messages
+      const botPromise = supabase
         .from('bots')
         .select('*')
         .eq('user_id', integration.user_id)
@@ -148,9 +141,27 @@ async function processWhatsAppMessage(messageData: any) {
         .eq('is_active', true)
         .single()
 
+      // Check for duplicate messages (check metadata for whatsapp_message_id)
+      const duplicateCheckPromise = supabase
+        .from('messages')
+        .select('id')
+        .eq('metadata->>whatsapp_message_id', whatsappMessageId)
+        .maybeSingle()
+
+      const [botResult, duplicateResult] = await Promise.all([botPromise, duplicateCheckPromise])
+      
+      const bot = botResult.data
+      const botError = botResult.error
+      const existingMessage = duplicateResult.data
+
       if (botError || !bot) {
         console.error('No active WhatsApp bot found for user:', integration.user_id, botError)
         continue
+      }
+
+      if (existingMessage) {
+        console.log('Skipping duplicate message:', whatsappMessageId)
+        continue 
       }
 
       console.log('🔍 Found bot:', bot.name, 'with ID:', bot.id)
@@ -199,6 +210,8 @@ async function processWhatsAppMessage(messageData: any) {
       }
 
       // Check for duplicate messages (check metadata for whatsapp_message_id)
+      // MOVED UP for parallel execution
+      /* 
       const { data: existingMessage } = await supabase
         .from('messages')
         .select('id')
@@ -208,9 +221,12 @@ async function processWhatsAppMessage(messageData: any) {
       if (existingMessage) {
         continue // Skip duplicate messages
       }
+      */
 
-      // Find or create conversation
-      const { data: conversation, error: conversationError } = await supabase
+      // OPTIMIZATION: Parallelize Conversation and Client Lookup
+      
+      // 1. Find conversation
+      const conversationPromise = supabase
         .from('conversations')
         .select('*')
         .eq('client_phone', senderPhone)
@@ -219,33 +235,34 @@ async function processWhatsAppMessage(messageData: any) {
         .limit(1)
         .maybeSingle()
 
-      // UPDATE CLIENT INTERACTION
-      // Try to find a client with this phone number for this user
-      // Generate phone variations for lookup
+      // 2. Find client (Generate phone variations for lookup)
       const phoneVariations = [senderPhone];
-      
       // Argentina specific logic
       if (senderPhone.startsWith('549')) {
-        // Remove 549 to get local number (e.g. 5492616977056 -> 2616977056)
         phoneVariations.push(senderPhone.substring(3));
-        // Remove 9 but keep 54 (e.g. 5492616977056 -> 542616977056)
         phoneVariations.push('54' + senderPhone.substring(3));
       }
 
-      const { data: client } = await supabase
+      const clientPromise = supabase
         .from('clients')
         .select('id')
         .eq('user_id', bot.user_id)
         .in('phone', phoneVariations)
         .maybeSingle()
 
+      const [conversationResult, clientResult] = await Promise.all([conversationPromise, clientPromise])
+      
+      const conversation = conversationResult.data
+      const client = clientResult.data
+
       if (client) {
-        // Update existing client's last interaction
-        await supabase
+        // Update existing client's last interaction (Fire and forget)
+        supabase
           .from('clients')
           .update({ last_interaction_at: new Date().toISOString() })
           .eq('id', client.id)
-        console.log('✅ Updated client last interaction:', client.id)
+          .then(() => console.log('✅ Updated client last interaction:', client.id))
+          .catch(err => console.error('Error updating client:', err))
       } else {
         // Optional: Create new client if not exists? 
         // For now, we'll just log it. The user might want to create clients automatically later.
