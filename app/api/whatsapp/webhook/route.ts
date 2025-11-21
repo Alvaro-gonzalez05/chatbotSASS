@@ -219,6 +219,28 @@ async function processWhatsAppMessage(messageData: any) {
         .limit(1)
         .maybeSingle()
 
+      // UPDATE CLIENT INTERACTION
+      // Try to find a client with this phone number for this user
+      const { data: client } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', bot.user_id)
+        .eq('phone', senderPhone)
+        .maybeSingle()
+
+      if (client) {
+        // Update existing client's last interaction
+        await supabase
+          .from('clients')
+          .update({ last_interaction_at: new Date().toISOString() })
+          .eq('id', client.id)
+        console.log('✅ Updated client last interaction:', client.id)
+      } else {
+        // Optional: Create new client if not exists? 
+        // For now, we'll just log it. The user might want to create clients automatically later.
+        console.log('ℹ️ No client found for phone:', senderPhone)
+      }
+
       let conversationId = conversation?.id
 
       if (!conversation) {

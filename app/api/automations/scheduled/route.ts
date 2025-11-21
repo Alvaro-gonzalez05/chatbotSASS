@@ -43,6 +43,8 @@ async function processBirthdayAutomations(supabase: any) {
     const todayStr = today.toISOString().split('T')[0] // YYYY-MM-DD
     
     // Verificar si ya se procesaron cumpleaños hoy
+    // NOTA: Se ha deshabilitado esta verificación para permitir múltiples ejecuciones diarias
+    /*
     const { data: existingExecution } = await supabase
       .from('automation_executions')
       .select('id')
@@ -54,6 +56,7 @@ async function processBirthdayAutomations(supabase: any) {
       console.log('ℹ️ Birthday automations already processed today')
       return NextResponse.json({ message: 'Already processed today', processed: 0 })
     }
+    */
 
     // Obtener automatizaciones de cumpleaños activas
     const { data: automations } = await supabase
@@ -120,8 +123,16 @@ async function processSingleBirthdayAutomation(supabase: any, automation: any, t
     const birthdayClients = clients.filter((client: any) => {
       if (!client.birthday) return false
       
-      const birthDate = new Date(client.birthday)
-      return birthDate.getMonth() + 1 === targetMonth && birthDate.getDate() === targetDay
+      // Solución robusta para zonas horarias: parsear el string YYYY-MM-DD directamente
+      // Evita que new Date('2025-11-27') se convierta en '2025-11-26 21:00' en zonas UTC-3
+      try {
+        const [year, month, day] = client.birthday.split('-').map(Number)
+        return month === targetMonth && day === targetDay
+      } catch (e) {
+        // Fallback por si el formato no es YYYY-MM-DD
+        const birthDate = new Date(client.birthday)
+        return birthDate.getMonth() + 1 === targetMonth && birthDate.getDate() === targetDay
+      }
     })
 
     if (birthdayClients.length === 0) {
@@ -129,31 +140,46 @@ async function processSingleBirthdayAutomation(supabase: any, automation: any, t
       return 0
     }
 
-    // Crear registro de ejecución
-    const { data: execution } = await supabase
+    // Crear registro de ejecución (usando upsert para permitir re-ejecuciones en el mismo día)
+    const { data: execution, error: executionError } = await supabase
       .from('automation_executions')
-      .insert({
+      .upsert({
         automation_id: automation.id,
         execution_date: today.toISOString().split('T')[0],
         automation_type: 'birthday',
         total_eligible_clients: birthdayClients.length,
-        status: 'processing'
-      })
+        status: 'processing',
+        messages_queued: 0 // Resetear contador
+      }, { onConflict: 'automation_id, execution_date' })
       .select()
       .single()
 
+    if (executionError) {
+      console.error('❌ Error creating execution record for birthday:', executionError)
+    }
+
     let messagesQueued = 0
+    const messagesToInsert: any[] = []
 
     // Programar mensaje para cada cliente
     for (const client of birthdayClients) {
       // Personalizar mensaje
       let messageContent = automation.message_template
-      messageContent = messageContent.replace(/\{name\}/g, client.name || 'Cliente')
-      messageContent = messageContent.replace(/\{first_name\}/g, client.name?.split(' ')[0] || 'Cliente')
+      if (messageContent) {
+        messageContent = messageContent.replace(/\{name\}/g, client.name || 'Cliente')
+        messageContent = messageContent.replace(/\{first_name\}/g, client.name?.split(' ')[0] || 'Cliente')
+      }
 
-      // Programar para envío inmediato
+      // Programar para envío inmediato (distribuido en 30 mins)
       const scheduledFor = new Date()
-      scheduledFor.setMinutes(scheduledFor.getMinutes() + Math.floor(Math.random() * 30)) // Distribuir en 30 minutos
+      scheduledFor.setMinutes(scheduledFor.getMinutes() + Math.floor(Math.random() * 30)) 
+
+      // Preparar metadata
+      const metadata: any = {
+        is_meta_template: automation.message_type === 'template',
+        template_name: automation.meta_template_name,
+        template_language: automation.meta_template_language,
+      }
 
       const messageData: any = {
         user_id: automation.user_id,
@@ -164,40 +190,56 @@ async function processSingleBirthdayAutomation(supabase: any, automation: any, t
         recipient_name: client.name,
         scheduled_for: scheduledFor.toISOString(),
         automation_type: 'birthday',
-        priority: 3
+        priority: 3,
+        metadata: metadata
       }
 
       // Agregar identificador según plataforma del bot
       const botPlatform = automation.bots.platform
       if (botPlatform === 'whatsapp' && client.phone) {
         messageData.recipient_phone = client.phone
+        messageData.platform = 'whatsapp'
       } else if (botPlatform === 'instagram' && client.instagram) {
         messageData.recipient_instagram_id = client.instagram
       } else if (botPlatform === 'gmail' && client.email) {
         messageData.recipient_email = client.email
+        messageData.platform = 'email'
       } else {
         // Si el cliente no tiene el campo necesario para la plataforma, saltar
         console.log(`⚠️ Client ${client.id} doesn't have contact info for ${botPlatform}`)
         continue
       }
 
-      await supabase
-        .from('scheduled_messages')
-        .insert(messageData)
+      messagesToInsert.push(messageData)
+    }
 
-      messagesQueued++
+    // Insertar en lotes (Bulk Insert)
+    const BATCH_SIZE = 100
+    for (let i = 0; i < messagesToInsert.length; i += BATCH_SIZE) {
+      const batch = messagesToInsert.slice(i, i + BATCH_SIZE)
+      const { error: insertError } = await supabase
+        .from('scheduled_messages')
+        .insert(batch)
+
+      if (insertError) {
+        console.error(`❌ Error scheduling batch of birthday messages (start index ${i}):`, insertError)
+      } else {
+        messagesQueued += batch.length
+      }
     }
 
     // Actualizar registro de ejecución
-    await supabase
-      .from('automation_executions')
-      .update({
-        status: 'completed',
-        clients_processed: birthdayClients.length,
-        messages_queued: messagesQueued,
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', execution.id)
+    if (execution) {
+      await supabase
+        .from('automation_executions')
+        .update({
+          status: 'completed',
+          clients_processed: birthdayClients.length,
+          messages_queued: messagesQueued,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', execution.id)
+    }
 
     console.log(`✅ Birthday automation processed: ${automation.name} - ${messagesQueued} messages queued`)
     
@@ -218,6 +260,8 @@ async function processInactiveClientAutomations(supabase: any) {
     const todayStr = today.toISOString().split('T')[0]
     
     // Verificar si ya se procesaron hoy
+    // NOTA: Se ha deshabilitado esta verificación para permitir múltiples ejecuciones diarias si es necesario
+    /*
     const { data: existingExecution } = await supabase
       .from('automation_executions')
       .select('id')
@@ -229,6 +273,7 @@ async function processInactiveClientAutomations(supabase: any) {
       console.log('ℹ️ Inactive client automations already processed today')
       return NextResponse.json({ message: 'Already processed today', processed: 0 })
     }
+    */
 
     // Obtener automatizaciones de clientes inactivos activas
     const { data: automations } = await supabase
@@ -276,107 +321,169 @@ async function processSingleInactiveClientAutomation(supabase: any, automation: 
     const cutoffDate = new Date(today)
     cutoffDate.setDate(cutoffDate.getDate() - inactiveDays)
     
-    // Buscar clientes inactivos
-    // Nota: Esta query asume que tienes una tabla de orders o similar para determinar la última actividad
-    // Ajusta según tu estructura de datos
-    const { data: inactiveClients } = await supabase
+    console.log(`🔍 Checking for clients inactive since: ${cutoffDate.toISOString()} (Days: ${inactiveDays})`)
+
+    // Buscar clientes inactivos:
+    // 1. Tienen last_interaction_at antigua (menor al cutoff)
+    // 2. O NO tienen last_interaction_at (nunca interactuaron)
+    const { data: potentialInactiveClients } = await supabase
       .from('clients')
-      .select(`
-        *,
-        orders(created_at)
-      `)
+      .select('*')
       .eq('user_id', automation.user_id)
-      .or(`orders.created_at.is.null,orders.created_at.lt.${cutoffDate.toISOString()}`)
+      .or(`last_interaction_at.is.null,last_interaction_at.lt.${cutoffDate.toISOString()}`)
     
-    if (!inactiveClients || inactiveClients.length === 0) {
+    console.log(`DEBUG: Potential clients found in DB query: ${potentialInactiveClients?.length || 0}`)
+
+    if (!potentialInactiveClients || potentialInactiveClients.length === 0) {
       console.log(`ℹ️ No inactive clients found for automation: ${automation.id}`)
       return 0
     }
 
-    // Filtrar clientes que realmente están inactivos
-    const filteredInactiveClients = inactiveClients.filter((client: any) => {
-      if (!client.orders || client.orders.length === 0) {
-        return true // Cliente sin órdenes es inactivo
+    // Filtrar falsos positivos (clientes nuevos creados recientemente que aún no tienen interacción)
+    const inactiveClients = potentialInactiveClients.filter((client: any) => {
+      // Si tiene fecha de interacción, la query ya garantizó que es antigua (< cutoff)
+      if (client.last_interaction_at) return true
+      
+      // Si NO tiene fecha de interacción (es NULL), verificamos cuándo se creó
+      // Si se creó hace poco (después del cutoff), es un cliente NUEVO, no inactivo.
+      // Si se creó hace mucho (antes del cutoff), es un cliente que nunca interactuó -> INACTIVO.
+      const createdAt = new Date(client.created_at)
+      const isOldEnough = createdAt < cutoffDate
+      
+      if (!isOldEnough) {
+         // Solo loguear los primeros 5 para no saturar
+         // console.log(`DEBUG: Client ${client.id} skipped (Too new). Created: ${createdAt.toISOString()}, Cutoff: ${cutoffDate.toISOString()}`)
       }
       
-      const lastOrderDate = new Date(Math.max(...client.orders.map((o: any) => new Date(o.created_at).getTime())))
-      return lastOrderDate < cutoffDate
+      return isOldEnough
     })
 
-    if (filteredInactiveClients.length === 0) {
-      console.log(`ℹ️ No truly inactive clients for automation: ${automation.id}`)
+    console.log(`DEBUG: Clients after 'New Client' filter: ${inactiveClients.length}`)
+
+    if (inactiveClients.length === 0) {
+      console.log(`ℹ️ No truly inactive clients found (all nulls were new clients)`)
       return 0
     }
 
-    // Crear registro de ejecución
-    const { data: execution } = await supabase
+    console.log(`👥 Found ${inactiveClients.length} truly inactive clients`)
+
+    // Crear registro de ejecución (usando upsert para permitir re-ejecuciones en el mismo día)
+    const { data: execution, error: executionError } = await supabase
       .from('automation_executions')
-      .insert({
+      .upsert({
         automation_id: automation.id,
         execution_date: today.toISOString().split('T')[0],
         automation_type: 'inactive_client',
-        total_eligible_clients: filteredInactiveClients.length,
-        status: 'processing'
-      })
+        total_eligible_clients: inactiveClients.length,
+        status: 'processing',
+        messages_queued: 0 // Resetear contador si se re-ejecuta
+      }, { onConflict: 'automation_id, execution_date' })
       .select()
       .single()
+
+    if (executionError) {
+      console.error('❌ Error creating execution record:', executionError)
+      // Continuamos aunque falle el registro de ejecución, pero no podremos actualizarlo al final
+    }
 
     let messagesQueued = 0
 
     // Programar mensaje para cada cliente inactivo
-    for (const client of filteredInactiveClients) {
-      // Personalizar mensaje
-      let messageContent = automation.message_template
-      messageContent = messageContent.replace(/\{name\}/g, client.name || 'Cliente')
-      messageContent = messageContent.replace(/\{first_name\}/g, client.name?.split(' ')[0] || 'Cliente')
+    const messagesToInsert: any[] = []
+
+    for (const client of inactiveClients) {
+      // Verificar si ya se le envió mensaje recientemente (para evitar spam si el cron corre varias veces o si la lógica falla)
+      // Esto es opcional pero recomendado. Por ahora confiamos en automation_executions para el día.
+
+      // Personalizar mensaje (si es texto simple)
+      // Si es template, se maneja diferente en el envío, pero aquí preparamos el contenido base
+      let messageContent = automation.message_template || ''
+      if (messageContent) {
+        messageContent = messageContent.replace(/\{name\}/g, client.name || 'Cliente')
+        messageContent = messageContent.replace(/\{first_name\}/g, client.name?.split(' ')[0] || 'Cliente')
+      }
 
       // Programar para envío distribuido
       const scheduledFor = new Date()
       scheduledFor.setHours(scheduledFor.getHours() + Math.floor(Math.random() * 8) + 1) // Distribuir en las próximas 8 horas
+
+      // Preparar metadata para templates
+      const metadata: any = {
+        is_meta_template: automation.message_type === 'template',
+        template_name: automation.meta_template_name,
+        template_language: automation.meta_template_language,
+        // Mapear variables si es necesario (esto requeriría lógica más compleja similar al broadcast)
+        // Por simplicidad, asumimos que si es template, el usuario configuró variables estáticas o simples
+      }
+
+      // Verificar que automation.bots existe
+      if (!automation.bots) {
+        console.error(`❌ Automation ${automation.id} has no bot assigned`)
+        continue
+      }
 
       const messageData: any = {
         user_id: automation.user_id,
         automation_id: automation.id,
         client_id: client.id,
         bot_id: automation.bots.id,
-        message_content: messageContent,
+        message_content: messageContent, // Texto fallback o contenido
         recipient_name: client.name,
         scheduled_for: scheduledFor.toISOString(),
         automation_type: 'inactive_client',
-        priority: 4
+        priority: 4,
+        metadata: metadata
       }
 
       // Agregar identificador según plataforma del bot
       const botPlatform = automation.bots.platform
-      if (botPlatform === 'whatsapp' && client.phone) {
+      
+      if (botPlatform === 'whatsapp') {
         messageData.recipient_phone = client.phone
-      } else if (botPlatform === 'instagram' && client.instagram) {
+        messageData.platform = 'whatsapp'
+      } else if (botPlatform === 'instagram') {
         messageData.recipient_instagram_id = client.instagram
-      } else if (botPlatform === 'gmail' && client.email) {
+        messageData.platform = 'instagram'
+      } else if (botPlatform === 'email') {
         messageData.recipient_email = client.email
-      } else {
-        // Si el cliente no tiene el campo necesario para la plataforma, saltar
-        console.log(`⚠️ Client ${client.id} doesn't have contact info for ${botPlatform}`)
+        messageData.platform = 'email'
+      }
+
+      // Validar que tenga destino
+      if (!messageData.recipient_phone && !messageData.recipient_instagram_id && !messageData.recipient_email) {
+        console.warn(`⚠️ Client ${client.id} has no contact info for platform ${botPlatform}`)
         continue
       }
 
-      await supabase
-        .from('scheduled_messages')
-        .insert(messageData)
-
-      messagesQueued++
+      messagesToInsert.push(messageData)
     }
 
-    // Actualizar registro de ejecución
-    await supabase
-      .from('automation_executions')
-      .update({
-        status: 'completed',
-        clients_processed: filteredInactiveClients.length,
-        messages_queued: messagesQueued,
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', execution.id)
+    // Insertar en lotes para optimizar rendimiento (Bulk Insert)
+    const BATCH_SIZE = 100
+    for (let i = 0; i < messagesToInsert.length; i += BATCH_SIZE) {
+      const batch = messagesToInsert.slice(i, i + BATCH_SIZE)
+      const { error: insertError } = await supabase
+        .from('scheduled_messages')
+        .insert(batch)
+
+      if (insertError) {
+        console.error(`❌ Error scheduling batch of messages (start index ${i}):`, insertError)
+      } else {
+        messagesQueued += batch.length
+      }
+    }
+
+    // Actualizar ejecución si existe
+    if (execution) {
+      await supabase
+        .from('automation_executions')
+        .update({
+          status: 'completed',
+          messages_queued: messagesQueued,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', execution.id)
+    }
 
     console.log(`✅ Inactive client automation processed: ${automation.name} - ${messagesQueued} messages queued`)
     

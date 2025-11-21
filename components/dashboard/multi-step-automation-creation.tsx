@@ -1247,9 +1247,16 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                                     ? "border-primary bg-primary/5"
                                     : "border-muted hover:border-primary/50"
                                 )}
-                                onClick={() =>
-                                  setFormData({ ...formData, trigger_type: key as any, trigger_config: {} })
-                                }
+                                onClick={() => {
+                                  let defaultConfig = {};
+                                  switch (key) {
+                                    case 'birthday': defaultConfig = { days_before: 0 }; break;
+                                    case 'inactive_client': defaultConfig = { inactive_days: 30 }; break;
+                                    case 'new_promotion': defaultConfig = { send_immediately: false }; break;
+                                    case 'comment_reply': defaultConfig = { comment_keywords: '' }; break;
+                                  }
+                                  setFormData({ ...formData, trigger_type: key as any, trigger_config: defaultConfig })
+                                }}
                               >
                                 <CardContent className="p-3 sm:p-4">
                                   <div className="flex items-center gap-3">

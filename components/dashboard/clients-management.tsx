@@ -209,7 +209,13 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-"
-    return new Date(dateString).toLocaleDateString("es-ES")
+    // Si es una fecha completa con hora (ISO), usar Date
+    if (dateString.includes('T')) {
+      return new Date(dateString).toLocaleDateString("es-ES")
+    }
+    // Si es solo fecha YYYY-MM-DD, parsear manualmente para evitar problemas de zona horaria
+    const [year, month, day] = dateString.split('-')
+    return `${day}/${month}/${year}`
   }
 
   const formatCurrency = (amount: number) => {
