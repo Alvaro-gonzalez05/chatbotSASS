@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { createNotification } from '@/lib/notifications'
 
 // Endpoint para procesar la cola de mensajes programados
 // Se puede llamar manualmente o desde un cron job
@@ -108,6 +109,17 @@ export async function POST(request: NextRequest) {
             if (success) {
               console.log(`✅ Message sent successfully via ${platform}:`, externalMessageId)
               
+              // Notificar éxito (evitar spam para promociones masivas)
+              if (message.automation_type !== 'new_promotion') {
+                await createNotification({
+                  userId: message.user_id,
+                  title: "Automatización ejecutada",
+                  message: `Mensaje enviado a ${message.recipient_name || message.recipient_phone}`,
+                  type: "success",
+                  link: `/dashboard/automations`
+                });
+              }
+              
               // BORRAR mensaje de la cola si se envió correctamente
               await supabase
                 .from('scheduled_messages')
@@ -117,6 +129,15 @@ export async function POST(request: NextRequest) {
               return { success: true, id: message.id }
             } else {
               console.error(`❌ Failed to send ${platform} message:`, errorMessage)
+              
+              // Notificar error
+              await createNotification({
+                userId: message.user_id,
+                title: "Error en automatización",
+                message: `Fallo al enviar a ${message.recipient_name || message.recipient_phone}: ${errorMessage}`,
+                type: "error",
+                link: `/dashboard/automations`
+              });
               
               // Actualizar estado a fallido (NO BORRAR)
               await supabase

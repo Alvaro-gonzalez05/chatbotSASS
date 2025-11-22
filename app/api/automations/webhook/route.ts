@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { createNotification } from '@/lib/notifications'
 
 // Webhook que recibe eventos de Supabase para procesar automatizaciones en tiempo real
 export async function POST(request: NextRequest) {
@@ -420,6 +421,15 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
 
     console.log(`✅ Promotion automation broadcast scheduled: ${automation.name} to ${messagesQueued} clients`)
     
+    // Notificar que la promoción se ha programado
+    await createNotification({
+      userId: automation.user_id,
+      title: "Automatización programada",
+      message: `Se han programado ${messagesQueued} mensajes para la automatización "${automation.name}"`,
+      type: "info",
+      link: `/dashboard/automations`
+    });
+    
   } catch (error) {
     console.error('💥 Error in handlePromotionAutomation:', error)
   }
@@ -651,6 +661,15 @@ async function handleNewPromotion(supabase: any, promotion: any) {
       }
 
       console.log(`✅ Promotion broadcast scheduled: ${automation.name} to ${clients.length} clients`)
+      
+      // Notificar que la promoción se ha programado
+      await createNotification({
+        userId: promotion.user_id,
+        title: "Promoción programada",
+        message: `Se han programado ${clients.length} mensajes para la promoción "${promotion.name}"`,
+        type: "info",
+        link: `/dashboard/automations`
+      });
     }
     
   } catch (error) {

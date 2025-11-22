@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { createNotification } from "@/lib/notifications"
 
 export async function POST(request: NextRequest) {
   try {
@@ -994,6 +995,15 @@ async function createOrderFromConfirmedResponse(
             console.log('✅ New client created:', newClient)
             clientId = newClient.id
             
+            // Create notification for new client
+            await createNotification({
+              userId: bot.user_id,
+              title: "Nuevo cliente registrado",
+              message: `${newClient.name} se ha registrado automáticamente`,
+              type: "success",
+              link: `/dashboard/clients?id=${newClient.id}`
+            });
+            
             // Update conversation with new client_id
             await supabase
               .from("conversations")
@@ -1036,6 +1046,15 @@ async function createOrderFromConfirmedResponse(
 
       if (!error) {
         console.log('✅ Order created successfully:', orderInfo)
+        
+        // Create notification for new order
+        await createNotification({
+          userId: bot.user_id,
+          title: "Nuevo pedido recibido",
+          message: `Pedido de $${orderInfo.total} recibido vía WhatsApp`,
+          type: "success",
+          link: `/dashboard/orders`
+        });
       } else {
         console.error('❌ Error saving order:', error)
       }
@@ -1334,6 +1353,22 @@ Si NO hay reserva completa, responde: NO_RESERVATION
           console.log('✅ Using AI-extracted reservation data:', reservationData)
 
           if (reservationData.hasReservation) {
+            // Check for duplicate reservations in the last 5 minutes
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+            const { data: existingReservations } = await supabase
+              .from("reservations")
+              .select("id")
+              .eq("conversation_id", conversation.id)
+              .eq("reservation_date", reservationData.reservationDate)
+              .eq("reservation_time", reservationData.reservationTime)
+              .gte("created_at", fiveMinutesAgo)
+              .limit(1)
+
+            if (existingReservations && existingReservations.length > 0) {
+              console.log('⚠️ Duplicate reservation detected, skipping creation:', existingReservations[0].id)
+              return
+            }
+
             // Use Gemini extracted reservation data (most reliable)
             let customerName = reservationData.customerName || senderName || conversation.client_name
             let customerPhone = reservationData.customerPhone || senderPhone || conversation.client_phone
@@ -1404,6 +1439,15 @@ Si NO hay reserva completa, responde: NO_RESERVATION
               console.log('✅ Reservation saved successfully to database!')
               console.log('✅ Inserted reservation ID:', insertedReservation[0]?.id)
               console.log('✅ Full inserted data:', insertedReservation[0])
+              
+              // Create notification for new reservation
+              await createNotification({
+                userId: bot.user_id,
+                title: "Nueva reserva confirmada",
+                message: `Reserva para ${reservationData.partySize} personas el ${reservationData.reservationDate} a las ${reservationData.reservationTime}`,
+                type: "success",
+                link: `/dashboard/reservations`
+              });
             } else if (error) {
               console.error('❌ Error saving reservation to database:', error)
               console.error('❌ Error details:', {

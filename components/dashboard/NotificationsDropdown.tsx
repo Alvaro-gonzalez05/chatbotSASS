@@ -3,51 +3,82 @@
 import { useState, useEffect } from "react";
 import { Bell, Check, Clock, Settings, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
+import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
+import { toast } from "sonner";
 
-// Datos mock de notificaciones - después puedes conectar con Supabase
-const mockNotifications = [
-  {
-    id: 1,
-    title: "Nuevo cliente registrado",
-    message: "Juan Pérez se ha registrado en tu sistema",
-    time: "Hace 5 min",
-    read: false,
-    type: "success"
-  },
-  {
-    id: 2,
-    title: "Bot actualizado",
-    message: "El bot 'Atención al Cliente' ha sido actualizado correctamente",
-    time: "Hace 1 hora",
-    read: false,
-    type: "info"
-  },
-  {
-    id: 3,
-    title: "Mensaje automatizado enviado",
-    message: "Se enviaron 25 mensajes promocionales",
-    time: "Hace 2 horas",
-    read: true,
-    type: "success"
-  },
-  {
-    id: 4,
-    title: "Error en automatización",
-    message: "La automatización 'Seguimiento' falló al ejecutarse",
-    time: "Hace 3 horas",
-    read: false,
-    type: "error"
-  },
-];
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  created_at: string;
+  read: boolean;
+  type: 'info' | 'success' | 'warning' | 'error';
+  link?: string;
+  metadata?: any;
+}
 
 export default function NotificationsDropdown() {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
   useEffect(() => {
+    console.log("🔔 NotificationsDropdown mounted - Realtime System Active");
     setMounted(true);
+    fetchNotifications();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('notifications_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'notifications' }, 
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newNotification = payload.new as Notification;
+            setNotifications(prev => [newNotification, ...prev]);
+            toast.info(newNotification.title, {
+              description: newNotification.message,
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setNotifications(prev => prev.map(n => 
+              n.id === payload.new.id ? { ...n, ...payload.new } : n
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setNotifications(prev => prev.filter(n => n.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setNotifications(data || []);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (!mounted) {
     return null;
@@ -55,18 +86,62 @@ export default function NotificationsDropdown() {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAsRead = (id: number) => {
+  const markAsRead = async (id: string) => {
+    // Optimistic update
     setNotifications(notifications.map(n => 
       n.id === id ? { ...n, read: true } : n
     ));
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      // Revert on error
+      fetchNotifications();
+    }
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    // Optimistic update
     setNotifications(notifications.map(n => ({ ...n, read: true })));
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', user.id)
+        .eq('read', false);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+      fetchNotifications();
+    }
   };
 
-  const deleteNotification = (id: number) => {
+  const deleteNotification = async (id: string) => {
+    // Optimistic update
     setNotifications(notifications.filter(n => n.id !== id));
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      fetchNotifications();
+    }
   };
 
   const getTypeColor = (type: string) => {
@@ -118,7 +193,7 @@ export default function NotificationsDropdown() {
               <div className="p-3 sm:p-4 border-b border-neutral-200 dark:border-neutral-700">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base sm:text-lg font-semibold text-neutral-900 dark:text-white">
-                    Notificaciones
+                    Centro de Notificaciones
                   </h3>
                   <div className="flex items-center space-x-1 sm:space-x-2">
                     <button
@@ -142,7 +217,9 @@ export default function NotificationsDropdown() {
 
               {/* Notifications List */}
               <div className="max-h-96 overflow-y-auto">
-                {notifications.length > 0 ? (
+                {isLoading ? (
+                  <div className="p-8 text-center text-neutral-500">Cargando...</div>
+                ) : notifications.length > 0 ? (
                   notifications.map((notification) => (
                     <motion.div
                       key={notification.id}
@@ -173,7 +250,7 @@ export default function NotificationsDropdown() {
                           </p>
                           <div className="flex items-center text-xs text-neutral-400 dark:text-neutral-500">
                             <Clock className="w-3 h-3 mr-1" />
-                            {notification.time}
+                            {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true, locale: es })}
                           </div>
                         </div>
                         <div className="flex items-center space-x-1">

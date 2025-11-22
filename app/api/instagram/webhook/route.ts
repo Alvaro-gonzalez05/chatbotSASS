@@ -227,7 +227,24 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
 
       const messageId = message.mid
       const rawText = message.text || ''
-      const textContent = rawText.trim() || '[No text]'
+      
+      // Check for attachments if text is empty
+      let textContent = rawText.trim()
+      
+      if (!textContent && message.attachments && message.attachments.length > 0) {
+        // Ignore template attachments or other non-text events that might be duplicates or system events
+        const attachmentType = message.attachments[0].type
+        if (attachmentType === 'template' || attachmentType === 'fallback') {
+          console.log(`📸 Skipping non-text attachment type: ${attachmentType}`)
+          continue
+        }
+        textContent = `[Attachment: ${attachmentType}]`
+      }
+      
+      if (!textContent) {
+        console.log('📸 Empty message content and no valid attachments, skipping...')
+        continue
+      }
 
       // Build a dedupe key using sender id + normalized text so we avoid
       // replying multiple times when Instagram emits related events.
@@ -433,6 +450,26 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         }
 
         console.log('🤖 Generating AI response for Instagram message...')
+
+        // DEBOUNCE LOGIC: Wait 7 seconds to see if more messages arrive
+        // This allows grouping multiple rapid messages into a single AI response
+        console.log('⏳ Waiting 7s for potential follow-up messages...')
+        await new Promise(resolve => setTimeout(resolve, 7000))
+
+        // Check if any newer messages exist for this conversation
+        const { data: newerMessages } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('conversation_id', conversation.id)
+          .gt('created_at', new Date(parseInt(timestamp)).toISOString())
+          .limit(1)
+        
+        if (newerMessages && newerMessages.length > 0) {
+          console.log('⏭️ Newer message detected, skipping response for this message')
+          continue
+        }
+
+        console.log('⚡ No newer messages, generating response...')
 
         // Get the base URL from the request headers
         const host = request.headers.get('host') || 'localhost:3000'
