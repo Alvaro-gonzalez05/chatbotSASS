@@ -133,6 +133,24 @@ export async function POST(request: NextRequest) {
     // Always extract client data (needed for reservations and better UX)
     // But only create/update clients if registration is enabled
     let extractedClientData = null
+    
+    // PRE-CHECK: Before extracting from message, check if we already know this client from DB
+    // This prevents asking for name if we already have it linked to this Instagram ID
+    let existingDbClient = null
+    if (platform === 'instagram' && senderInstagramId) {
+      const { data: dbClient } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", bot.user_id)
+        .eq("instagram", senderInstagramId)
+        .single()
+      
+      if (dbClient) {
+        existingDbClient = dbClient
+        console.log('✅ Pre-check: Found existing Instagram client in DB:', dbClient.name)
+      }
+    }
+
     extractedClientData = await extractClientDataFromMessage(
       message, 
       senderName, 
@@ -143,6 +161,20 @@ export async function POST(request: NextRequest) {
       platform || conversation.platform, // Use platform from request or conversation
       senderInstagramId
     )
+    
+    // If we found an existing client in DB but extraction didn't find a name (or found a username),
+    // use the DB name to enrich the data passed to the AI context
+    if (existingDbClient && (!extractedClientData || !extractedClientData.name || extractedClientData.name.startsWith('@'))) {
+      extractedClientData = {
+        ...extractedClientData,
+        name: existingDbClient.name,
+        phone: existingDbClient.phone || extractedClientData?.phone,
+        email: existingDbClient.email || extractedClientData?.email,
+        instagram_id: existingDbClient.instagram || senderInstagramId,
+        instagram_username: existingDbClient.instagram_username || extractedClientData?.instagram_username
+      }
+      console.log('✅ Enriched extracted data with DB client info:', extractedClientData)
+    }
     
     // Create/update client record if we have extracted data AND registration is enabled
     if (extractedClientData && canRegisterClients) {
@@ -187,6 +219,22 @@ export async function POST(request: NextRequest) {
           
           console.log('🔍 Merged client data:', mergedData)
           extractedClientData = mergedData
+        }
+      } else if (existingDbClient) {
+        // If conversation doesn't have client_id but we found one in DB via pre-check
+        console.log('🔍 Linking conversation to existing DB client:', existingDbClient.id)
+        await supabase
+          .from("conversations")
+          .update({ client_id: existingDbClient.id })
+          .eq("id", conversation.id)
+          
+        // Use existing client data
+        extractedClientData = {
+            name: existingDbClient.name,
+            phone: existingDbClient.phone,
+            email: existingDbClient.email,
+            instagram_id: existingDbClient.instagram,
+            instagram_username: existingDbClient.instagram_username
         }
       }
       

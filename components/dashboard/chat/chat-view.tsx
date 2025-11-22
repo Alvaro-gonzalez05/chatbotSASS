@@ -430,6 +430,12 @@ export function ChatView({ userId }: ChatViewProps) {
     return format(date, "dd/MM/yyyy")
   }
 
+  const getInitials = (name: string | undefined | null) => {
+    if (!name) return "??"
+    const cleanName = name.startsWith('@') ? name.substring(1) : name
+    return cleanName.substring(0, 2).toUpperCase()
+  }
+
   return (
     <div className="flex h-full gap-4 bg-background">
       {/* Sidebar - Conversation List */}
@@ -468,7 +474,7 @@ export function ChatView({ userId }: ChatViewProps) {
                       "text-white",
                       conv.platform === 'whatsapp' ? "bg-green-500" : "bg-pink-500"
                     )}>
-                      {conv.client_name?.substring(0, 2).toUpperCase() || "??"}
+                      {getInitials(conv.client_name)}
                     </AvatarFallback>
                   </Avatar>
                   
@@ -514,7 +520,7 @@ export function ChatView({ userId }: ChatViewProps) {
                     "text-white",
                     selectedConversation.platform === 'whatsapp' ? "bg-green-500" : "bg-pink-500"
                   )}>
-                    {selectedConversation.client_name?.substring(0, 2).toUpperCase()}
+                    {getInitials(selectedConversation.client_name)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
