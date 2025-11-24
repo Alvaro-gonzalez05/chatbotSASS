@@ -30,6 +30,7 @@ import {
   Check,
   Loader2,
 } from "lucide-react"
+import { FaWhatsapp } from "react-icons/fa"
 
 interface BotFormData {
   name: string
@@ -64,7 +65,7 @@ interface MultiStepBotCreationProps {
 }
 
 const platformIcons = {
-  whatsapp: MessageSquare,
+  whatsapp: FaWhatsapp,
   instagram: Instagram,
   email: Mail,
 }

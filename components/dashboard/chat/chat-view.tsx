@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +50,7 @@ interface Conversation {
   unread_count?: number // Virtual field
   last_message?: string // Virtual field
   paused_until?: string | null
+  needs_attention?: boolean
 }
 
 interface Message {
@@ -58,6 +60,7 @@ interface Message {
   created_at: string
   message_type: string
   metadata?: any
+  is_read?: boolean
 }
 
 interface ChatViewProps {
@@ -80,58 +83,140 @@ export function ChatView({ userId }: ChatViewProps) {
   const [refreshKey, setRefreshKey] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
+  
+  // Pagination state
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const PAGE_SIZE = 15
 
-  // Fetch conversations
-  useEffect(() => {
-    const fetchConversations = async () => {
-      setIsLoading(true)
-      try {
-        // Get conversations for user's bots
-        const { data, error } = await supabase
-          .from("conversations")
-          .select(`
-            *,
-            messages:messages(content, created_at, sender_type)
-          `)
-          .eq("user_id", userId)
-          .order("last_message_at", { ascending: false })
+  const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver({
+    threshold: 0.1,
+    triggerOnce: false
+  })
 
-        if (error) throw error
+  const fetchConversations = async (pageNumber: number) => {
+    if (pageNumber === 0) setIsLoading(true)
+    else setIsLoadingMore(true)
+    
+    try {
+      const from = pageNumber * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
 
-        // Process conversations to get last message
-        const processedConversations = data.map((conv: any) => {
-          // Sort messages to get the last one
-          const sortedMessages = conv.messages?.sort((a: any, b: any) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )
-          
-          const lastMsg = sortedMessages?.[0]
-          
-          return {
-            ...conv,
-            last_message: lastMsg?.content || "Sin mensajes",
-            // Mock unread count for now
-            unread_count: 0 
-          }
-        })
+      // Get conversations for user's bots
+      let query = supabase
+        .from("conversations")
+        .select(`
+          *,
+          messages:messages(content, created_at, sender_type, is_read)
+        `)
+        .eq("user_id", userId)
+        .order("last_message_at", { ascending: false })
+        .range(from, to)
+      
+      // If search term exists, we might need to adjust query or handle it differently
+      // For now, let's assume search is client-side or we reset pagination on search
+      // Implementing server-side search would require more changes
+      
+      const { data, error } = await query
 
-        setConversations(processedConversations)
-      } catch (error) {
-        console.error("Error fetching conversations:", error)
-      } finally {
-        setIsLoading(false)
+      if (error) throw error
+
+      // Process conversations to get last message
+      const processedConversations = data.map((conv: any) => {
+        // Sort messages to get the last one
+        const sortedMessages = conv.messages?.sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+        
+        const lastMsg = sortedMessages?.[0]
+        
+        // Calculate unread count
+        const unreadCount = conv.messages?.filter((m: any) => 
+          m.sender_type === 'client' && m.is_read === false
+        ).length || 0
+        
+        return {
+          ...conv,
+          last_message: lastMsg?.content || "Sin mensajes",
+          unread_count: unreadCount
+        }
+      })
+
+      setConversations(prev => {
+        if (pageNumber === 0) return processedConversations
+        
+        // Filter duplicates
+        const existingIds = new Set(prev.map(c => c.id))
+        const newConvs = processedConversations.filter((c: any) => !existingIds.has(c.id))
+        
+        return [...prev, ...newConvs]
+      })
+      
+      if (data.length < PAGE_SIZE) {
+        setHasMore(false)
       }
+    } catch (error) {
+      console.error("Error fetching conversations:", error)
+    } finally {
+      setIsLoading(false)
+      setIsLoadingMore(false)
     }
+  }
 
-    fetchConversations()
+  // Initial fetch
+  useEffect(() => {
+    fetchConversations(0)
+  }, [userId])
 
-    // Realtime subscription for new conversations
+  // Load more on scroll
+  useEffect(() => {
+    if (isIntersecting && hasMore && !isLoading && !isLoadingMore) {
+      const nextPage = page + 1
+      setPage(nextPage)
+      fetchConversations(nextPage)
+    }
+  }, [isIntersecting, hasMore, isLoading, isLoadingMore])
+
+  // Realtime subscription for new conversations
+  useEffect(() => {
     const channel = supabase
       .channel('conversations_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'conversations', filter: `user_id=eq.${userId}` }, 
-        () => {
-          fetchConversations()
+        async (payload) => {
+          if (payload.eventType === 'INSERT') {
+            // Fetch the new conversation with its messages
+            const { data, error } = await supabase
+              .from("conversations")
+              .select(`
+                *,
+                messages:messages(content, created_at, sender_type, is_read)
+              `)
+              .eq("id", payload.new.id)
+              .single()
+              
+            if (!error && data) {
+              const processedConv = {
+                ...data,
+                last_message: "Nuevo chat", // Simplified
+                unread_count: 0
+              }
+              
+              setConversations(prev => [processedConv, ...prev])
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            setConversations(prev => {
+              const updatedList = prev.map(c => 
+                c.id === payload.new.id ? { ...c, ...payload.new } : c
+              )
+              
+              // If last_message_at changed, re-sort
+              return updatedList.sort((a, b) => 
+                new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+              )
+            })
+          }
         }
       )
       .subscribe()
@@ -148,6 +233,19 @@ export function ChatView({ userId }: ChatViewProps) {
     const fetchMessages = async () => {
       setIsLoadingMessages(true)
       try {
+        // Mark messages as read
+        await supabase
+          .from("messages")
+          .update({ is_read: true })
+          .eq("conversation_id", selectedConversation.id)
+          .eq("sender_type", "client")
+          .eq("is_read", false)
+
+        // Update local conversation state to clear unread count
+        setConversations(prev => prev.map(c => 
+          c.id === selectedConversation.id ? { ...c, unread_count: 0 } : c
+        ))
+
         const { data, error } = await supabase
           .from("messages")
           .select("*")
@@ -170,8 +268,17 @@ export function ChatView({ userId }: ChatViewProps) {
       .channel(`messages_${selectedConversation.id}`)
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${selectedConversation.id}` }, 
-        (payload) => {
+        async (payload) => {
           const newMessage = payload.new as Message
+          
+          // If message is from client and we are viewing it, mark as read immediately
+          if (newMessage.sender_type === 'client') {
+             await supabase
+              .from("messages")
+              .update({ is_read: true })
+              .eq("id", newMessage.id)
+          }
+
           setMessages(prev => {
             // Check if message already exists
             if (prev.some(m => m.id === newMessage.id)) return prev
@@ -203,7 +310,7 @@ export function ChatView({ userId }: ChatViewProps) {
     }
   }, [messages])
 
-  const updateBotStatus = async (newStatus: string, pausedUntil: string | null = null) => {
+    const updateBotStatus = async (newStatus: string, pausedUntil: string | null = null) => {
     if (!selectedConversation) return
     
     const actionText = newStatus === 'paused' ? 'pausado' : 'reanudado'
@@ -213,7 +320,8 @@ export function ChatView({ userId }: ChatViewProps) {
     const optimisticConv = { 
       ...selectedConversation, 
       status: newStatus,
-      paused_until: newStatus === 'paused' ? pausedUntil : null
+      paused_until: newStatus === 'paused' ? pausedUntil : null,
+      needs_attention: newStatus === 'active' ? false : selectedConversation.needs_attention // Clear attention flag if reactivating
     }
     
     setSelectedConversation(optimisticConv)
@@ -227,6 +335,7 @@ export function ChatView({ userId }: ChatViewProps) {
         updateData.paused_until = pausedUntil
       } else {
         updateData.paused_until = null
+        updateData.needs_attention = false // Clear attention flag in DB
       }
 
       const { error } = await supabase
@@ -253,9 +362,7 @@ export function ChatView({ userId }: ChatViewProps) {
         description: "No se pudo actualizar el estado del chat."
       })
     }
-  }
-
-  // Countdown timer effect
+  }  // Countdown timer effect
   useEffect(() => {
     if (!selectedConversation || selectedConversation.status !== 'paused' || !selectedConversation.paused_until) {
       setTimeRemaining("")
@@ -459,15 +566,28 @@ export function ChatView({ userId }: ChatViewProps) {
             ) : filteredConversations.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground">No se encontraron conversaciones</div>
             ) : (
-              filteredConversations.map((conv) => (
+              filteredConversations.map((conv) => {
+                const showUnread = (conv.unread_count || 0) > 0 && conv.status === 'paused'
+                const needsAttention = conv.needs_attention && conv.status === 'paused'
+                
+                return (
                 <button
                   key={conv.id}
                   onClick={() => setSelectedConversation(conv)}
                   className={cn(
-                    "flex items-start gap-3 p-4 text-left transition-colors hover:bg-muted/50 border-b last:border-0",
-                    selectedConversation?.id === conv.id && "bg-muted"
+                    "flex items-start gap-3 p-4 text-left transition-colors hover:bg-muted/50 border-b last:border-0 relative",
+                    selectedConversation?.id === conv.id && "bg-muted",
+                    showUnread && !needsAttention && "bg-blue-50 dark:bg-blue-950/20",
+                    needsAttention && "bg-red-50 dark:bg-red-950/20"
                   )}
                 >
+                  {showUnread && !needsAttention && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />
+                  )}
+                  {needsAttention && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500" />
+                  )}
+                  
                   <Avatar>
                     <AvatarImage src="" />
                     <AvatarFallback className={cn(
@@ -480,17 +600,17 @@ export function ChatView({ userId }: ChatViewProps) {
                   
                   <div className="flex-1 overflow-hidden">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium truncate">{conv.client_name}</span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      <span className={cn("truncate", (showUnread || needsAttention) ? "font-bold text-foreground" : "font-medium")}>{conv.client_name}</span>
+                      <span className={cn("text-xs whitespace-nowrap", needsAttention ? "text-red-600 font-bold" : showUnread ? "text-blue-600 font-medium" : "text-muted-foreground")}>
                         {formatTime(conv.last_message_at)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground truncate max-w-[180px]">
+                      <p className={cn("text-sm truncate max-w-[180px]", (showUnread || needsAttention) ? "font-medium text-foreground" : "text-muted-foreground")}>
                         {conv.last_message}
                       </p>
-                      {conv.unread_count && conv.unread_count > 0 ? (
-                        <Badge variant="default" className="h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                      {showUnread ? (
+                        <Badge variant="default" className={cn("h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]", needsAttention ? "bg-red-500 hover:bg-red-600" : "")}>
                           {conv.unread_count}
                         </Badge>
                       ) : null}
@@ -499,10 +619,26 @@ export function ChatView({ userId }: ChatViewProps) {
                       <Badge variant="outline" className="text-[10px] h-4 px-1 py-0">
                         {conv.platform}
                       </Badge>
+                      {needsAttention && (
+                        <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">
+                          Ayuda
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </button>
-              ))
+              )})
+            )}
+            
+            {/* Loader for infinite scroll */}
+            {hasMore && !isLoading && !searchTerm && (
+              <div ref={loadMoreRef} className="p-4 flex justify-center">
+                {isLoadingMore ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
+                ) : (
+                  <div className="h-1 w-full" /> // Invisible trigger
+                )}
+              </div>
             )}
           </div>
         </ScrollArea>

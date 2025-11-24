@@ -303,7 +303,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate bot response using the same logic as the main chat API
-    const botResponse = await generateBotResponse(
+    const { content: botResponse, shouldPause } = await generateBotResponse(
       supabase, 
       bot, 
       conversation, 
@@ -325,26 +325,40 @@ export async function POST(request: NextRequest) {
         content: botResponse,
         sender_type: 'bot',
         message_type: 'text',
-        metadata: { generated_via: 'webhook', sender_phone: senderPhone }
+        metadata: { 
+          generated_via: 'webhook', 
+          sender_phone: senderPhone,
+          is_handover: shouldPause 
+        }
       })
 
     if (saveError) {
       console.error('Error saving bot message:', saveError)
     }
 
-    // Update conversation last activity (works for all conversations now)
+    // Update conversation status
+    const updateData: any = { 
+      last_message_at: new Date().toISOString()
+    }
+
+    if (shouldPause) {
+      updateData.status = 'paused'
+      updateData.needs_attention = true
+      updateData.paused_until = null
+    } else {
+      updateData.status = 'active'
+    }
+
     await supabase
       .from("conversations")
-      .update({ 
-        last_message_at: new Date().toISOString(),
-        status: 'active'
-      })
+      .update(updateData)
       .eq("id", actualConversationId)
 
     return NextResponse.json({
       response: botResponse,
       conversationId,
-      botId
+      botId,
+      status: shouldPause ? 'paused' : 'active'
     })
 
   } catch (error) {
@@ -368,7 +382,7 @@ async function generateBotResponse(
   extractedClientData?: any,
   platform?: string,
   senderInstagramId?: string
-): Promise<string> {
+): Promise<{ content: string, shouldPause: boolean }> {
   try {
     // Get conversation history for context (recent messages first)
     const { data: messages } = await supabase
@@ -700,6 +714,10 @@ DETECCIÓN DE INTENCIONES:
 - PEDIDOS: Palabras clave como "quiero", "pedir", "ordenar", "llevar", "comprar", "me das", nombres de productos
 - RESERVAS: Palabras clave como "reservar", "mesa", "cita", "apartar", "agendar", "programar", fechas y horas
 - EXTRACCIÓN DE DATOS: Si el cliente menciona su nombre o teléfono, tómalo en cuenta para futuras referencias
+- DERIVACIÓN A HUMANO: Si el usuario solicita explícitamente hablar con una persona/humano/asesor, o si la consulta es una queja grave, o si no puedes resolverla:
+  1. Tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]"
+  2. Luego escribe un mensaje amable confirmando que un asesor humano responderá en breve.
+  3. NO inventes soluciones si el usuario pide un humano.
 - Responde proactivamente cuando detectes estas intenciones
 - Para pedidos: confirma productos, cantidades y modalidad de entrega
 - Para reservas: confirma fecha, hora, cantidad de personas y datos de contacto
@@ -719,7 +737,7 @@ MENÚ/CARTA:
 
     // Generate response using Gemini
     if (!bot.gemini_api_key) {
-      return "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente."
+      return { content: "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente.", shouldPause: false }
     }
 
     // Generate response using Gemini 2.5 Flash model with retry logic
@@ -784,7 +802,7 @@ MENÚ/CARTA:
 
     if (!response || !response.ok) {
       console.error('Gemini API failed after all retry attempts')
-      return "Disculpa, tengo problemas técnicos. Intenta nuevamente en un momento."
+      return { content: "Disculpa, tengo problemas técnicos. Intenta nuevamente en un momento.", shouldPause: false }
     }
 
     const data = await response.json()
@@ -802,7 +820,25 @@ MENÚ/CARTA:
           candidate.content.parts && 
           candidate.content.parts[0] && 
           candidate.content.parts[0].text) {
-        const aiResponse = candidate.content.parts[0].text.trim()
+        let aiResponse = candidate.content.parts[0].text.trim()
+        let shouldPause = false
+
+        // Check for handover tag
+        if (aiResponse.includes('[HANDOVER]')) {
+            console.log('🚨 AI detected handover request')
+            aiResponse = aiResponse.replace('[HANDOVER]', '').trim()
+            shouldPause = true
+            
+            // Send notification to business owner
+            await createNotification({
+                userId: bot.user_id,
+                title: "Solicitud de Humano (IA)",
+                message: `La IA ha detectado que el cliente ${senderName || senderPhone || 'Desconocido'} necesita atención humana.`,
+                type: 'warning',
+                link: `/dashboard/chat?id=${conversation.id}`,
+                metadata: { conversation_id: conversation.id, platform: platform || conversation.platform }
+            })
+        }
 
         // Process orders and reservations if bot has those features enabled
         const featuresCheck = bot.features || []
@@ -823,16 +859,16 @@ MENÚ/CARTA:
           )
         }
 
-        return aiResponse
+        return { content: aiResponse, shouldPause }
       }
     }
     
     console.error('Invalid Gemini response structure:', JSON.stringify(data, null, 2))
-    return "Disculpa, no pude generar una respuesta. Intenta con otra pregunta."
+    return { content: "Disculpa, no pude generar una respuesta. Intenta con otra pregunta.", shouldPause: false }
 
   } catch (error) {
     console.error('Error generating bot response:', error)
-    return "Disculpa, tengo problemas técnicos en este momento. Intenta nuevamente más tarde."
+    return { content: "Disculpa, tengo problemas técnicos en este momento. Intenta nuevamente más tarde.", shouldPause: false }
   }
 }
 

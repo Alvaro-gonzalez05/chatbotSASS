@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Bell, Check, Clock, Settings, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Bell, Check, Clock, Settings, Trash2, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 interface Notification {
   id: string;
@@ -19,17 +21,30 @@ interface Notification {
   metadata?: any;
 }
 
+const PAGE_SIZE = 10;
+
 export default function NotificationsDropdown() {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  
   const supabase = createClient();
+  const router = useRouter();
+  
+  // Intersection observer for infinite scroll
+  const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver({
+    threshold: 0.1,
+    triggerOnce: false
+  });
 
   useEffect(() => {
     console.log("🔔 NotificationsDropdown mounted - Realtime System Active");
     setMounted(true);
-    fetchNotifications();
+    fetchNotifications(0);
 
     // Subscribe to realtime changes
     const channel = supabase
@@ -39,10 +54,19 @@ export default function NotificationsDropdown() {
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newNotification = payload.new as Notification;
-            setNotifications(prev => [newNotification, ...prev]);
-            toast.info(newNotification.title, {
-              description: newNotification.message,
+            setNotifications(prev => {
+              // Avoid duplicates
+              if (prev.some(n => n.id === newNotification.id)) return prev;
+              return [newNotification, ...prev];
             });
+            
+            // Only show toast if it's NOT a handover request (to avoid double alerting)
+            // or if the user specifically requested to hide it
+            if (newNotification.title !== "Solicitud de Humano" && newNotification.title !== "Solicitud de Humano (IA)") {
+               toast.info(newNotification.title, {
+                description: newNotification.message,
+              });
+            }
           } else if (payload.eventType === 'UPDATE') {
             setNotifications(prev => prev.map(n => 
               n.id === payload.new.id ? { ...n, ...payload.new } : n
@@ -59,24 +83,55 @@ export default function NotificationsDropdown() {
     };
   }, []);
 
-  const fetchNotifications = async () => {
+  // Load more when scrolling to bottom
+  useEffect(() => {
+    if (isIntersecting && hasMore && !isLoading && !isLoadingMore && isOpen) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchNotifications(nextPage);
+    }
+  }, [isIntersecting, isOpen]);
+
+  const fetchNotifications = async (pageNumber: number) => {
     try {
+      if (pageNumber === 0) setIsLoading(true);
+      else setIsLoadingMore(true);
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const from = pageNumber * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .range(from, to);
 
       if (error) throw error;
-      setNotifications(data || []);
+      
+      const newNotifications = data || [];
+      
+      setNotifications(prev => {
+        if (pageNumber === 0) return newNotifications;
+        
+        // Filter out duplicates that might have been added via realtime or offset shifts
+        const existingIds = new Set(prev.map(n => n.id));
+        const uniqueNewNotifications = newNotifications.filter(n => !existingIds.has(n.id));
+        
+        return [...prev, ...uniqueNewNotifications];
+      });
+
+      if (newNotifications.length < PAGE_SIZE) {
+        setHasMore(false);
+      }
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
@@ -102,7 +157,7 @@ export default function NotificationsDropdown() {
     } catch (error) {
       console.error('Error marking notification as read:', error);
       // Revert on error
-      fetchNotifications();
+      fetchNotifications(0);
     }
   };
 
@@ -123,7 +178,7 @@ export default function NotificationsDropdown() {
       if (error) throw error;
     } catch (error) {
       console.error('Error marking all as read:', error);
-      fetchNotifications();
+      fetchNotifications(0);
     }
   };
 
@@ -140,7 +195,16 @@ export default function NotificationsDropdown() {
       if (error) throw error;
     } catch (error) {
       console.error('Error deleting notification:', error);
-      fetchNotifications();
+      fetchNotifications(0);
+    }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    markAsRead(notification.id);
+    setIsOpen(false);
+    
+    if (notification.link) {
+      router.push(notification.link);
     }
   };
 
@@ -226,7 +290,7 @@ export default function NotificationsDropdown() {
                       className={`p-3 sm:p-4 border-b border-neutral-100 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors cursor-pointer ${
                         !notification.read ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''
                       }`}
-                      onClick={() => markAsRead(notification.id)}
+                      onClick={() => handleNotificationClick(notification)}
                       whileHover={{ x: 4 }}
                       transition={{ type: "spring", stiffness: 400, damping: 17 }}
                     >
@@ -286,6 +350,17 @@ export default function NotificationsDropdown() {
                     <p className="text-neutral-500 dark:text-neutral-400">
                       No tienes notificaciones
                     </p>
+                  </div>
+                )}
+                
+                {/* Loader for infinite scroll */}
+                {hasMore && !isLoading && notifications.length > 0 && (
+                  <div ref={loadMoreRef} className="p-4 flex justify-center">
+                    {isLoadingMore ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
+                    ) : (
+                      <div className="h-1 w-full" /> // Invisible trigger
+                    )}
                   </div>
                 )}
               </div>

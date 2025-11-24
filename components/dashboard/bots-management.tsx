@@ -41,6 +41,7 @@ import {
 } from "lucide-react"
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
+import { FaWhatsapp } from "react-icons/fa"
 
 interface BotData {
   id: string
@@ -52,6 +53,7 @@ interface BotData {
   gemini_api_key?: string
   is_active: boolean
   created_at: string
+  user_id: string
 }
 
 interface BotsManagementProps {
@@ -60,7 +62,7 @@ interface BotsManagementProps {
 }
 
 const platformIcons = {
-  whatsapp: MessageSquare,
+  whatsapp: FaWhatsapp,
   instagram: Instagram,
   email: Mail,
 }
