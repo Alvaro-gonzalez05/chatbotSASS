@@ -15,8 +15,6 @@ export default async function DashboardPage() {
   const { data: profile } = await supabase.from("user_profiles").select("*").eq("id", data.user.id).single()
 
   return (
-    <PageTransition>
-      <DashboardOverview user={data.user} profile={profile} />
-    </PageTransition>
+    <DashboardOverview user={data.user} profile={profile} />
   )
 }

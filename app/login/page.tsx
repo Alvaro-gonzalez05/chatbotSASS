@@ -50,6 +50,10 @@ export default function LoginPage() {
             name: userProfile?.business_name || user.email?.split('@')[0],
             plan: userProfile?.plan_type || 'trial'
           })
+          
+          // Prefetch dashboard while animation is preparing
+          router.prefetch('/dashboard')
+          
           setShowSuccessOverlay(true)
         } else {
           router.push('/register/complete')
@@ -101,6 +105,10 @@ export default function LoginPage() {
           name: profile?.business_name || user.email?.split('@')[0],
           plan: profile?.plan_type || 'trial'
         })
+        
+        // Prefetch dashboard while animation is preparing
+        router.prefetch('/dashboard')
+        
         setShowSuccessOverlay(true)
       }
     } catch (error: unknown) {

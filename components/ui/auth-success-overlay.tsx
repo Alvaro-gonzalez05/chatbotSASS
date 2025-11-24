@@ -44,10 +44,14 @@ export default function AuthSuccessOverlay({
 
     // Redirección automática después de la animación (más tiempo)
     const redirectTimer = setTimeout(() => {
+      // Prefetch dashboard for faster loading
+      router.prefetch('/dashboard')
+      
       if (onComplete) {
         onComplete()
       } else {
-        router.push('/dashboard')
+        // Use replace instead of push to prevent back navigation
+        router.replace('/dashboard')
       }
     }, 6200)
 
@@ -84,7 +88,7 @@ export default function AuthSuccessOverlay({
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        exit={{ opacity: 1 }} // Keep opacity 1 on exit to prevent flash
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
       >
         <Card className="w-full max-w-md mx-4 border-0 shadow-2xl bg-white/95 backdrop-blur">

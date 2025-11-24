@@ -19,8 +19,6 @@ export default async function BotsPage() {
     .order("created_at", { ascending: false })
 
   return (
-    <PageTransition>
-      <BotsManagement initialBots={bots || []} userId={data.user.id} />
-    </PageTransition>
+    <BotsManagement initialBots={bots || []} userId={data.user.id} />
   )
 }

@@ -58,13 +58,11 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
   }
 
   return (
-    <PageTransition>
-      <ClientsManagement 
-        initialClients={clients || []} 
-        userId={data.user.id}
-        pagination={paginationInfo}
-        searchTerm={search}
-      />
-    </PageTransition>
+    <ClientsManagement 
+      initialClients={clients || []} 
+      userId={data.user.id}
+      pagination={paginationInfo}
+      searchTerm={search}
+    />
   )
 }

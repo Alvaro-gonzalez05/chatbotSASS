@@ -41,6 +41,15 @@ export default function NotificationsDropdown() {
     triggerOnce: false
   });
 
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio('/sounds/notification.mp3');
+      audio.play().catch(error => console.log("Audio play failed (user interaction required):", error));
+    } catch (e) {
+      console.error("Error initializing audio:", e);
+    }
+  };
+
   useEffect(() => {
     console.log("🔔 NotificationsDropdown mounted - Realtime System Active");
     setMounted(true);
@@ -54,6 +63,10 @@ export default function NotificationsDropdown() {
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newNotification = payload.new as Notification;
+            
+            // Play notification sound
+            playNotificationSound();
+
             setNotifications(prev => {
               // Avoid duplicates
               if (prev.some(n => n.id === newNotification.id)) return prev;
