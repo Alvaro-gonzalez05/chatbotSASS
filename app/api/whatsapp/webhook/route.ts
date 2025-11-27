@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    const origin = request.nextUrl.origin
     console.log('WhatsApp Webhook Event:', JSON.stringify(body, null, 2))
 
     // Verify webhook signature (recommended for production)
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
         if (entry.changes && entry.changes.length > 0) {
           for (const change of entry.changes) {
             if (change.field === 'messages') {
-              await processWhatsAppMessage(change.value)
+              await processWhatsAppMessage(change.value, origin)
             }
           }
         }
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processWhatsAppMessage(messageData: any) {
+async function processWhatsAppMessage(messageData: any, origin: string) {
   if (!messageData.messages || messageData.messages.length === 0) {
     return
   }
@@ -373,7 +374,7 @@ async function processWhatsAppMessage(messageData: any) {
         }
 
         console.log('⚡ No newer messages, generating response...')
-        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName)
+        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName, origin)
       }
 
     } catch (error) {
@@ -388,13 +389,22 @@ async function generateAndSendAIResponse(
   senderPhone: string,
   userMessage: string,
   botId: string,
-  senderName?: string
+  senderName?: string,
+  origin?: string
 ) {
   try {
     // Generate AI response using webhook-specific chat API
-    const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'http://localhost:3000'
+    let baseUrl = origin;
+    if (!baseUrl) {
+      if (process.env.NEXTAUTH_URL) {
+        baseUrl = process.env.NEXTAUTH_URL;
+      } else if (process.env.VERCEL_URL) {
+        baseUrl = `https://${process.env.VERCEL_URL}`;
+      } else {
+        baseUrl = 'http://localhost:3000';
+      }
+    }
+    
     const chatApiUrl = `${baseUrl}/api/chat/webhook`
     
     const response = await fetch(chatApiUrl, {
