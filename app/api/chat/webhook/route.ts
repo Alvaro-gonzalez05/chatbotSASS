@@ -390,10 +390,35 @@ async function generateBotResponse(
       .select("*")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
-      .limit(15) // Increased limit to capture full bursts
+      .limit(30) // Increased limit to capture full bursts
+
+    // SESSION TIMEOUT LOGIC
+    // Filter messages to only include the current "session".
+    // If there is a gap of > 6 hours between messages, we cut the history there.
+    const SESSION_TIMEOUT_HOURS = 6;
+    let validMessages: any[] = [];
+    
+    if (messages && messages.length > 0) {
+        // Start with the most recent message
+        validMessages.push(messages[0]);
+        
+        for (let i = 0; i < messages.length - 1; i++) {
+            const currentMsgDate = new Date(messages[i].created_at);
+            const prevMsgDate = new Date(messages[i+1].created_at);
+            
+            const gapHours = (currentMsgDate.getTime() - prevMsgDate.getTime()) / (1000 * 60 * 60);
+            
+            if (gapHours < SESSION_TIMEOUT_HOURS) {
+                validMessages.push(messages[i+1]);
+            } else {
+                console.log(`🕒 Session gap detected (${gapHours.toFixed(1)}h) at message ${i}. Cutting history.`);
+                break; // Stop adding older messages
+            }
+        }
+    }
 
     // Reverse to get chronological order
-    const chronologicalMessages = messages?.reverse() || []
+    const chronologicalMessages = validMessages.reverse();
 
     // Separate the "history" from the "current user turn"
     // We want to group all recent user messages into the "New Message" block
@@ -474,11 +499,12 @@ async function generateBotResponse(
       const menuText = menuLink ? `Disponible en: ${menuLink}` : 'No especificado'
 
       businessInfo = `
-${userProfile.business_name || 'Negocio'} - ${userProfile.business_description || 'Restaurante'}
-📍 ${userProfile.location || 'No especificado'}
-📞 ${fallbackInfo.phone || 'No especificado'}
-🍴 Menú: ${menuText}
-⏰ ${hoursText}
+NOMBRE DEL NEGOCIO: ${userProfile.business_name || 'Negocio'}
+DESCRIPCIÓN: ${userProfile.business_description || 'Restaurante'}
+📍 DIRECCIÓN: ${userProfile.location || 'No especificado'}
+📞 TELÉFONO: ${fallbackInfo.phone || 'No especificado'}
+🍴 MENÚ: ${menuText}
+⏰ HORARIOS: ${hoursText}
 ${socialText ? '📱 ' + socialText : ''}
       `.trim()
 
@@ -714,10 +740,11 @@ DETECCIÓN DE INTENCIONES:
 - PEDIDOS: Palabras clave como "quiero", "pedir", "ordenar", "llevar", "comprar", "me das", nombres de productos
 - RESERVAS: Palabras clave como "reservar", "mesa", "cita", "apartar", "agendar", "programar", fechas y horas
 - EXTRACCIÓN DE DATOS: Si el cliente menciona su nombre o teléfono, tómalo en cuenta para futuras referencias
-- DERIVACIÓN A HUMANO: Si el usuario solicita explícitamente hablar con una persona/humano/asesor, o si la consulta es una queja grave, o si no puedes resolverla:
+- DERIVACIÓN A HUMANO: Si el usuario solicita explícitamente hablar con una persona/humano/asesor, o si la consulta es una queja grave, o si no puedes resolverla (por ejemplo, piden productos que no tienes):
   1. Tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]"
   2. Luego escribe un mensaje amable confirmando que un asesor humano responderá en breve.
   3. NO inventes soluciones si el usuario pide un humano.
+  4. IMPORTANTE: Si no tienes los productos que pide el cliente, DEBES usar [HANDOVER].
 - Responde proactivamente cuando detectes estas intenciones
 - Para pedidos: confirma productos, cantidades y modalidad de entrega
 - Para reservas: confirma fecha, hora, cantidad de personas y datos de contacto
@@ -725,7 +752,12 @@ DETECCIÓN DE INTENCIONES:
 
 MENÚ/CARTA:
 - Si piden carta: saluda + contexto + enlace directo (no hipervínculo) + invitar preguntas
-- Tono entusiasta sobre productos`
+- Tono entusiasta sobre productos
+
+REGLAS DE PRIORIDAD Y CONFLICTOS:
+1. INFORMACIÓN DEL NEGOCIO: Los datos en la sección "INFORMACIÓN DEL NEGOCIO" (nombre, dirección, horarios, menú) son la VERDAD ABSOLUTA. Si la sección "PERSONALIDAD" menciona datos diferentes, IGNÓRALOS y usa solo los de "INFORMACIÓN DEL NEGOCIO".
+2. INSTRUCCIONES DEL SISTEMA: Las instrucciones sobre comportamiento (pedir nombre, tomar pedidos, derivar a humano) son OBLIGATORIAS. Si la "PERSONALIDAD" dice que no hagas algo que el sistema requiere, IGNORA esa parte de la personalidad.
+3. PERSONALIDAD: Usa la sección "PERSONALIDAD" únicamente para definir tu tono, estilo de voz y vocabulario, siempre y cuando no contradiga los puntos 1 y 2.`
 
 
 
@@ -886,217 +918,248 @@ async function processOrdersAndReservations(
   extractedClientData?: any
 ) {
   try {
-    // Analyze the conversation to detect completed orders or reservations
-    const combinedText = `${userMessage} ${aiResponse}`.toLowerCase()
-    
-    // Order detection patterns - improved logic
-    if (canTakeOrders) {
-      const orderKeywords = [
-        'pedido confirmado', 'pedido registrado', 'total del pedido', 
-        'resumen del pedido', 'pedido finalizado', 'tu pedido es',
-        'el total es', 'total: $', 'confirmo tu pedido', 'anotado',
-        'ya estamos preparando', 'te esperamos', 'listo el pedido',
-        'perfecto, una', 'dale, una', 'excelente elección',
-        'tu orden', 'orden confirmada', 'orden registrada',
-        'perfecto!', 'listo!', '¡perfecto!', '¡listo!',
-        'apuntado', 'tomamos nota', 'muy bien',
-        'quedó anotado', 'genial', '¡genial!'
-      ]
-      
-      const hasOrderConfirmation = orderKeywords.some(keyword => 
-        aiResponse.toLowerCase().includes(keyword)
-      )
-      
-      // Also check if we have a complete order (product + quantity + delivery method)
-      const orderInfo = parseOrderFromResponse(aiResponse, userMessage)
-      const hasCompleteOrder = orderInfo.items.length > 0 && (
-        combinedText.includes('retir') || 
-        combinedText.includes('domicilio') || 
-        combinedText.includes('envío') ||
-        combinedText.includes('delivery')
-      )
-      
-      // Create order if confirmed OR if we have complete information and bot seems to be acknowledging it
-      if (hasOrderConfirmation || (hasCompleteOrder && (
-        aiResponse.toLowerCase().includes('dale') ||
-        aiResponse.toLowerCase().includes('perfecto') ||
-        aiResponse.toLowerCase().includes('excelente') ||
-        aiResponse.toLowerCase().includes('anotado') ||
-        aiResponse.toLowerCase().includes('listo')
-      ))) {
-        console.log('🛒 Order detected - creating order. Confirmation:', hasOrderConfirmation, 'Complete:', hasCompleteOrder)
-        // Create order directly from confirmed information
-        await createOrderFromConfirmedResponse(supabase, bot, conversation, userMessage, aiResponse, senderName, senderPhone)
-      }
+    if (!bot.gemini_api_key) return;
+
+    // Combined detection and extraction prompt
+    const analysisPrompt = `
+Analiza la última interacción entre Usuario y Bot.
+Determina si el Bot ha CONFIRMADO FINALMENTE un pedido o una reserva.
+
+Usuario: "${userMessage}"
+Bot: "${aiResponse}"
+
+FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
+
+Si es un PEDIDO CONFIRMADO (${canTakeOrders ? 'SI' : 'NO'} habilitado):
+Extrae los items, total, y tipo de entrega.
+Formato JSON:
+{
+  "type": "order",
+  "items": [{"name": "x", "quantity": 1, "price": 0}],
+  "total": 0,
+  "orderType": "delivery" | "pickup",
+  "deliveryAddress": "...",
+  "customerName": "...",
+  "customerPhone": "..."
+}
+
+Si es una RESERVA CONFIRMADA (${canTakeReservations ? 'SI' : 'NO'} habilitado):
+Extrae fecha, hora, personas.
+Formato JSON:
+{
+  "type": "reservation",
+  "customerName": "...",
+  "customerPhone": "...",
+  "reservationDate": "YYYY-MM-DD",
+  "reservationTime": "HH:MM",
+  "partySize": 0,
+  "specialRequests": "..."
+}
+
+Si NO hay confirmación explícita (solo están charlando o preguntando):
+{ "type": "none" }
+
+Responde SOLO con el JSON.
+`;
+
+    // Call Gemini
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: analysisPrompt }] }],
+        generationConfig: { temperature: 0.1 }
+      })
+    });
+
+    if (!response.ok) return;
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return;
+
+    let result;
+    try {
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        result = JSON.parse(jsonStr);
+    } catch (e) {
+        console.error("Error parsing analysis JSON", e);
+        return;
     }
-    
-    // Reservation detection patterns
-    if (canTakeReservations) {
-      const reservationKeywords = [
-        'reserva confirmada', 'genial! reserva confirmada', 
-        'reserva registrada', 'reserva para', 'mesa reservada', 
-        'tu reserva', 'reserva finalizada', 'reserva anotada', 
-        'reserva lista', 'cita confirmada', 'cita registrada', 
-        'tu cita', 'mesa apartada', 'te esperamos el', 
-        'nos vemos el', 'quedaste agendado', 'agendamos tu', 
-        'programamos tu', 'tenemos tu mesa',
-        'aquí tenés el resumen', 'resumen:', '**fecha:**', '**hora:**',
-        'confirmada para', 'listo para', 'anotado para', 'registrado para'
-      ]
-      
-      const hasReservationConfirmation = reservationKeywords.some(keyword => 
-        aiResponse.toLowerCase().includes(keyword)
-      )
-      
-      console.log('🔍 Checking reservation confirmation. Found:', hasReservationConfirmation)
-      console.log('🤖 AI Response preview:', aiResponse.substring(0, 100))
-      console.log('🔍 Full AI Response for debugging:', aiResponse)
-      
-      if (hasReservationConfirmation) {
-        console.log('✅ Reservation confirmation detected - calling processReservationFromConversation')
-        // Extract reservation information - passing extracted client data too
-        await processReservationFromConversation(supabase, bot, conversation, userMessage, aiResponse, senderName, senderPhone, extractedClientData)
-      } else {
-        console.log('❌ No reservation confirmation keywords found in response')
-      }
+
+    if (result.type === 'order' && canTakeOrders) {
+        console.log('🤖 AI Detected & Extracted Order:', result);
+        await saveOrderFromAI(supabase, bot, conversation, result, senderName, senderPhone);
+    } else if (result.type === 'reservation' && canTakeReservations) {
+        console.log('🤖 AI Detected & Extracted Reservation:', result);
+        await saveReservationFromAI(supabase, bot, conversation, result, senderName, senderPhone, extractedClientData);
     }
+
   } catch (error) {
-    console.error('Error processing orders/reservations:', error)
+    console.error('Error processing orders/reservations:', error);
   }
 }
 
-// Function to create order from confirmed response (simplified approach)
-async function createOrderFromConfirmedResponse(
+async function saveOrderFromAI(
   supabase: any,
   bot: any,
   conversation: any,
-  userMessage: string,
-  aiResponse: string,
+  orderData: any,
   senderName?: string,
   senderPhone?: string
 ) {
   try {
-    console.log('📝 Creating order from confirmed response')
+    if (!orderData.items || orderData.items.length === 0) return;
+
+    let clientId = conversation.client_id;
     
-    // Parse order information from the confirmed response
-    const orderInfo = parseOrderFromResponse(aiResponse, userMessage)
-    
-    if (orderInfo.items.length > 0) {
-      // Check if it's a delivery order without address
-      if (orderInfo.orderType === 'delivery') {
-        const hasAddressInMessage = /dirección|direccion|calle|número|numero|barrio|zona|vivo en|mi dirección es/i.test(`${userMessage} ${aiResponse}`)
-        if (!hasAddressInMessage) {
-          console.log('🚫 Delivery order detected but no address provided - not creating order yet')
-          return // Don't create order until address is provided
-        }
-      }
-      
-      let clientId = conversation.client_id
-      
-      // Check if we need to find or create a client
-      if (!clientId && senderPhone) {
-        // Check if client exists by phone number
-        const { data: existingClient } = await supabase
+    // Check if we need to find or create a client
+    if (!clientId && senderPhone) {
+      const { data: existingClient } = await supabase
+        .from("clients")
+        .select("id, name, phone")
+        .eq("user_id", bot.user_id)
+        .eq("phone", senderPhone)
+        .single();
+
+      if (existingClient) {
+        clientId = existingClient.id;
+        await supabase.from("conversations").update({ client_id: clientId }).eq("id", conversation.id);
+      } else if (bot.features && bot.features.includes('register_clients')) {
+        const { data: newClient } = await supabase
           .from("clients")
-          .select("id, name, phone")
-          .eq("user_id", bot.user_id)
-          .eq("phone", senderPhone)
-          .single()
+          .insert({
+            user_id: bot.user_id,
+            name: senderName || `Cliente ${senderPhone}`,
+            phone: senderPhone,
+            source: 'whatsapp_auto',
+            notes: 'Registrado automáticamente via WhatsApp'
+          })
+          .select()
+          .single();
 
-        if (existingClient) {
-          console.log('📱 Found existing client:', existingClient)
-          clientId = existingClient.id
-          
-          // Update conversation with client_id
-          await supabase
-            .from("conversations")
-            .update({ client_id: clientId })
-            .eq("id", conversation.id)
-        } else if (bot.features && bot.features.includes('register_clients')) {
-          // Auto-register new client if feature is enabled
-          console.log('👤 Auto-registering new client')
-          const { data: newClient, error: clientError } = await supabase
-            .from("clients")
-            .insert({
-              user_id: bot.user_id,
-              name: senderName || `Cliente ${senderPhone}`,
-              phone: senderPhone,
-              source: 'whatsapp_auto',
-              notes: 'Registrado automáticamente via WhatsApp'
-            })
-            .select()
-            .single()
-
-          if (!clientError && newClient) {
-            console.log('✅ New client created:', newClient)
-            clientId = newClient.id
-            
-            // Create notification for new client
-            await createNotification({
-              userId: bot.user_id,
-              title: "Nuevo cliente registrado",
-              message: `${newClient.name} se ha registrado automáticamente`,
-              type: "success",
-              link: `/dashboard/clients?id=${newClient.id}`
-            });
-            
-            // Update conversation with new client_id
-            await supabase
-              .from("conversations")
-              .update({ 
-                client_id: clientId,
-                client_name: newClient.name 
-              })
-              .eq("id", conversation.id)
-          } else {
-            console.error('❌ Error creating client:', clientError)
-          }
+        if (newClient) {
+          clientId = newClient.id;
+          await createNotification({
+            userId: bot.user_id,
+            title: "Nuevo cliente registrado",
+            message: `${newClient.name} se ha registrado automáticamente`,
+            type: "success",
+            link: `/dashboard/clients?id=${newClient.id}`
+          });
+          await supabase.from("conversations").update({ client_id: clientId, client_name: newClient.name }).eq("id", conversation.id);
         }
-      }
-
-      // Extract address if it's a delivery order
-      let deliveryAddress = null
-      if (orderInfo.orderType === 'delivery') {
-        const addressMatch = `${userMessage} ${aiResponse}`.match(/(?:dirección|direccion|vivo en|mi dirección es|enviar a)[\s:]*([^.!?]+)/i)
-        if (addressMatch) {
-          deliveryAddress = addressMatch[1].trim()
-        } else {
-          deliveryAddress = 'Por confirmar'
-        }
-      }
-
-      const { error } = await supabase
-        .from("orders")
-        .insert({
-          user_id: bot.user_id,
-          client_id: clientId,
-          conversation_id: conversation.id,
-          items: orderInfo.items,
-          total_amount: orderInfo.total,
-          customer_notes: `Pedido vía WhatsApp: ${userMessage}`,
-          delivery_address: deliveryAddress,
-          delivery_phone: senderPhone || conversation.client_phone,
-          status: 'pending',
-          order_type: orderInfo.orderType || 'pickup'
-        })
-
-      if (!error) {
-        console.log('✅ Order created successfully:', orderInfo)
-        
-        // Create notification for new order
-        await createNotification({
-          userId: bot.user_id,
-          title: "Nuevo pedido recibido",
-          message: `Pedido de $${orderInfo.total} recibido vía WhatsApp`,
-          type: "success",
-          link: `/dashboard/orders`
-        });
-      } else {
-        console.error('❌ Error saving order:', error)
       }
     }
+
+    const { error } = await supabase
+      .from("orders")
+      .insert({
+        user_id: bot.user_id,
+        client_id: clientId,
+        conversation_id: conversation.id,
+        items: orderData.items,
+        total_amount: orderData.total,
+        customer_notes: `Pedido vía WhatsApp`,
+        delivery_address: orderData.deliveryAddress,
+        delivery_phone: senderPhone || conversation.client_phone,
+        status: 'pending',
+        order_type: orderData.orderType || 'pickup'
+      });
+
+    if (!error) {
+      console.log('✅ Order saved successfully from AI');
+      await createNotification({
+        userId: bot.user_id,
+        title: "Nuevo pedido recibido",
+        message: `Pedido de $${orderData.total} recibido vía WhatsApp`,
+        type: "success",
+        link: `/dashboard/orders`
+      });
+    } else {
+      console.error('❌ Error saving order:', error);
+    }
   } catch (error) {
-    console.error('Error creating order:', error)
+    console.error('Error saving order from AI:', error);
+  }
+}
+
+async function saveReservationFromAI(
+  supabase: any,
+  bot: any,
+  conversation: any,
+  reservationData: any,
+  senderName?: string,
+  senderPhone?: string,
+  extractedClientData?: any
+) {
+  try {
+    // Check for duplicate reservations in the last 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: existingReservations } = await supabase
+      .from("reservations")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .eq("reservation_date", reservationData.reservationDate)
+      .eq("reservation_time", reservationData.reservationTime)
+      .gte("created_at", fiveMinutesAgo)
+      .limit(1);
+
+    if (existingReservations && existingReservations.length > 0) {
+      console.log('⚠️ Duplicate reservation detected, skipping creation');
+      return;
+    }
+
+    let customerName = reservationData.customerName || senderName || conversation.client_name;
+    let customerPhone = reservationData.customerPhone || senderPhone || conversation.client_phone;
+    
+    if (extractedClientData && (!customerName || !customerPhone)) {
+      if (!customerName && extractedClientData.name) customerName = extractedClientData.name;
+      if (!customerPhone && extractedClientData.phone) customerPhone = extractedClientData.phone;
+    }
+
+    let clientId = conversation.client_id;
+    if (customerName && customerPhone && (customerName !== 'Usuario de Prueba' && customerPhone !== 'test-user')) {
+      const clientRecord = await createOrUpdateClient(supabase, bot.user_id, {
+        name: customerName,
+        phone: customerPhone
+      }, conversation.id);
+      
+      if (clientRecord) {
+        clientId = clientRecord.id;
+        await supabase.from("conversations").update({ client_id: clientRecord.id }).eq("id", conversation.id);
+      }
+    }
+
+    const { data: insertedReservation, error } = await supabase
+      .from("reservations")
+      .insert({
+        user_id: bot.user_id,
+        client_id: clientId,
+        conversation_id: conversation.id,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        reservation_date: reservationData.reservationDate,
+        reservation_time: reservationData.reservationTime,
+        party_size: reservationData.partySize,
+        special_requests: reservationData.specialRequests,
+        status: 'pending'
+      })
+      .select();
+
+    if (!error && insertedReservation) {
+      console.log('✅ Reservation saved successfully from AI');
+      await createNotification({
+        userId: bot.user_id,
+        title: "Nueva reserva confirmada",
+        message: `Reserva para ${reservationData.partySize} personas el ${reservationData.reservationDate} a las ${reservationData.reservationTime}`,
+        type: "success",
+        link: `/dashboard/reservations`
+      });
+    } else {
+      console.error('❌ Error saving reservation:', error);
+    }
+  } catch (error) {
+    console.error('Error saving reservation from AI:', error);
   }
 }
 

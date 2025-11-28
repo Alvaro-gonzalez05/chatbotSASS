@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
         
       case 'automations':
         // Nuevo: manejar cuando se crea/activa una automatización de promoción
-        if (type === 'INSERT' && record.trigger_type === 'new_promotion' && record.promotion) {
+        if (type === 'INSERT' && record.trigger_type === 'new_promotion') {
           // Esperar 5 segundos para permitir que la UI del cliente muestre la confirmación antes de iniciar el procesamiento pesado
           await new Promise(resolve => setTimeout(resolve, 5000))
           await handlePromotionAutomation(supabase, record)
@@ -184,10 +184,10 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
   
   try {
     const automation = automationRecord
-    const promotion = automation.promotion // Datos de la promoción incluidos
+    const promotion = automation.promotion // Datos de la promoción incluidos (puede ser null)
     
-    if (!promotion || !automation.is_active) {
-      console.log('⚠️ Automation inactive or no promotion attached')
+    if (!automation.is_active) {
+      console.log('⚠️ Automation inactive')
       return
     }
 
@@ -211,6 +211,21 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
       .select('*')
       .eq('user_id', automation.user_id)
 
+    // Filtrar por audiencia seleccionada si aplica
+    const targetAudience = automation.trigger_config?.target_audience;
+    const selectedClients = automation.trigger_config?.selected_clients;
+
+    console.log('🎯 Target Audience Config:', { targetAudience, selectedClientsCount: selectedClients?.length, selectedClients });
+
+    if (targetAudience === 'specific') {
+      if (Array.isArray(selectedClients) && selectedClients.length > 0) {
+        clientsQuery = clientsQuery.in('id', selectedClients);
+      } else {
+        console.log('⚠️ Specific audience selected but no clients provided (or invalid format). Aborting broadcast.');
+        return;
+      }
+    }
+
     // Filtrar clientes según la plataforma del bot
     if (bot.platform === 'whatsapp') {
       clientsQuery = clientsQuery.not('phone', 'is', null)
@@ -222,8 +237,13 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
 
     const { data: clients, error: clientsError } = await clientsQuery
 
-    if (clientsError || !clients || clients.length === 0) {
-      console.log(`ℹ️ No active clients found for ${bot.platform} promotion broadcast`)
+    if (clientsError) {
+      console.error('❌ Error fetching clients:', clientsError);
+      return;
+    }
+
+    if (!clients || clients.length === 0) {
+      console.log(`ℹ️ No active clients found for ${bot.platform} promotion broadcast. Query returned 0 results.`)
       return
     }
 
@@ -265,14 +285,20 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
         messageContent = messageContent.replace(/\{nombre\}/g, client.name || 'Cliente')
         messageContent = messageContent.replace(/\{name\}/g, client.name || 'Cliente')
         messageContent = messageContent.replace(/\{client_name\}/g, client.name || 'Cliente')
-        messageContent = messageContent.replace(/\{promocion\}/g, promotion.name)
-        messageContent = messageContent.replace(/\{promotion_name\}/g, promotion.name)
+        
+        if (promotion) {
+          messageContent = messageContent.replace(/\{promocion\}/g, promotion.name)
+          messageContent = messageContent.replace(/\{promotion_name\}/g, promotion.name)
+        } else {
+          messageContent = messageContent.replace(/\{promocion\}/g, '')
+          messageContent = messageContent.replace(/\{promotion_name\}/g, '')
+        }
         
         messageContent = messageContent.replace(/\{negocio\}/g, businessName)
         messageContent = messageContent.replace(/\{business_name\}/g, businessName)
 
         // Si la promoción tiene imagen, incluir referencia
-        if (promotion.image_url) {
+        if (promotion && promotion.image_url) {
           messageContent += '\n\n📸 Ve la imagen de la promoción en nuestros canales.'
         }
 
@@ -311,16 +337,16 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
                  value = client.phone || '';
                  break;
                case 'nombre_promocion':
-                 value = promotion.name || '';
+                 value = promotion ? promotion.name : '';
                  break;
                case 'descripcion_promocion':
-                 value = promotion.description || '';
+                 value = promotion ? (promotion.description || '') : '';
                  break;
                case 'fecha_inicio':
-                 value = promotion.start_date ? new Date(promotion.start_date).toLocaleDateString() : '';
+                 value = (promotion && promotion.start_date) ? new Date(promotion.start_date).toLocaleDateString() : '';
                  break;
                case 'fecha_fin':
-                 value = promotion.end_date ? new Date(promotion.end_date).toLocaleDateString() : '';
+                 value = (promotion && promotion.end_date) ? new Date(promotion.end_date).toLocaleDateString() : '';
                  break;
                default:
                  value = fieldName; // Fallback
@@ -352,8 +378,8 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
           automation_type: 'new_promotion',
           priority: 3, // Prioridad media para promociones
           metadata: {
-            promotion_id: promotion.id,
-            promotion_name: promotion.name,
+            promotion_id: promotion ? promotion.id : null,
+            promotion_name: promotion ? promotion.name : null,
             ...templateMetadata
           }
         }
@@ -377,7 +403,7 @@ async function handlePromotionAutomation(supabase: any, automationRecord: any) {
           message_content: messageContent,
           success: true,
           metadata: {
-            promotion_id: promotion.id,
+            promotion_id: promotion ? promotion.id : null,
             broadcast_type: 'new_promotion',
             platform: bot.platform
           }

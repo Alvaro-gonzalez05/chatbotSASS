@@ -405,6 +405,11 @@ async function generateAndSendAIResponse(
       }
     }
     
+    // Force HTTP for localhost to avoid SSL errors in development
+    if (baseUrl.includes('localhost')) {
+      baseUrl = baseUrl.replace('https://', 'http://');
+    }
+    
     const chatApiUrl = `${baseUrl}/api/chat/webhook`
     
     const response = await fetch(chatApiUrl, {

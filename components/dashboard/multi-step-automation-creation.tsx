@@ -73,6 +73,7 @@ interface MessageTemplate {
   html_content?: string
   variables: string[]
   status: string
+  language?: string
   can_use: boolean
   source: 'local_db' | 'meta_api' | 'create_new'
 }
@@ -98,6 +99,12 @@ interface Promotion {
   end_date: string
   is_active: boolean
   image_url?: string
+}
+
+interface Client {
+  id: string
+  name: string
+  phone: string
 }
 
 interface MultiStepAutomationCreationProps {
@@ -178,6 +185,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   const [accessToken, setAccessToken] = useState("")
   const [detectedVariables, setDetectedVariables] = useState<string[]>([])
   const [availableVariables, setAvailableVariables] = useState<TemplateVariable[]>([])
+  const [clients, setClients] = useState<Client[]>([])
   const supabase = createClient()
 
   const [formData, setFormData] = useState<AutomationFormData>({
@@ -225,6 +233,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       fetchPromotions()
       // Primero cargar la suscripción, luego verificar límites se hará automáticamente
       fetchUserSubscription()
+      fetchClients()
     }
   }, [isOpen, userId])
 
@@ -294,6 +303,17 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     formData.trigger_type,
     formData.promotion_id
   ])
+
+  const fetchClients = async () => {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from("clients")
+      .select("id, name, phone")
+      .eq("user_id", userId)
+      .order("name", { ascending: true })
+    
+    if (data) setClients(data)
+  }
 
   const fetchBots = async () => {
     try {
@@ -570,6 +590,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         body_content: "",
         variables: []
       },
+      variable_mapping: {},
       bot_id: "",
       is_active: true,
     })
@@ -696,33 +717,37 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
       if (error) throw error
 
-      // Si es una automatización de tipo new_promotion y tiene promoción asignada,
-      // disparar el broadcast inmediatamente
-      if (automation.trigger_type === 'new_promotion' && automation.promotion_id && automation.is_active) {
+      // Si es una automatización de tipo new_promotion, disparar el broadcast inmediatamente
+      // (incluso si no tiene promoción vinculada, puede ser un mensaje masivo simple)
+      if (automation.trigger_type === 'new_promotion' && automation.is_active) {
         try {
-          // Obtener datos de la promoción
-          const { data: promotion } = await supabase
-            .from('promotions')
-            .select('*')
-            .eq('id', automation.promotion_id)
-            .single()
-
-          if (promotion) {
-            // Llamar al endpoint de webhook para procesar el broadcast
-            // NO esperar la respuesta (fire and forget) para evitar bloquear la UI
-            fetch('/api/automations/webhook', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                type: 'INSERT',
-                table: 'automations',
-                record: {
-                  ...automation,
-                  promotion: promotion
-                }
-              })
-            }).catch(err => console.error('Error triggering background webhook:', err))
+          let promotion = null;
+          
+          // Si tiene promoción vinculada, obtener sus datos
+          if (automation.promotion_id) {
+            const { data } = await supabase
+              .from('promotions')
+              .select('*')
+              .eq('id', automation.promotion_id)
+              .single()
+            promotion = data;
           }
+
+          // Llamar al endpoint de webhook para procesar el broadcast
+          // NO esperar la respuesta (fire and forget) para evitar bloquear la UI
+          fetch('/api/automations/webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'INSERT',
+              table: 'automations',
+              record: {
+                ...automation,
+                promotion: promotion
+              }
+            })
+          }).catch(err => console.error('Error triggering background webhook:', err))
+          
         } catch (webhookError) {
           console.error('Error preparing promotion broadcast:', webhookError)
           // No lanzamos error para no bloquear la creación de la automatización
@@ -866,6 +891,78 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                 Enviar inmediatamente al crear promoción
               </Label>
             </div>
+
+            <div className="space-y-2 pt-2 border-t">
+                <Label className="text-sm font-medium">Audiencia</Label>
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center space-x-2">
+                        <input 
+                            type="radio" 
+                            id="audience_all" 
+                            name="audience" 
+                            checked={!formData.trigger_config.target_audience || formData.trigger_config.target_audience === 'all'}
+                            onChange={() => setFormData({
+                                ...formData,
+                                trigger_config: { ...formData.trigger_config, target_audience: 'all' }
+                            })}
+                            className="rounded-full border-gray-300"
+                        />
+                        <Label htmlFor="audience_all" className="font-normal">Todos los clientes</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <input 
+                            type="radio" 
+                            id="audience_specific" 
+                            name="audience" 
+                            checked={formData.trigger_config.target_audience === 'specific'}
+                            onChange={() => setFormData({
+                                ...formData,
+                                trigger_config: { ...formData.trigger_config, target_audience: 'specific' }
+                            })}
+                            className="rounded-full border-gray-300"
+                        />
+                        <Label htmlFor="audience_specific" className="font-normal">Seleccionar clientes específicos</Label>
+                    </div>
+                </div>
+            </div>
+
+            {formData.trigger_config.target_audience === 'specific' && (
+                <div className="border rounded-md p-2 max-h-60 overflow-y-auto bg-slate-50">
+                    {clients.length > 0 ? (
+                        clients.map(client => (
+                            <div key={client.id} className="flex items-center space-x-2 p-2 hover:bg-white rounded transition-colors border-b last:border-0 border-slate-100">
+                                <input 
+                                    type="checkbox"
+                                    id={`client_${client.id}`}
+                                    checked={(formData.trigger_config.selected_clients || []).includes(client.id)}
+                                    onChange={(e) => {
+                                        const currentSelected = formData.trigger_config.selected_clients || [];
+                                        let newSelected;
+                                        if (e.target.checked) {
+                                            newSelected = [...currentSelected, client.id];
+                                        } else {
+                                            newSelected = currentSelected.filter((id: string) => id !== client.id);
+                                        }
+                                        setFormData({
+                                            ...formData,
+                                            trigger_config: { ...formData.trigger_config, selected_clients: newSelected }
+                                        });
+                                    }}
+                                    className="rounded border-gray-300"
+                                />
+                                <Label htmlFor={`client_${client.id}`} className="cursor-pointer flex-1 text-sm">
+                                    <span className="font-medium">{client.name || 'Sin nombre'}</span> 
+                                    <span className="text-gray-500 ml-2 text-xs">{client.phone}</span>
+                                </Label>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                            No hay clientes registrados para seleccionar.
+                        </div>
+                    )}
+                </div>
+            )}
           </div>
         )
 
@@ -1919,7 +2016,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                               Obteniendo plantillas...
                                             </>
-                                          ) : (
+                                                                                   ) : (
                                             'Obtener Plantillas'
                                           )}
                                         </Button>
