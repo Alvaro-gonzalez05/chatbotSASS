@@ -10,11 +10,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const { batch_size = 100, user_id } = await request.json().catch(() => ({}))
-    
+
     console.log('🚀 Processing message queue...', { batch_size, user_id })
-    
+
     const supabase = createAdminClient()
-    
+
     let totalProcessed = 0
     let totalFailed = 0
     let keepProcessing = true
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     while (keepProcessing) {
       loopCount++
-      
+
       // Verificar límite de tiempo
       if (Date.now() - startTime > MAX_DURATION) {
         console.log('⏳ Time limit reached, stopping execution to avoid timeout')
@@ -68,10 +68,10 @@ export async function POST(request: NextRequest) {
 
       // Procesar mensajes en paralelo con concurrencia limitada
       const CONCURRENCY = 10;
-      
+
       for (let i = 0; i < pendingMessages.length; i += CONCURRENCY) {
         const chunk = pendingMessages.slice(i, i + CONCURRENCY);
-        
+
         // Marcar lote como procesando
         await supabase
           .from('scheduled_messages')
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
 
             if (success) {
               console.log(`✅ Message sent successfully via ${platform}:`, externalMessageId)
-              
+
               // Notificar éxito (evitar spam para promociones masivas)
               if (message.automation_type !== 'new_promotion') {
                 await createNotification({
@@ -119,17 +119,17 @@ export async function POST(request: NextRequest) {
                   link: `/dashboard/automations`
                 });
               }
-              
+
               // BORRAR mensaje de la cola si se envió correctamente
               await supabase
                 .from('scheduled_messages')
                 .delete()
                 .eq('id', message.id)
-                
+
               return { success: true, id: message.id }
             } else {
               console.error(`❌ Failed to send ${platform} message:`, errorMessage)
-              
+
               // Notificar error
               await createNotification({
                 userId: message.user_id,
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
                 type: "error",
                 link: `/dashboard/automations`
               });
-              
+
               // Actualizar estado a fallido (NO BORRAR)
               await supabase
                 .from('scheduled_messages')
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', message.id)
-                
+
               return { success: false, id: message.id, error: errorMessage }
             }
 
@@ -158,11 +158,11 @@ export async function POST(request: NextRequest) {
             return { success: false, id: message.id, error: 'Unknown error' }
           }
         }));
-        
+
         batchProcessed += results.filter(r => r.success).length;
         batchFailed += results.filter(r => !r.success).length;
       }
-      
+
       totalProcessed += batchProcessed
       totalFailed += batchFailed
 
@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Función para enviar mensaje según la plataforma
-async function sendMessage(message: any, bot: any): Promise<{success: boolean, messageId?: string, error?: string}> {
+async function sendMessage(message: any, bot: any): Promise<{ success: boolean, messageId?: string, error?: string }> {
   try {
     switch (bot.platform) {
       case 'whatsapp':
@@ -212,19 +212,19 @@ async function sendMessage(message: any, bot: any): Promise<{success: boolean, m
         return { success: false, error: `Unsupported platform: ${bot.platform}` }
     }
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown sending error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown sending error'
     }
   }
 }
 
 // Función para enviar mensaje por WhatsApp
-async function sendWhatsAppMessage(message: any, bot: any): Promise<{success: boolean, messageId?: string, error?: string}> {
+async function sendWhatsAppMessage(message: any, bot: any): Promise<{ success: boolean, messageId?: string, error?: string }> {
   try {
     // Obtener configuración de WhatsApp desde integrations
     const supabase = createAdminClient()
-    
+
     const { data: integration, error: configError } = await supabase
       .from('integrations')
       .select('*')
@@ -290,31 +290,31 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{success: bo
     console.log('[WhatsApp] API Response:', JSON.stringify(result, null, 2))
 
     if (response.ok && result.messages && result.messages[0]) {
-      return { 
-        success: true, 
-        messageId: result.messages[0].id 
+      return {
+        success: true,
+        messageId: result.messages[0].id
       }
     } else {
-      return { 
-        success: false, 
-        error: result.error?.message || 'Failed to send WhatsApp message' 
+      return {
+        success: false,
+        error: result.error?.message || 'Failed to send WhatsApp message'
       }
     }
 
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown WhatsApp error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown WhatsApp error'
     }
   }
 }
 
 // Función para enviar mensaje por Instagram
-async function sendInstagramMessage(message: any, bot: any): Promise<{success: boolean, messageId?: string, error?: string}> {
+async function sendInstagramMessage(message: any, bot: any): Promise<{ success: boolean, messageId?: string, error?: string }> {
   try {
     // Obtener configuración de Instagram desde integrations
     const supabase = createAdminClient()
-    
+
     const { data: integration, error: configError } = await supabase
       .from('integrations')
       .select('*')
@@ -359,27 +359,27 @@ async function sendInstagramMessage(message: any, bot: any): Promise<{success: b
     const result = await response.json()
 
     if (response.ok && result.message_id) {
-      return { 
-        success: true, 
-        messageId: result.message_id 
+      return {
+        success: true,
+        messageId: result.message_id
       }
     } else {
-      return { 
-        success: false, 
-        error: result.error?.message || 'Failed to send Instagram message' 
+      return {
+        success: false,
+        error: result.error?.message || 'Failed to send Instagram message'
       }
     }
 
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown Instagram error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown Instagram error'
     }
   }
 }
 
 // Función para enviar Gmail
-async function sendGmailMessage(message: any, bot: any): Promise<{success: boolean, messageId?: string, error?: string}> {
+async function sendGmailMessage(message: any, bot: any): Promise<{ success: boolean, messageId?: string, error?: string }> {
   try {
     // Obtener configuración de gmail del bot
     const supabase = createAdminClient()
@@ -414,15 +414,15 @@ async function sendGmailMessage(message: any, bot: any): Promise<{success: boole
     return result
 
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown email error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown email error'
     }
   }
 }
 
 // Enviar email via SendGrid
-async function sendViaSendGrid(message: any, config: any): Promise<{success: boolean, messageId?: string, error?: string}> {
+async function sendViaSendGrid(message: any, config: any): Promise<{ success: boolean, messageId?: string, error?: string }> {
   try {
     const emailPayload = {
       personalizations: [{
@@ -454,21 +454,21 @@ async function sendViaSendGrid(message: any, config: any): Promise<{success: boo
     }
 
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'SendGrid sending error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'SendGrid sending error'
     }
   }
 }
 
 // Enviar email via Mailgun
-async function sendViaMailgun(message: any, config: any): Promise<{success: boolean, messageId?: string, error?: string}> {
+async function sendViaMailgun(message: any, config: any): Promise<{ success: boolean, messageId?: string, error?: string }> {
   // Implementación similar para Mailgun
   return { success: false, error: 'Mailgun implementation pending' }
 }
 
 // Enviar email via Amazon SES
-async function sendViaSES(message: any, config: any): Promise<{success: boolean, messageId?: string, error?: string}> {
+async function sendViaSES(message: any, config: any): Promise<{ success: boolean, messageId?: string, error?: string }> {
   // Implementación similar para Amazon SES
   return { success: false, error: 'SES implementation pending' }
 }
@@ -477,27 +477,27 @@ async function sendViaSES(message: any, config: any): Promise<{success: boolean,
 export async function GET() {
   try {
     const supabase = createAdminClient()
-    
+
     // Obtener estadísticas de la cola
     const { data: stats, error } = await supabase
       .from('scheduled_messages')
       .select('status')
-    
+
     if (error) {
       return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 })
     }
-    
+
     const statusCounts = stats.reduce((acc: any, msg: any) => {
       acc[msg.status] = (acc[msg.status] || 0) + 1
       return acc
     }, {})
-    
+
     return NextResponse.json({
       total: stats.length,
       by_status: statusCounts,
       timestamp: new Date().toISOString()
     })
-    
+
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
