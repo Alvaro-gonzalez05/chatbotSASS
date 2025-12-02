@@ -110,6 +110,9 @@ export async function POST(request: NextRequest) {
             if (success) {
               console.log(`✅ Message sent successfully via ${platform}:`, externalMessageId)
 
+              // Log message to conversation history so it appears in chat view
+              await logMessageToConversation(supabase, message, bot, externalMessageId);
+
               // Notificar éxito (evitar spam para promociones masivas)
               if (message.automation_type !== 'new_promotion') {
                 await createNotification({
@@ -214,6 +217,84 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
+  }
+}
+
+// Helper function to log automation messages to conversation history
+async function logMessageToConversation(supabase: any, message: any, bot: any, externalMessageId: string | null) {
+  try {
+    // 1. Find or create conversation
+    let conversationId = null;
+    
+    // Try to find existing conversation
+    const { data: existingConv } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('bot_id', bot.id)
+      .eq('client_id', message.client_id)
+      .single();
+      
+    if (existingConv) {
+      conversationId = existingConv.id;
+    } else {
+      // Create new conversation
+      // We need client details
+      const { data: client } = await supabase
+        .from('clients')
+        .select('name, phone, instagram_username')
+        .eq('id', message.client_id)
+        .single();
+        
+      if (client) {
+        const { data: newConv } = await supabase
+          .from('conversations')
+          .insert({
+            user_id: message.user_id,
+            bot_id: bot.id,
+            client_id: message.client_id,
+            client_name: client.name || message.recipient_name || 'Cliente',
+            client_phone: client.phone || message.recipient_phone,
+            platform: bot.platform,
+            status: 'active',
+            last_message_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
+          
+        if (newConv) conversationId = newConv.id;
+      }
+    }
+    
+    if (conversationId) {
+      // Determine content
+      let content = message.message_content;
+      if (message.metadata?.is_meta_template) {
+        content = content || `[Plantilla: ${message.metadata.template_name}]`;
+      }
+
+      // 2. Insert message
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        content: content,
+        sender_type: 'bot',
+        message_type: 'text', 
+        metadata: {
+          sent_by: 'automation',
+          automation_id: message.automation_id,
+          whatsapp_message_id: externalMessageId,
+          status: 'sent',
+          is_template: message.metadata?.is_meta_template
+        }
+      });
+      
+      // 3. Update conversation timestamp
+      await supabase
+        .from('conversations')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', conversationId);
+    }
+  } catch (error) {
+    console.error('Error logging automation message to conversation:', error);
   }
 }
 

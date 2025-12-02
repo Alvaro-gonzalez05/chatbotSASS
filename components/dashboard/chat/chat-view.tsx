@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -867,12 +868,17 @@ export function ChatView({ userId }: ChatViewProps) {
                 >
                   <Paperclip className="h-5 w-5" />
                 </Button>
-                <Input 
-                  placeholder="Escribe un mensaje..." 
-                  className="flex-1"
+                <Textarea 
+                  placeholder="Escribe un mensaje... (Shift+Enter para nueva línea)" 
+                  className="flex-1 min-h-[40px] max-h-[120px] resize-none"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSendMessage()
+                    }
+                  }}
                   disabled={isSending}
                 />
                 <Button onClick={handleSendMessage} disabled={isSending || !newMessage.trim() || selectedConversation.status !== 'paused'}>
