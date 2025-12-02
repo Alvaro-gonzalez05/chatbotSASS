@@ -255,17 +255,26 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{ success: b
     // Verificar si es una plantilla de Meta o mensaje de texto simple
     if (message.metadata?.is_meta_template) {
       messagePayload.type = 'template';
+      
+      // Usar componentes pre-construidos si existen (nueva lógica)
+      let components = message.metadata.whatsapp_components;
+
+      // Fallback para compatibilidad hacia atrás (lógica antigua)
+      if (!components && message.metadata.template_parameters) {
+        components = [
+          {
+            type: 'body',
+            parameters: message.metadata.template_parameters || []
+          }
+        ];
+      }
+
       messagePayload.template = {
         name: message.metadata.template_name,
         language: {
           code: message.metadata.template_language || 'es'
         },
-        components: [
-          {
-            type: 'body',
-            parameters: message.metadata.template_parameters || []
-          }
-        ]
+        components: components || []
       };
     } else {
       messagePayload.type = 'text';

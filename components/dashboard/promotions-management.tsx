@@ -134,16 +134,23 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
     setIsLoading(true)
 
     try {
+      // Prepare the data object, ensuring all required fields are present
+      // and optional fields are handled correctly
+      const promotionData = {
+        user_id: userId,
+        name: promotionForm.name,
+        description: promotionForm.description || null,
+        max_uses: promotionForm.max_uses ? Number.parseInt(promotionForm.max_uses) : null,
+        current_uses: 0,
+        start_date: promotionForm.start_date,
+        end_date: promotionForm.end_date,
+        is_active: promotionForm.is_active,
+        image_url: promotionForm.image_url || null
+      };
+
       const { data, error } = await supabase
         .from("promotions")
-        .insert([
-          {
-            ...promotionForm,
-            user_id: userId,
-            max_uses: promotionForm.max_uses ? Number.parseInt(promotionForm.max_uses) : null,
-            current_uses: 0,
-          },
-        ])
+        .insert([promotionData])
         .select()
         .single()
 
@@ -157,6 +164,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
         duration: 4000,
       })
     } catch (error) {
+      console.error("Error creating promotion:", error);
       toast.error("Error al crear promoción", {
         description: "No se pudo crear la promoción. Verifica los datos e inténtalo de nuevo.",
         duration: 4000,

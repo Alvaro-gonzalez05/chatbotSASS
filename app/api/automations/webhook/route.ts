@@ -161,7 +161,48 @@ async function processPromotionBroadcast(automation: any) {
         template_language: templateLanguage,
       }
 
-      // Si es plantilla de Meta, construir los parámetros
+      // Construir componentes de WhatsApp (Header, Body, Buttons)
+      const whatsappComponents: any[] = [];
+
+      // 1. Procesar HEADER (Imagen, Video, Documento)
+      // IMPORTANTE: Solo agregamos el header si tenemos una imagen REAL para enviar (dinámica).
+      // Si la plantilla tiene una imagen fija en Meta, NO debemos enviar este componente,
+      // ya que Meta usará la imagen predeterminada.
+      if (isMetaTemplate && templateVariables.template_data?.components) {
+        const headerComponent = templateVariables.template_data.components.find((c: any) => c.type === 'HEADER');
+        
+        // Solo procesamos si es de tipo IMAGE
+        if (headerComponent && headerComponent.format === 'IMAGE') {
+          let imageUrl = null;
+          
+          // 1. Intentar usar la imagen de la promoción
+          if (promotionData && promotionData.image_url) {
+             imageUrl = promotionData.image_url;
+             console.log(`🖼️ Using promotion image for dynamic header: ${imageUrl}`);
+          } 
+          
+          // 2. Si no hay imagen de promoción, usar una imagen por defecto para evitar que falle
+          // Meta REQUIERE una imagen si la plantilla tiene header de imagen. No se puede omitir.
+          if (!imageUrl) {
+            // Usar una imagen genérica de "Oferta" o el logo de la empresa si estuviera disponible
+            // Por ahora usamos un placeholder seguro
+            imageUrl = "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=2071&auto=format&fit=crop";
+            console.warn('⚠️ No promotion image found. Using fallback placeholder image to satisfy Meta requirements.');
+          }
+          
+          whatsappComponents.push({
+            type: 'header',
+            parameters: [{
+              type: 'image',
+              image: {
+                link: imageUrl
+              }
+            }]
+          });
+        }
+      }
+
+      // 2. Procesar BODY (Variables de texto)
       if (isMetaTemplate && metaVariables.length > 0) {
         const templateParameters: any[] = []
 
@@ -210,9 +251,25 @@ async function processPromotionBroadcast(automation: any) {
         }
 
         metadata.template_parameters = templateParameters
+        
+        // Agregar componente BODY
+        whatsappComponents.push({
+          type: 'body',
+          parameters: templateParameters
+        });
 
         console.log(`✅ Generated ${templateParameters.length} parameters for client ${client.id}`)
         console.log(`   Parameters:`, templateParameters.map((p, idx) => `[${idx + 1}] "${p.text}"`).join(', '))
+      } else if (isMetaTemplate) {
+        // Si es plantilla pero no tiene variables, igual necesitamos el componente body vacío si la plantilla tiene body
+        // Pero Meta suele aceptar componentes vacíos o implícitos si no hay parámetros.
+        // Sin embargo, para consistencia, si detectamos que hay un body en la definición, podríamos agregarlo.
+        // Por ahora, lo dejamos así, ya que el error principal era el header.
+      }
+
+      // Guardar componentes completos en metadata
+      if (whatsappComponents.length > 0) {
+        metadata.whatsapp_components = whatsappComponents;
       }
 
       // Determinar destinatario según plataforma

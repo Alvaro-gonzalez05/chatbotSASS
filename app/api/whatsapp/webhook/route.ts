@@ -206,6 +206,23 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
           messageContent = { ...messageContent, video }
           textContent = video?.caption || '[Video]'
           break
+        case 'button':
+          // Handle button replies (Quick Replies)
+          messageContent = { ...messageContent, button: message.button }
+          textContent = message.button?.text || '[Button Reply]'
+          break
+        case 'interactive':
+          // Handle interactive messages (List replies, etc.)
+          if (message.interactive?.type === 'button_reply') {
+             messageContent = { ...messageContent, interactive: message.interactive }
+             textContent = message.interactive.button_reply?.title || '[Button Reply]'
+          } else if (message.interactive?.type === 'list_reply') {
+             messageContent = { ...messageContent, interactive: message.interactive }
+             textContent = message.interactive.list_reply?.title || '[List Reply]'
+          } else {
+             textContent = '[Interactive Message]'
+          }
+          break
         default:
           textContent = `[${messageType} message]`
       }
@@ -304,15 +321,24 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       }
 
       // Store the message
+      // IMPORTANT: Map WhatsApp message types to our internal types
+      let internalMessageType = 'text';
+      if (['image', 'audio', 'document', 'video'].includes(messageType)) {
+        internalMessageType = messageType;
+      }
+      // Treat buttons and interactive messages as text for storage purposes, 
+      // but keep the original type in metadata
+      
       const { data: storedMessage, error: messageError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           content: textContent,
           sender_type: 'client',
-          message_type: messageType,
+          message_type: internalMessageType,
           metadata: {
             whatsapp_message_id: whatsappMessageId,
+            original_type: messageType,
             ...messageContent
           }
         })
@@ -327,7 +353,10 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       console.log('✅ Message stored successfully')
 
       // Only process AI response for text messages (for now)
-      if (messageType === 'text' && textContent.trim()) {
+      // Also process button replies and interactive messages as text
+      const shouldProcessAI = (messageType === 'text' || messageType === 'button' || messageType === 'interactive') && textContent.trim();
+
+      if (shouldProcessAI) {
         // Check if conversation is paused
         if (conversation && conversation.status === 'paused') {
           // Check if pause has expired

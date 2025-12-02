@@ -31,6 +31,7 @@ export default function NotificationsDropdown() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
   
   const supabase = createClient();
   const router = useRouter();
@@ -51,16 +52,36 @@ export default function NotificationsDropdown() {
   };
 
   useEffect(() => {
-    console.log("🔔 NotificationsDropdown mounted - Realtime System Active");
+    console.log("🔔 NotificationsDropdown mounted");
     setMounted(true);
-    fetchNotifications(0);
+    
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        fetchNotifications(0, user.id);
+      }
+    };
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    console.log("🔔 Subscribing to notifications for user:", userId);
 
     // Subscribe to realtime changes
     const channel = supabase
-      .channel('notifications_changes')
+      .channel(`notifications_user_${userId}`)
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'notifications' }, 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`
+        }, 
         (payload) => {
+          console.log("🔔 Notification received:", payload);
           if (payload.eventType === 'INSERT') {
             const newNotification = payload.new as Notification;
             
@@ -89,12 +110,14 @@ export default function NotificationsDropdown() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("🔔 Subscription status:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [userId]);
 
   // Load more when scrolling to bottom
   useEffect(() => {
@@ -105,13 +128,19 @@ export default function NotificationsDropdown() {
     }
   }, [isIntersecting, isOpen]);
 
-  const fetchNotifications = async (pageNumber: number) => {
+  const fetchNotifications = async (pageNumber: number, specificUserId?: string) => {
     try {
       if (pageNumber === 0) setIsLoading(true);
       else setIsLoadingMore(true);
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      let targetUserId = specificUserId;
+      
+      if (!targetUserId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        targetUserId = user.id;
+        if (!userId) setUserId(user.id);
+      }
 
       const from = pageNumber * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
@@ -119,7 +148,7 @@ export default function NotificationsDropdown() {
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('created_at', { ascending: false })
         .range(from, to);
 
