@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         break
       }
 
-      // Obtener mensajes pendientes para enviar
+      // Obtener mensajes pendientes o fallidos (para reintentar)
       let query = supabase
         .from('scheduled_messages')
         .select(`
@@ -37,7 +37,8 @@ export async function POST(request: NextRequest) {
           automations!inner(*, bots!inner(*)),
           clients(name, phone)
         `)
-        .eq('status', 'pending')
+        .in('status', ['pending', 'failed']) // Incluir fallidos para reintento
+        .lt('retry_count', 3) // Solo si no han superado el límite de intentos
         .lte('scheduled_for', new Date().toISOString())
         .order('priority', { ascending: true })
         .order('scheduled_for', { ascending: true })
@@ -140,12 +141,29 @@ export async function POST(request: NextRequest) {
               });
 
               // Actualizar estado a fallido (NO BORRAR)
+              // Lógica de reintentos inteligente:
+              // Solo incrementar el contador de intentos si ha pasado un día desde el último intento
+              // Esto permite que el cron siga intentando enviar (por si se libera el límite)
+              // pero sin agotar los 3 intentos permitidos en un solo día.
+              
+              const lastUpdate = new Date(message.updated_at)
+              const now = new Date()
+              const isSameDay = lastUpdate.toDateString() === now.toDateString()
+              
+              let newRetryCount = message.retry_count || 0
+              
+              // Si es el primer intento (0) o si es un día diferente, incrementamos
+              // Si es el mismo día y ya falló una vez, NO incrementamos (para no gastar intentos por límites diarios)
+              if (!isSameDay || newRetryCount === 0) {
+                 newRetryCount++
+              }
+
               await supabase
                 .from('scheduled_messages')
                 .update({
                   status: 'failed',
                   error_message: errorMessage,
-                  retry_count: (message.retry_count || 0) + 1,
+                  retry_count: newRetryCount,
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', message.id)
@@ -176,7 +194,8 @@ export async function POST(request: NextRequest) {
     const { count: remainingCount } = await supabase
       .from('scheduled_messages')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
+      .in('status', ['pending', 'failed'])
+      .lt('retry_count', 3)
       .lte('scheduled_for', new Date().toISOString())
 
     console.log('📊 Processing completed:', { totalProcessed, totalFailed, remaining: remainingCount || 0 })

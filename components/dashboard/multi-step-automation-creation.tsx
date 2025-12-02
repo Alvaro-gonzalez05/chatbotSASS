@@ -35,6 +35,7 @@ import {
   Users,
   Info,
   Plus,
+  Search,
 } from "lucide-react"
 import { 
   extractVariablesFromText, 
@@ -186,6 +187,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   const [detectedVariables, setDetectedVariables] = useState<string[]>([])
   const [availableVariables, setAvailableVariables] = useState<TemplateVariable[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [clientSearchTerm, setClientSearchTerm] = useState("")
+  const [isSearchingClients, setIsSearchingClients] = useState(false)
   const supabase = createClient()
 
   const [formData, setFormData] = useState<AutomationFormData>({
@@ -233,7 +236,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
       fetchPromotions()
       // Primero cargar la suscripción, luego verificar límites se hará automáticamente
       fetchUserSubscription()
-      fetchClients()
+      setClientSearchTerm("")
     }
   }, [isOpen, userId])
 
@@ -304,15 +307,44 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     formData.promotion_id
   ])
 
-  const fetchClients = async () => {
+  // Effect for client search debounce
+  useEffect(() => {
+    if (isOpen) {
+      const delayDebounceFn = setTimeout(() => {
+        fetchClients(clientSearchTerm)
+      }, 500)
+
+      return () => clearTimeout(delayDebounceFn)
+    }
+  }, [clientSearchTerm, isOpen, selectedBotPlatform])
+
+  const fetchClients = async (searchTerm = "") => {
+    setIsSearchingClients(true)
     const supabase = createClient()
-    const { data } = await supabase
+    
+    let query = supabase
       .from("clients")
       .select("id, name, phone")
       .eq("user_id", userId)
-      .order("name", { ascending: true })
+
+    // Si es WhatsApp, filtrar clientes que tengan teléfono
+    if (selectedBotPlatform === 'whatsapp') {
+       query = query.not('phone', 'is', null).neq('phone', '')
+    }
+
+    if (searchTerm) {
+      // Search by name or phone
+      query = query.or(`name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
+      query = query.order("name", { ascending: true })
+    } else {
+      // If no search, get last 10 created
+      query = query.order("created_at", { ascending: false }).limit(10)
+    }
+    
+    const { data } = await query
     
     if (data) setClients(data)
+    setIsSearchingClients(false)
   }
 
   const fetchBots = async () => {
@@ -927,8 +959,23 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
             </div>
 
             {formData.trigger_config.target_audience === 'specific' && (
-                <div className="border rounded-md p-2 max-h-60 overflow-y-auto bg-slate-50">
-                    {clients.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar cliente por nombre o teléfono..."
+                      value={clientSearchTerm}
+                      onChange={(e) => setClientSearchTerm(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+
+                  <div className="border rounded-md p-2 max-h-60 overflow-y-auto bg-slate-50">
+                    {isSearchingClients ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    ) : clients.length > 0 ? (
                         clients.map(client => (
                             <div key={client.id} className="flex items-center space-x-2 p-2 hover:bg-white rounded transition-colors border-b last:border-0 border-slate-100">
                                 <input 
@@ -958,9 +1005,15 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                         ))
                     ) : (
                         <div className="text-center py-4 text-gray-500 text-sm">
-                            No hay clientes registrados para seleccionar.
+                            {clientSearchTerm ? "No se encontraron clientes." : "No hay clientes recientes."}
                         </div>
                     )}
+                  </div>
+                  {!clientSearchTerm && clients.length > 0 && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Mostrando los últimos 10 clientes. Usa el buscador para encontrar más.
+                    </p>
+                  )}
                 </div>
             )}
           </div>

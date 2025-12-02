@@ -71,6 +71,7 @@ async function processPromotionBroadcast(automation: any) {
     // Determinar audiencia objetivo
     const targetAudience = fullAutomation.trigger_config?.target_audience || 'all'
     const selectedClientIds = fullAutomation.trigger_config?.selected_clients || []
+    const botPlatform = fullAutomation.bots.platform
 
     // Obtener clientes objetivo
     let clientsQuery = supabase
@@ -81,6 +82,13 @@ async function processPromotionBroadcast(automation: any) {
     // Filtrar por clientes específicos si aplica
     if (targetAudience === 'specific' && selectedClientIds.length > 0) {
       clientsQuery = clientsQuery.in('id', selectedClientIds)
+    }
+
+    // Filtrar por plataforma para asegurar que tengan el medio de contacto correcto
+    if (botPlatform === 'whatsapp') {
+      clientsQuery = clientsQuery.not('phone', 'is', null).neq('phone', '')
+    } else if (botPlatform === 'email') {
+      clientsQuery = clientsQuery.not('email', 'is', null).neq('email', '')
     }
 
     const { data: clients, error: clientsError } = await clientsQuery

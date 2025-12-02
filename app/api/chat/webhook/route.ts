@@ -5,11 +5,11 @@ import { createNotification } from "@/lib/notifications"
 
 export async function POST(request: NextRequest) {
   try {
-    const { botId, message, conversationId, senderPhone, senderName, senderInstagramId, platform } = await request.json()
+    const { botId, message, conversationId, senderPhone, senderName, senderInstagramId, platform, mediaId } = await request.json()
 
-    if (!botId || !message || !conversationId) {
+    if (!botId || (!message && !mediaId) || !conversationId) {
       return NextResponse.json(
-        { error: "Missing required fields: botId, message, conversationId" },
+        { error: "Missing required fields: botId, message/mediaId, conversationId" },
         { status: 400 }
       )
     }
@@ -54,6 +54,63 @@ export async function POST(request: NextRequest) {
     // Handle test conversations differently
     let conversation
     let actualConversationId = conversationId
+    
+    // Process Media (Image/Audio) if mediaId is present (WhatsApp only for now)
+    let mediaPart = null;
+    if (mediaId && (platform === 'whatsapp' || !platform)) { // Default to whatsapp if platform missing
+      try {
+        // We need the integration config to get the access token
+        const { data: integration } = await supabase
+          .from('integrations')
+          .select('config')
+          .eq('user_id', bot.user_id)
+          .eq('platform', 'whatsapp')
+          .eq('is_active', true)
+          .single();
+          
+        if (integration && integration.config?.access_token) {
+          const accessToken = integration.config.access_token;
+          
+          // 1. Get Media URL
+          const mediaUrlRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, { 
+            headers: { Authorization: `Bearer ${accessToken}` } 
+          });
+          
+          if (mediaUrlRes.ok) {
+            const mediaUrlData = await mediaUrlRes.json();
+            const mediaUrl = mediaUrlData.url;
+            
+            if (mediaUrl) {
+              // 2. Download Media
+              const mediaRes = await fetch(mediaUrl, { 
+                headers: { Authorization: `Bearer ${accessToken}` } 
+              });
+              
+              if (mediaRes.ok) {
+                const arrayBuffer = await mediaRes.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString('base64');
+                const mimeType = mediaRes.headers.get('content-type') || 'application/octet-stream';
+                
+                // Check if supported type (image or audio)
+                if (mimeType.startsWith('image/') || mimeType.startsWith('audio/')) {
+                    mediaPart = {
+                      inlineData: {
+                        mimeType: mimeType,
+                        data: base64
+                      }
+                    };
+                    console.log(`📸/🎤 Media (${mimeType}) downloaded and processed for AI analysis`);
+                } else {
+                    console.log(`⚠️ Unsupported media type: ${mimeType}`);
+                }
+              }
+            }
+          }
+        }
+      } catch (mediaError) {
+        console.error('Error processing media:', mediaError);
+      }
+    }
     
     if (conversationId.startsWith('test-conversation-')) {
       // Generate a consistent UUID based on the test conversation ID
@@ -314,7 +371,8 @@ export async function POST(request: NextRequest) {
       senderPhone, 
       extractedClientData,
       platform || conversation.platform, // Add platform parameter
-      senderInstagramId
+      senderInstagramId,
+      mediaPart // Pass media part to generator
     )
 
     // Save bot response to messages table (works for both real and test conversations)
@@ -381,7 +439,8 @@ async function generateBotResponse(
   senderPhone?: string,
   extractedClientData?: any,
   platform?: string,
-  senderInstagramId?: string
+  senderInstagramId?: string,
+  mediaPart?: any
 ): Promise<{ content: string, shouldPause: boolean }> {
   try {
     // Get conversation history for context (recent messages first)
@@ -465,7 +524,7 @@ async function generateBotResponse(
     const combinedUserMessage = currentUserMessages.map(m => m.content).join('\n');
     
     // Update the userMessage variable to be used in the prompt
-    const finalUserMessage = combinedUserMessage || userMessage;
+    const finalUserMessage = combinedUserMessage || userMessage || (mediaPart ? (mediaPart.inlineData.mimeType.startsWith('audio') ? "[Audio enviado por el usuario]" : "[Imagen enviada por el usuario]") : "");
 
     // Prepare the enhanced prompt with business information from user_profiles table
     let businessInfo = 'No hay información del negocio disponible.'
@@ -772,7 +831,7 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
       return { content: "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente.", shouldPause: false }
     }
 
-    // Generate response using Gemini 2.5 Flash model with retry logic
+    // Generate response using Gemini 1.5 Flash model with retry logic
     const maxAttempts = 3
     let attempt = 0
     let response: any = null
@@ -781,7 +840,7 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
       attempt++
       
       try {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -792,7 +851,8 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
                 parts: [
                   {
                     text: `${systemPrompt}\n\n=== HISTORIAL DE LA CONVERSACIÓN ===\n${conversationHistory.map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Bot'}: ${m.content}`).join('\n')}\n\n=== NUEVO MENSAJE ===\nCliente: ${finalUserMessage}\n\nBot: `
-                  }
+                  },
+                  ...(mediaPart ? [mediaPart] : [])
                 ]
               }
             ],
@@ -812,7 +872,7 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
           
           // If it's a 503 error (overloaded) and we have more attempts, retry
           if (response.status === 503 && attempt < maxAttempts) {
-            const backoff = 500 * Math.pow(2, attempt - 1)
+            const backoff = 2000 * Math.pow(2, attempt - 1)
             console.log(`🔄 Retrying Gemini API in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`)
             await new Promise(resolve => setTimeout(resolve, backoff))
             continue
@@ -824,7 +884,7 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
       } catch (fetchError) {
         console.error(`Gemini API fetch error (attempt ${attempt}):`, fetchError)
         if (attempt < maxAttempts) {
-          const backoff = 500 * Math.pow(2, attempt - 1)
+          const backoff = 2000 * Math.pow(2, attempt - 1)
           console.log(`🔄 Retrying Gemini API in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`)
           await new Promise(resolve => setTimeout(resolve, backoff))
           continue
@@ -963,7 +1023,7 @@ Responde SOLO con el JSON.
 `;
 
     // Call Gemini
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1269,7 +1329,7 @@ Si hay un pedido completo, responde con este formato JSON:
 Si no hay pedido completo, responde: NO_ORDER
 `
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1401,7 +1461,7 @@ Si NO hay reserva completa, responde: NO_RESERVATION
 `
 
     console.log('🤖 Calling Gemini AI for reservation extraction...')
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1819,7 +1879,7 @@ ${platform === 'instagram'
 `
 
     const genAI = new GoogleGenerativeAI(bot.gemini_api_key)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
 
     const result = await model.generateContent(extractionPrompt)
     const responseText = result.response.text()

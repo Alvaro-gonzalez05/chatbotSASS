@@ -354,7 +354,8 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
 
       // Only process AI response for text messages (for now)
       // Also process button replies and interactive messages as text
-      const shouldProcessAI = (messageType === 'text' || messageType === 'button' || messageType === 'interactive') && textContent.trim();
+      // Also process images (for receipts/comprobantes) and audio
+      const shouldProcessAI = (['text', 'button', 'interactive', 'image', 'audio'].includes(messageType));
 
       if (shouldProcessAI) {
         // Check if conversation is paused
@@ -403,7 +404,11 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         }
 
         console.log('⚡ No newer messages, generating response...')
-        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName, origin)
+        
+        // Extract media ID if present (for images or audio)
+        const mediaId = messageType === 'image' ? message.image?.id : (messageType === 'audio' ? message.audio?.id : undefined);
+        
+        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName, origin, mediaId)
       }
 
     } catch (error) {
@@ -419,7 +424,8 @@ async function generateAndSendAIResponse(
   userMessage: string,
   botId: string,
   senderName?: string,
-  origin?: string
+  origin?: string,
+  mediaId?: string
 ) {
   try {
     // Generate AI response using webhook-specific chat API
@@ -451,7 +457,9 @@ async function generateAndSendAIResponse(
         conversationId,
         botId: botId,
         senderPhone,
-        senderName
+        senderName,
+        platform: 'whatsapp',
+        mediaId // Pass mediaId to the chat webhook
       })
     })
 

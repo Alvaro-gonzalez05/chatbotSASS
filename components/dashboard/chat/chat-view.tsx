@@ -82,6 +82,7 @@ export function ChatView({ userId }: ChatViewProps) {
   const [pendingPause, setPendingPause] = useState<{ duration: string | null } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
   
   // Pagination state
@@ -476,6 +477,57 @@ export function ChatView({ userId }: ChatViewProps) {
     }
   }
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !selectedConversation) return
+    
+    if (selectedConversation.status !== 'paused') {
+      toast.error("La IA está activa", {
+        description: "Debes pausar la respuesta automática para enviar archivos."
+      })
+      e.target.value = '' // Reset input
+      return
+    }
+
+    const file = e.target.files[0]
+    // Limit file size (e.g., 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Archivo muy grande", { description: "El tamaño máximo es 10MB" })
+      e.target.value = ''
+      return
+    }
+
+    setIsSending(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('conversationId', selectedConversation.id)
+    // Optional: Add caption if we had a UI for it
+    // formData.append('caption', newMessage) 
+
+    try {
+      const response = await fetch('/api/chat/send-media', {
+        method: 'POST',
+        body: formData
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Error sending file')
+      }
+
+      toast.success("Archivo enviado")
+      setNewMessage("") // Clear input if we used it for caption
+    } catch (error) {
+      console.error("Error sending file:", error)
+      toast.error("Error al enviar archivo", {
+        description: error instanceof Error ? error.message : "Inténtalo de nuevo"
+      })
+    } finally {
+      setIsSending(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const handlePauseRequest = () => {
     if (!selectedConversation) return
 
@@ -541,6 +593,18 @@ export function ChatView({ userId }: ChatViewProps) {
     if (!name) return "??"
     const cleanName = name.startsWith('@') ? name.substring(1) : name
     return cleanName.substring(0, 2).toUpperCase()
+  }
+
+  const getMediaUrl = (msg: Message) => {
+    if (!selectedConversation) return ''
+    
+    const mediaId = msg.message_type === 'image' 
+      ? msg.metadata?.image?.id 
+      : msg.metadata?.audio?.id
+      
+    if (!mediaId) return ''
+    
+    return `/api/media/proxy?mediaId=${mediaId}&botId=${selectedConversation.bot_id}`
   }
 
   return (
@@ -739,7 +803,34 @@ export function ChatView({ userId }: ChatViewProps) {
                             : "bg-primary text-primary-foreground rounded-tr-none"
                         )}
                       >
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        {msg.message_type === 'image' && msg.metadata?.image ? (
+                          <div className="space-y-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img 
+                              src={getMediaUrl(msg)} 
+                              alt="Imagen compartida" 
+                              className="rounded-md max-w-full h-auto max-h-[300px] object-cover"
+                              onError={(e) => {
+                                // Fallback if proxy fails or ID is missing
+                                if (msg.metadata?.image?.url && e.currentTarget.src !== msg.metadata.image.url) {
+                                  e.currentTarget.src = msg.metadata.image.url
+                                }
+                              }}
+                            />
+                            {msg.content && msg.content !== '[Image]' && (
+                              <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                            )}
+                          </div>
+                        ) : msg.message_type === 'audio' && msg.metadata?.audio ? (
+                          <div className="min-w-[240px]">
+                            <audio controls className="w-full h-10 mt-1">
+                              <source src={getMediaUrl(msg)} type={msg.metadata.audio.mime_type} />
+                              Tu navegador no soporta audio.
+                            </audio>
+                          </div>
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        )}
                         <div className={cn(
                           "text-[10px] mt-1 flex items-center justify-end gap-1",
                           isClient ? "text-muted-foreground" : "text-primary-foreground/70"
@@ -760,7 +851,20 @@ export function ChatView({ userId }: ChatViewProps) {
                 <Button variant="ghost" size="icon" className="text-muted-foreground">
                   <Smile className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon" className="text-muted-foreground">
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  onChange={handleFileSelect}
+                  accept="image/*,audio/*,video/*,application/pdf"
+                />
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-muted-foreground"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSending || selectedConversation.status !== 'paused'}
+                >
                   <Paperclip className="h-5 w-5" />
                 </Button>
                 <Input 
