@@ -5,12 +5,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Users, Bot, MessageSquare, TrendingUp, Plus, Calendar, Gift, Zap } from "lucide-react"
+import { Users, Bot, MessageSquare, TrendingUp, Plus, Calendar, Gift, Zap, Loader2, MessageCircle, Activity, UserPlus, Settings, Play } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
+import { startOfMonth, subMonths, endOfMonth } from "date-fns"
+import { MultiStepBotCreation } from "./multi-step-bot-creation"
+import { MultiStepAutomationCreation } from "./multi-step-automation-creation"
+import { ClientCreationDialog } from "./client-creation-dialog"
 
 interface DashboardOverviewProps {
   user: User
@@ -18,16 +24,160 @@ interface DashboardOverviewProps {
 }
 
 export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
-
-  // Mock data - in real app, this would come from the database
-  const stats = {
+  const router = useRouter()
+  const [isBotDialogOpen, setIsBotDialogOpen] = useState(false)
+  const [isClientDialogOpen, setIsClientDialogOpen] = useState(false)
+  const [isAutomationDialogOpen, setIsAutomationDialogOpen] = useState(false)
+  
+  const [stats, setStats] = useState({
     totalClients: 0,
+    clientsGrowth: 0,
     activeBots: 0,
     monthlyMessages: 0,
+    messagesGrowth: 0,
     conversionRate: 0,
+    conversionGrowth: 0,
+    activeConversations: 0,
+    totalConversations: 0,
+    unreadMessages: 0
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case "F5":
+          e.preventDefault()
+          setIsBotDialogOpen(true)
+          break
+        case "F6":
+          e.preventDefault()
+          setIsClientDialogOpen(true)
+          break
+        case "F7":
+          e.preventDefault()
+          setIsAutomationDialogOpen(true)
+          break
+        case "F8":
+          e.preventDefault()
+          router.push("/dashboard/chat")
+          break
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [router])
+
+  const fetchStats = async () => {
+    try {
+      const now = new Date()
+      const startOfCurrentMonth = startOfMonth(now).toISOString()
+      const startOfLastMonth = startOfMonth(subMonths(now, 1)).toISOString()
+      const endOfLastMonth = endOfMonth(subMonths(now, 1)).toISOString()
+
+      // 1. Clients Stats
+      const { count: totalClients } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+
+      const { count: lastMonthClients } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .lt('created_at', startOfCurrentMonth)
+
+      const clientsGrowth = lastMonthClients && lastMonthClients > 0 
+        ? ((totalClients || 0) - lastMonthClients) / lastMonthClients * 100 
+        : 0
+
+      // 2. Active Bots
+      const { count: activeBots } = await supabase
+        .from('bots')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+
+      // 3. Messages Stats & Active Conversations
+      // Fetch conversations IDs for this user
+      const { data: userConversations } = await supabase
+        .from('conversations')
+        .select('id, status, last_message_at')
+        .eq('user_id', user.id)
+      
+      const conversationIds = userConversations?.map(c => c.id) || []
+      
+      // Calculate active conversations (activity in last 24h)
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+      const activeConversations = userConversations?.filter(c => 
+        c.last_message_at && c.last_message_at >= oneDayAgo
+      ).length || 0
+      
+      let monthlyMessages = 0
+      let lastMonthMessages = 0
+      let unreadMessages = 0
+
+      if (conversationIds.length > 0) {
+        const { count: currentMonthCount } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .in('conversation_id', conversationIds)
+          .gte('created_at', startOfCurrentMonth)
+          
+        const { count: lastMonthCount } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .in('conversation_id', conversationIds)
+          .gte('created_at', startOfLastMonth)
+          .lt('created_at', startOfCurrentMonth)
+          
+        monthlyMessages = currentMonthCount || 0
+        lastMonthMessages = lastMonthCount || 0
+      }
+
+      const messagesGrowth = lastMonthMessages > 0
+        ? (monthlyMessages - lastMonthMessages) / lastMonthMessages * 100
+        : 0
+
+      setStats({
+        totalClients: totalClients || 0,
+        clientsGrowth,
+        activeBots: activeBots || 0,
+        monthlyMessages,
+        messagesGrowth,
+        conversionRate: 0,
+        conversionGrowth: 0,
+        activeConversations,
+        totalConversations: conversationIds.length,
+        unreadMessages: 0 
+      })
+    } catch (error) {
+      console.error("Error fetching dashboard stats:", error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const trialDaysLeft = 15 // This would be calculated based on user creation date
+  useEffect(() => {
+    fetchStats()
+  }, [user.id])
+
+  // Calculate trial days left
+  const trialEndDate = profile?.trial_end_date ? new Date(profile.trial_end_date) : new Date()
+  const now = new Date()
+  const diffTime = Math.max(0, trialEndDate.getTime() - now.getTime())
+  const trialDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
+  const maxTrialDays = 15 // Assuming 15 days trial
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
 
 
@@ -41,239 +191,200 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
             <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">Aquí tienes un resumen de tu negocio y chatbots</p>
           </div>
         </ScrollSlideUp>
-        <ScrollFadeIn delay={0.2}>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-            <Badge variant="secondary" className="bg-primary/10 text-primary text-xs sm:text-sm w-fit">
-              <Calendar className="h-3 w-3 mr-1" />
-              {trialDaysLeft} días de prueba
-            </Badge>
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Button asChild size="sm" className="w-full sm:w-auto">
-                <Link href="/dashboard/bots">
-                  <Plus className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">Crear Bot</span>
-                  <span className="sm:hidden">Bot</span>
-                </Link>
-              </Button>
-            </motion.div>
-          </div>
-        </ScrollFadeIn>
       </div>
 
-      {/* Trial Progress */}
-      <ScrollFadeIn delay={0.3}>
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center text-base sm:text-lg">
-              <Gift className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
-              Prueba Gratuita Activa
-            </CardTitle>
-            <CardDescription className="text-xs sm:text-sm">Aprovecha al máximo tus {trialDaysLeft} días restantes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 sm:space-y-4">
-              <Progress value={((15 - trialDaysLeft) / 15) * 100} className="h-2" />
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-                <span className="text-muted-foreground text-xs sm:text-sm">Día {15 - trialDaysLeft} de 15</span>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
-                    <Link href="/dashboard/configuracion">Ver Planes</Link>
-                  </Button>
-                </motion.div>
-              </div>
+
+
+      <div className="space-y-6">
+        {/* Quick Actions - Horizontal */}
+        <div className="space-y-4">
+          <h2 className="font-semibold text-lg">Acciones Rápidas</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div onClick={() => setIsBotDialogOpen(true)} className="block cursor-pointer">
+              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white h-full">
+                <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
+                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                    <Bot className="h-6 w-6" />
+                  </div>
+                  <span className="font-medium text-sm">Nuevo Bot</span>
+                  <span className="text-xs opacity-70">Tecla F5</span>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
-      </ScrollFadeIn>
+            
+            <div onClick={() => setIsClientDialogOpen(true)} className="block cursor-pointer">
+              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white h-full">
+                <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
+                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                    <UserPlus className="h-6 w-6" />
+                  </div>
+                  <span className="font-medium text-sm">Nuevo Cliente</span>
+                  <span className="text-xs opacity-70">Tecla F6</span>
+                </CardContent>
+              </Card>
+            </div>
 
-      {/* Stats Grid */}
-      <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-        <ScrollStaggerChild>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Total Clientes</CardTitle>
-              <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <ScrollScaleIn delay={0.5}>
-                <div className="text-xl sm:text-2xl font-bold">{stats.totalClients}</div>
-              </ScrollScaleIn>
-              <p className="text-xs text-muted-foreground">+0% desde el mes pasado</p>
-            </CardContent>
-          </Card>
-        </ScrollStaggerChild>
+            <div onClick={() => setIsAutomationDialogOpen(true)} className="block cursor-pointer">
+              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white h-full">
+                <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
+                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                    <Zap className="h-6 w-6" />
+                  </div>
+                  <span className="font-medium text-sm">Nueva Automatización</span>
+                  <span className="text-xs opacity-70">Tecla F7</span>
+                </CardContent>
+              </Card>
+            </div>
 
-        <ScrollStaggerChild>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Bots Activos</CardTitle>
-              <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <ScrollScaleIn delay={0.6}>
-                <div className="text-xl sm:text-2xl font-bold">{stats.activeBots}</div>
-              </ScrollScaleIn>
-              <p className="text-xs text-muted-foreground">de 1 disponible en tu plan</p>
-            </CardContent>
-          </Card>
-        </ScrollStaggerChild>
+            <Link href="/dashboard/chat" className="block">
+              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white cursor-pointer h-full">
+                <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
+                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                    <MessageCircle className="h-6 w-6" />
+                  </div>
+                  <span className="font-medium text-sm">Ir al Chat</span>
+                  <span className="text-xs opacity-70">Tecla F8</span>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+        </div>
 
-        <ScrollStaggerChild>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Mensajes del Mes</CardTitle>
-              <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <ScrollScaleIn delay={0.7}>
-                <div className="text-xl sm:text-2xl font-bold">{stats.monthlyMessages}</div>
-              </ScrollScaleIn>
-              <p className="text-xs text-muted-foreground">+0% desde el mes pasado</p>
-            </CardContent>
-          </Card>
-        </ScrollStaggerChild>
+        {/* Stats - Below */}
+        <div>
+          <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3">
+            <ScrollStaggerChild>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Total Clientes</CardTitle>
+                  <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                  <ScrollScaleIn delay={0.5}>
+                    <div className="text-xl sm:text-2xl font-bold">{stats.totalClients}</div>
+                  </ScrollScaleIn>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.clientsGrowth > 0 ? "+" : ""}{stats.clientsGrowth.toFixed(0)}% desde el mes pasado
+                  </p>
+                </CardContent>
+              </Card>
+            </ScrollStaggerChild>
 
-        <ScrollStaggerChild>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Tasa de Conversión</CardTitle>
-              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <ScrollScaleIn delay={0.8}>
-                <div className="text-xl sm:text-2xl font-bold">{stats.conversionRate}%</div>
-              </ScrollScaleIn>
-              <p className="text-xs text-muted-foreground">+0% desde el mes pasado</p>
-            </CardContent>
-          </Card>
-        </ScrollStaggerChild>
-      </ScrollStaggeredChildren>
+            <ScrollStaggerChild>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Bots Activos</CardTitle>
+                  <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                  <ScrollScaleIn delay={0.6}>
+                    <div className="text-xl sm:text-2xl font-bold">{stats.activeBots}</div>
+                  </ScrollScaleIn>
+                  <p className="text-xs text-muted-foreground">de {profile?.max_bots || 1} disponible en tu plan</p>
+                </CardContent>
+              </Card>
+            </ScrollStaggerChild>
 
-      {/* Quick Actions */}
-      <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        <ScrollStaggerChild>
-          <motion.div
-            whileHover={{ scale: 1.02, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader className="px-3 sm:px-6 pt-3 sm:pt-6">
-                <CardTitle className="flex items-center text-base sm:text-lg">
-                  <Bot className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
-                  Primeros pasos
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">Guía interactiva para configurar tu app y empezar a usar el bot</CardDescription>
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <div className="flex flex-col gap-4 sm:gap-6">
-                  {/* Multi-step onboarding visual */}
-                  {[{
-                    label: "Completar información del negocio",
-                    action: "Completar",
-                    href: "/dashboard/negocio",
-                  }, {
-                    label: "Configurar tu primer bot",
-                    action: "Configurar",
-                    href: "/dashboard/bots",
-                  }, {
-                    label: "Añadir tus primeros clientes",
-                    action: "Añadir",
-                    href: "/dashboard/clientes",
-                  }, {
-                    label: "Probar tu bot",
-                    action: "Probar",
-                    href: "/dashboard/pruebas",
-                  }].map((step, idx) => (
-                    <div key={step.label} className="flex items-center gap-2 sm:gap-4 mb-2">
-                      <motion.div
-                        className={cn(
-                          "w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-sm sm:text-lg border-2 transition-colors",
-                          "bg-primary text-white border-primary"
-                        )}
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 0.3, delay: 0.1 * idx }}
-                      >
-                        {idx + 1}
-                      </motion.div>
-                      <span className="flex-1 text-xs sm:text-sm font-medium">{step.label}</span>
-                      <Button asChild size="sm" variant="outline" className="text-xs sm:text-sm">
-                        <Link href={step.href}>{step.action}</Link>
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </ScrollStaggerChild>
+            <ScrollStaggerChild>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Mensajes del Mes</CardTitle>
+                  <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                  <ScrollScaleIn delay={0.7}>
+                    <div className="text-xl sm:text-2xl font-bold">{stats.monthlyMessages}</div>
+                  </ScrollScaleIn>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.messagesGrowth > 0 ? "+" : ""}{stats.messagesGrowth.toFixed(0)}% desde el mes pasado
+                  </p>
+                </CardContent>
+              </Card>
+            </ScrollStaggerChild>
 
-        <ScrollStaggerChild>
-          <motion.div
-            whileHover={{ scale: 1.02, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader className="px-3 sm:px-6 pt-3 sm:pt-6">
-                <CardTitle className="flex items-center text-base sm:text-lg">
-                  <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
-                  Gestionar Clientes
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">Añade y organiza tu base de clientes</CardDescription>
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button asChild variant="outline" className="w-full bg-transparent text-sm sm:text-base">
-                    <Link href="/dashboard/clientes">
-                      <span className="hidden sm:inline">Ver Clientes</span>
-                      <span className="sm:hidden">Clientes</span>
-                    </Link>
-                  </Button>
-                </motion.div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </ScrollStaggerChild>
+            <ScrollStaggerChild>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Conversaciones Activas</CardTitle>
+                  <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                  <ScrollScaleIn delay={0.8}>
+                    <div className="text-xl sm:text-2xl font-bold">{stats.activeConversations}</div>
+                  </ScrollScaleIn>
+                  <p className="text-xs text-muted-foreground">
+                    En las últimas 24 horas
+                  </p>
+                </CardContent>
+              </Card>
+            </ScrollStaggerChild>
 
-        <ScrollStaggerChild>
-          <motion.div
-            whileHover={{ scale: 1.02, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader className="px-3 sm:px-6 pt-3 sm:pt-6">
-                <CardTitle className="flex items-center text-base sm:text-lg">
-                  <Zap className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-primary" />
-                  Automatizaciones
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">Configura campañas automáticas de marketing</CardDescription>
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button asChild variant="outline" className="w-full bg-transparent text-sm sm:text-base">
-                    <Link href="/dashboard/automatizaciones">
-                      <span className="hidden sm:inline">Configurar</span>
-                      <span className="sm:hidden">Configurar</span>
-                    </Link>
-                  </Button>
-                </motion.div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </ScrollStaggerChild>
-      </ScrollStaggeredChildren>
+            <ScrollStaggerChild>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Total Conversaciones</CardTitle>
+                  <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                  <ScrollScaleIn delay={0.9}>
+                    <div className="text-xl sm:text-2xl font-bold">{stats.totalConversations}</div>
+                  </ScrollScaleIn>
+                  <p className="text-xs text-muted-foreground">
+                    Histórico total
+                  </p>
+                </CardContent>
+              </Card>
+            </ScrollStaggerChild>
+
+            <ScrollStaggerChild>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Tasa de Conversión</CardTitle>
+                  <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+                  <ScrollScaleIn delay={1.0}>
+                    <div className="text-xl sm:text-2xl font-bold">{stats.conversionRate}%</div>
+                  </ScrollScaleIn>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.conversionGrowth > 0 ? "+" : ""}{stats.conversionGrowth.toFixed(0)}% desde el mes pasado
+                  </p>
+                </CardContent>
+              </Card>
+            </ScrollStaggerChild>
+          </ScrollStaggeredChildren>
+        </div>
+      </div>
+
+      <MultiStepBotCreation
+        isOpen={isBotDialogOpen}
+        onClose={() => setIsBotDialogOpen(false)}
+        onBotCreated={() => {
+          setIsBotDialogOpen(false)
+          fetchStats()
+        }}
+        userId={user.id}
+      />
+
+      <ClientCreationDialog
+        isOpen={isClientDialogOpen}
+        onClose={() => setIsClientDialogOpen(false)}
+        onClientCreated={() => {
+          setIsClientDialogOpen(false)
+          fetchStats()
+        }}
+        userId={user.id}
+      />
+
+      <MultiStepAutomationCreation
+        isOpen={isAutomationDialogOpen}
+        onClose={() => setIsAutomationDialogOpen(false)}
+        onAutomationCreated={() => {
+          setIsAutomationDialogOpen(false)
+          fetchStats()
+        }}
+        userId={user.id}
+      />
     </div>
   )
 }

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2 } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -94,6 +94,7 @@ export function ChatView({ userId }: ChatViewProps) {
 
   const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver({
     threshold: 0.1,
+    rootMargin: '100px',
     triggerOnce: false
   })
 
@@ -684,6 +685,11 @@ export function ChatView({ userId }: ChatViewProps) {
                       <Badge variant="outline" className="text-[10px] h-4 px-1 py-0">
                         {conv.platform}
                       </Badge>
+                      {conv.status === 'paused' && (
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800">
+                          IA Pausada
+                        </Badge>
+                      )}
                       {needsAttention && (
                         <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">
                           Ayuda
@@ -697,12 +703,8 @@ export function ChatView({ userId }: ChatViewProps) {
             
             {/* Loader for infinite scroll */}
             {hasMore && !isLoading && !searchTerm && (
-              <div ref={loadMoreRef} className="p-4 flex justify-center">
-                {isLoadingMore ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
-                ) : (
-                  <div className="h-1 w-full" /> // Invisible trigger
-                )}
+              <div ref={loadMoreRef} className="py-6 flex justify-center w-full">
+                 <Loader2 className={cn("h-6 w-6 animate-spin text-muted-foreground transition-opacity", isLoadingMore ? "opacity-100" : "opacity-0")} />
               </div>
             )}
           </div>
@@ -828,6 +830,31 @@ export function ChatView({ userId }: ChatViewProps) {
                               <source src={getMediaUrl(msg)} type={msg.metadata.audio.mime_type} />
                               Tu navegador no soporta audio.
                             </audio>
+                          </div>
+                        ) : msg.message_type === 'location' && msg.metadata?.location ? (
+                          <div className="min-w-[200px]">
+                            <a 
+                              href={`https://www.google.com/maps/search/?api=1&query=${msg.metadata.location.latitude},${msg.metadata.location.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex flex-col gap-2 hover:opacity-90 transition-opacity"
+                            >
+                              <div className="relative w-full h-32 bg-slate-200 rounded-md overflow-hidden flex items-center justify-center">
+                                {/* Static map placeholder or actual map if API key available */}
+                                <div className="absolute inset-0 bg-slate-300 flex items-center justify-center">
+                                  <MapPin className="h-8 w-8 text-red-500" />
+                                </div>
+                                {/* Optional: Use Google Static Maps API if you have a key */}
+                                {/* <img src={`https://maps.googleapis.com/maps/api/staticmap?center=${msg.metadata.location.latitude},${msg.metadata.location.longitude}&zoom=15&size=400x200&markers=color:red%7C${msg.metadata.location.latitude},${msg.metadata.location.longitude}&key=YOUR_KEY`} alt="Mapa" className="w-full h-full object-cover" /> */}
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <MapPin className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                                <div className="text-sm">
+                                  <p className="font-medium">{msg.metadata.location.name || 'Ubicación'}</p>
+                                  <p className="text-xs opacity-80">{msg.metadata.location.address || `${msg.metadata.location.latitude}, ${msg.metadata.location.longitude}`}</p>
+                                </div>
+                              </div>
+                            </a>
                           </div>
                         ) : (
                           <p className="text-sm whitespace-pre-wrap">{msg.content}</p>

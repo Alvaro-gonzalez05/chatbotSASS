@@ -113,7 +113,8 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         image,
         document,
         audio,
-        video
+        video,
+        location
       } = message
 
       const recipientPhone = messageData.metadata?.phone_number_id || messageData.metadata?.display_phone_number
@@ -205,6 +206,10 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         case 'video':
           messageContent = { ...messageContent, video }
           textContent = video?.caption || '[Video]'
+          break
+        case 'location':
+          messageContent = { ...messageContent, location }
+          textContent = location.name || location.address ? `📍 ${location.name || ''} ${location.address || ''}`.trim() : '📍 Ubicación compartida'
           break
         case 'button':
           // Handle button replies (Quick Replies)
@@ -323,7 +328,7 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       // Store the message
       // IMPORTANT: Map WhatsApp message types to our internal types
       let internalMessageType = 'text';
-      if (['image', 'audio', 'document', 'video'].includes(messageType)) {
+      if (['image', 'audio', 'document', 'video', 'location'].includes(messageType)) {
         internalMessageType = messageType;
       }
       // Treat buttons and interactive messages as text for storage purposes, 
@@ -355,7 +360,7 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       // Only process AI response for text messages (for now)
       // Also process button replies and interactive messages as text
       // Also process images (for receipts/comprobantes) and audio
-      const shouldProcessAI = (['text', 'button', 'interactive', 'image', 'audio'].includes(messageType));
+      const shouldProcessAI = (['text', 'button', 'interactive', 'image', 'audio', 'location'].includes(messageType));
 
       if (shouldProcessAI) {
         // Check if conversation is paused
