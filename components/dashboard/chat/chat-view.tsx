@@ -74,6 +74,13 @@ export function ChatView({ userId }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+  const [messagesPage, setMessagesPage] = useState(0)
+  const [hasMoreMessages, setHasMoreMessages] = useState(true)
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false)
+  const MESSAGES_PAGE_SIZE = 20
+  const shouldScrollToBottomRef = useRef(true)
+  const previousScrollHeightRef = useRef(0)
+
   const [searchTerm, setSearchTerm] = useState("")
   const [newMessage, setNewMessage] = useState("")
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false)
@@ -107,6 +114,8 @@ export function ChatView({ userId }: ChatViewProps) {
       const to = from + PAGE_SIZE - 1
 
       // Get conversations for user's bots
+      // Note: Fetching all messages for each conversation is heavy, but needed for last_message and unread_count
+      // Ideally this should be optimized with a DB view or function
       let query = supabase
         .from("conversations")
         .select(`
@@ -229,12 +238,61 @@ export function ChatView({ userId }: ChatViewProps) {
     }
   }, [userId, supabase])
 
+  const loadOlderMessages = async () => {
+    if (isLoadingMoreMessages || !hasMoreMessages || !selectedConversation) return
+    
+    setIsLoadingMoreMessages(true)
+    shouldScrollToBottomRef.current = false
+    
+    if (scrollRef.current) {
+      previousScrollHeightRef.current = scrollRef.current.scrollHeight
+    }
+
+    try {
+      const nextPage = messagesPage + 1
+      const from = nextPage * MESSAGES_PAGE_SIZE
+      const to = from + MESSAGES_PAGE_SIZE - 1
+
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", selectedConversation.id)
+        .order("created_at", { ascending: false })
+        .range(from, to)
+
+      if (error) throw error
+
+      if (data.length < MESSAGES_PAGE_SIZE) {
+        setHasMoreMessages(false)
+      }
+
+      const olderMessages = data.reverse()
+      setMessages(prev => [...olderMessages, ...prev])
+      setMessagesPage(nextPage)
+    } catch (error) {
+      console.error("Error loading older messages:", error)
+    } finally {
+      setIsLoadingMoreMessages(false)
+    }
+  }
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop } = e.currentTarget
+    if (scrollTop === 0 && hasMoreMessages && !isLoadingMoreMessages) {
+      loadOlderMessages()
+    }
+  }
+
   // Fetch messages when conversation is selected
   useEffect(() => {
     if (!selectedConversation) return
 
     const fetchMessages = async () => {
       setIsLoadingMessages(true)
+      setMessagesPage(0)
+      setHasMoreMessages(true)
+      shouldScrollToBottomRef.current = true
+      
       try {
         // Mark messages as read
         await supabase
@@ -253,10 +311,16 @@ export function ChatView({ userId }: ChatViewProps) {
           .from("messages")
           .select("*")
           .eq("conversation_id", selectedConversation.id)
-          .order("created_at", { ascending: true })
+          .order("created_at", { ascending: false })
+          .range(0, MESSAGES_PAGE_SIZE - 1)
 
         if (error) throw error
-        setMessages(data || [])
+        
+        if (data.length < MESSAGES_PAGE_SIZE) {
+          setHasMoreMessages(false)
+        }
+
+        setMessages(data.reverse() || [])
       } catch (error) {
         console.error("Error fetching messages:", error)
       } finally {
@@ -286,6 +350,8 @@ export function ChatView({ userId }: ChatViewProps) {
             // Check if message already exists
             if (prev.some(m => m.id === newMessage.id)) return prev
             
+            shouldScrollToBottomRef.current = true
+            
             // Remove optimistic message if it matches content and is recent (simple heuristic)
             // We assume the optimistic message is at the end
             const filtered = prev.filter(m => {
@@ -308,8 +374,17 @@ export function ChatView({ userId }: ChatViewProps) {
 
   // Auto-scroll to bottom
   useEffect(() => {
-    if (scrollRef.current) {
+    if (!scrollRef.current) return
+
+    if (shouldScrollToBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    } else {
+      // Restore scroll position when loading older messages
+      const newScrollHeight = scrollRef.current.scrollHeight
+      const diff = newScrollHeight - previousScrollHeightRef.current
+      if (diff > 0) {
+        scrollRef.current.scrollTop = diff
+      }
     }
   }, [messages])
 
@@ -430,6 +505,7 @@ export function ChatView({ userId }: ChatViewProps) {
       metadata: { sent_by: 'agent', status: 'sending' }
     }
     
+    shouldScrollToBottomRef.current = true
     setMessages(prev => [...prev, optimisticMessage])
     const messageToSend = newMessage
     setNewMessage("")
@@ -625,7 +701,7 @@ export function ChatView({ userId }: ChatViewProps) {
           </div>
         </div>
         
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="flex flex-col">
             {isLoading ? (
               <div className="p-4 text-center text-muted-foreground">Cargando conversaciones...</div>
@@ -708,7 +784,7 @@ export function ChatView({ userId }: ChatViewProps) {
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </Card>
 
       {/* Main - Chat Window */}
@@ -778,7 +854,13 @@ export function ChatView({ userId }: ChatViewProps) {
             <div 
               className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950/50"
               ref={scrollRef}
+              onScroll={handleScroll}
             >
+              {isLoadingMoreMessages && (
+                <div className="flex justify-center py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
               {isLoadingMessages ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
