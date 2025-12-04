@@ -947,8 +947,7 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
             takeReservations,
             senderName,
             senderPhone,
-            extractedClientData,
-            chronologicalMessages
+            extractedClientData
           )
         }
 
@@ -976,33 +975,22 @@ async function processOrdersAndReservations(
   canTakeReservations: boolean,
   senderName?: string,
   senderPhone?: string,
-  extractedClientData?: any,
-  conversationHistory: any[] = []
+  extractedClientData?: any
 ) {
   try {
     if (!bot.gemini_api_key) return;
 
-    // Format history for the prompt
-    const historyText = conversationHistory.map(msg => 
-      `${msg.sender_type === 'client' ? 'Usuario' : 'Bot'}: ${msg.content}`
-    ).join('\n');
-
     // Combined detection and extraction prompt
     const analysisPrompt = `
-Analiza la conversación completa entre Usuario y Bot.
-Determina si el Bot ha CONFIRMADO FINALMENTE un pedido o una reserva en su ÚLTIMA respuesta.
+Analiza la última interacción entre Usuario y Bot.
+Determina si el Bot ha CONFIRMADO FINALMENTE un pedido o una reserva.
 
-HISTORIAL DE CONVERSACIÓN:
-${historyText}
-
-ÚLTIMA INTERACCIÓN:
 Usuario: "${userMessage}"
 Bot: "${aiResponse}"
 
 FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
 
 Si es un PEDIDO CONFIRMADO (${canTakeOrders ? 'SI' : 'NO'} habilitado):
-Busca en TODO el historial los items que el usuario pidió.
 Extrae los items, total, y tipo de entrega.
 Formato JSON:
 {
@@ -1035,7 +1023,6 @@ Responde SOLO con el JSON.
 `;
 
     // Call Gemini
-    console.log('🤖 Analyzing conversation for orders/reservations...');
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1045,10 +1032,7 @@ Responde SOLO con el JSON.
       })
     });
 
-    if (!response.ok) {
-        console.error('❌ Error calling Gemini for analysis:', response.statusText);
-        return;
-    }
+    if (!response.ok) return;
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) return;
@@ -1057,7 +1041,6 @@ Responde SOLO con el JSON.
     try {
         const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
         result = JSON.parse(jsonStr);
-        console.log('🤖 Analysis result:', JSON.stringify(result, null, 2));
     } catch (e) {
         console.error("Error parsing analysis JSON", e);
         return;
