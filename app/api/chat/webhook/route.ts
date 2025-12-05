@@ -840,7 +840,7 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
       attempt++
       
       try {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${bot.gemini_api_key}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1023,7 +1023,7 @@ Responde SOLO con el JSON.
 `;
 
     // Call Gemini
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1329,7 +1329,7 @@ Si hay un pedido completo, responde con este formato JSON:
 Si no hay pedido completo, responde: NO_ORDER
 `
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1461,7 +1461,7 @@ Si NO hay reserva completa, responde: NO_RESERVATION
 `
 
     console.log('🤖 Calling Gemini AI for reservation extraction...')
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${bot.gemini_api_key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1879,7 +1879,7 @@ ${platform === 'instagram'
 `
 
     const genAI = new GoogleGenerativeAI(bot.gemini_api_key)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" })
 
     const result = await model.generateContent(extractionPrompt)
     const responseText = result.response.text()
