@@ -98,6 +98,7 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
     // Prepare data with default name if empty
     const clientData = {
       ...formData,
+      birthday: formData.birthday ? formData.birthday : null,
       name: formData.name.trim() || "Cliente sin nombre",
       user_id: userId,
       total_purchases: 0,
@@ -145,7 +146,10 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
     try {
       const { data, error } = await supabase
         .from("clients")
-        .update(formData)
+        .update({
+          ...formData,
+          birthday: formData.birthday ? formData.birthday : null
+        })
         .eq("id", selectedClient.id)
         .select()
         .single()

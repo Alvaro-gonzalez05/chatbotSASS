@@ -56,6 +56,7 @@ export function ClientCreationDialog({ isOpen, onClose, onClientCreated, userId 
     // Prepare data with default name if empty
     const clientData = {
       ...formData,
+      birthday: formData.birthday ? formData.birthday : null,
       name: formData.name.trim() || "Cliente sin nombre",
       user_id: userId,
       total_purchases: 0,
