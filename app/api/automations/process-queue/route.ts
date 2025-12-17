@@ -226,42 +226,67 @@ async function logMessageToConversation(supabase: any, message: any, bot: any, e
     // 1. Find or create conversation
     let conversationId = null;
     
-    // Try to find existing conversation
+    // Try to find existing conversation by phone (most reliable identifier)
+    // Using maybeSingle() to avoid errors if no record is found
     const { data: existingConv } = await supabase
       .from('conversations')
-      .select('id')
+      .select('id, client_id')
       .eq('bot_id', bot.id)
-      .eq('client_id', message.client_id)
-      .single();
+      .eq('client_phone', message.recipient_phone)
+      .maybeSingle();
       
     if (existingConv) {
       conversationId = existingConv.id;
+      
+      // Update client_id if missing in conversation but present in message
+      if (!existingConv.client_id && message.client_id) {
+         await supabase
+           .from('conversations')
+           .update({ client_id: message.client_id })
+           .eq('id', conversationId);
+      }
     } else {
       // Create new conversation
-      // We need client details
-      const { data: client } = await supabase
-        .from('clients')
-        .select('name, phone, instagram_username')
-        .eq('id', message.client_id)
-        .single();
-        
-      if (client) {
-        const { data: newConv } = await supabase
-          .from('conversations')
-          .insert({
-            user_id: message.user_id,
-            bot_id: bot.id,
-            client_id: message.client_id,
-            client_name: client.name || message.recipient_name || 'Cliente',
-            client_phone: client.phone || message.recipient_phone,
-            platform: bot.platform,
-            status: 'active',
-            last_message_at: new Date().toISOString()
-          })
-          .select('id')
+      let clientName = message.recipient_name || 'Cliente';
+      
+      // If we have client_id, try to get name from clients table
+      if (message.client_id) {
+        const { data: client } = await supabase
+          .from('clients')
+          .select('name')
+          .eq('id', message.client_id)
           .single();
           
-        if (newConv) conversationId = newConv.id;
+        if (client && client.name) clientName = client.name;
+      }
+        
+      const { data: newConv, error: createError } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: message.user_id,
+          bot_id: bot.id,
+          client_id: message.client_id,
+          client_name: clientName,
+          client_phone: message.recipient_phone,
+          platform: bot.platform,
+          status: 'active',
+          last_message_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+        
+      if (newConv) conversationId = newConv.id;
+      if (createError) {
+        // If creation failed (e.g. race condition), try to fetch again
+        console.error('Error creating conversation, retrying fetch:', createError);
+        const { data: retryConv } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('bot_id', bot.id)
+          .eq('client_phone', message.recipient_phone)
+          .maybeSingle();
+          
+        if (retryConv) conversationId = retryConv.id;
       }
     }
     

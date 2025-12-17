@@ -22,6 +22,7 @@ import {
   Calendar,
   ShoppingCart,
   MessageSquare,
+  Bot,
 } from "lucide-react"
 
 interface NavigationItem {
@@ -51,7 +52,7 @@ const baseNavigation: NavigationItem[] = [
   {
     name: "Bots",
     href: "/dashboard/bots",
-    icon: Users, // TODO: cambiar por ícono de bot
+    icon: Bot,
   },
   {
     name: "Pedidos",
@@ -97,12 +98,36 @@ export function DashboardSidebar() {
       visible: !item.requiresFeature 
     }))
   )
+  const [hasNewMessages, setHasNewMessages] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
   const supabase = createClient()
+
+  const checkNewMessages = async (uid?: string) => {
+    try {
+      const currentUserId = uid || userId
+      if (!currentUserId) return
+
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      
+      // Check for conversations with messages in the last hour
+      const { count } = await supabase
+        .from('conversations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', currentUserId)
+        .gt('last_message_at', oneHourAgo)
+      
+      setHasNewMessages((count || 0) > 0)
+    } catch (error) {
+      console.error('Error checking new messages:', error)
+    }
+  }
 
   const updateNavigation = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      
+      if (!userId) setUserId(user.id)
 
       // Get user's bots and their features
       const { data: bots, error: botsError } = await supabase
@@ -167,6 +192,14 @@ export function DashboardSidebar() {
 
   useEffect(() => {
     updateNavigation()
+    
+    // Initial check
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        setUserId(data.user.id)
+        checkNewMessages(data.user.id)
+      }
+    })
 
     // Listen for custom events when bots are created/updated
     const handleBotUpdate = () => {
@@ -179,17 +212,51 @@ export function DashboardSidebar() {
 
     // Also update navigation when navigating between pages (in case user created/edited a bot)
     const handleRouteChange = () => {
-      setTimeout(updateNavigation, 500) // Small delay to ensure data is saved
+      setTimeout(() => {
+        updateNavigation()
+        checkNewMessages()
+      }, 500) // Small delay to ensure data is saved
     }
     
     window.addEventListener('focus', handleRouteChange)
+
+    // Set up interval to check for new messages every minute
+    const messageInterval = setInterval(() => checkNewMessages(), 60000)
 
     return () => {
       window.removeEventListener('botCreated', handleBotUpdate)
       window.removeEventListener('botUpdated', handleBotUpdate)
       window.removeEventListener('focus', handleRouteChange)
+      clearInterval(messageInterval)
     }
   }, [supabase])
+
+  // Realtime subscription for new messages
+  useEffect(() => {
+    if (!userId) return
+
+    const channel = supabase
+      .channel('sidebar_conversations')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          // If a conversation is updated or inserted, it means there's activity
+          // We can simply set the indicator to true immediately
+          setHasNewMessages(true)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, supabase])
 
   return (
     <div
@@ -235,8 +302,20 @@ export function DashboardSidebar() {
                     collapsed && "justify-center",
                   )}
                 >
-                  <item.icon className={cn("h-4 w-4", !collapsed && "mr-3")} />
-                  {!collapsed && <span>{item.name}</span>}
+                  <div className="relative">
+                    <item.icon className={cn("h-4 w-4", !collapsed && "mr-3")} />
+                    {item.name === "Mensajes" && hasNewMessages && collapsed && (
+                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                    )}
+                  </div>
+                  {!collapsed && (
+                    <div className="flex items-center justify-between flex-1">
+                      <span>{item.name}</span>
+                      {item.name === "Mensajes" && hasNewMessages && (
+                        <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                      )}
+                    </div>
+                  )}
                 </Link>
               )
             })}
