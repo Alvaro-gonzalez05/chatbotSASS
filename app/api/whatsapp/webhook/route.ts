@@ -249,11 +249,21 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       // OPTIMIZATION: Parallelize Conversation and Client Lookup
       
       // 1. Find conversation
-      const conversationPromise = supabase
+      // Flexible search to handle 549 vs local numbers
+      let convQuery = supabase
         .from('conversations')
         .select('*')
-        .eq('client_phone', senderPhone)
-        .eq('bot_id', bot.id)
+        .eq('bot_id', bot.id);
+
+      // If senderPhone is Argentina mobile (549...), check for local version too
+      if (senderPhone.startsWith('549')) {
+         const shortPhone = senderPhone.substring(3); 
+         convQuery = convQuery.or(`client_phone.eq.${senderPhone},client_phone.eq.${shortPhone}`);
+      } else {
+         convQuery = convQuery.eq('client_phone', senderPhone);
+      }
+
+      const conversationPromise = convQuery
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -322,6 +332,15 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
             .from('conversations')
             .update({ client_name: senderName })
             .eq('id', conversation.id)
+        }
+
+        // Update phone number to international format if we found a match with a different (likely short) number
+        // This ensures we migrate local numbers to international format on new activity
+        if (senderPhone.startsWith('549') && conversation.client_phone !== senderPhone) {
+           await supabase
+            .from('conversations')
+            .update({ client_phone: senderPhone })
+            .eq('id', conversation.id);
         }
       }
 

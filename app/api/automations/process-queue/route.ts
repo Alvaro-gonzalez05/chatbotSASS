@@ -227,13 +227,31 @@ async function logMessageToConversation(supabase: any, message: any, bot: any, e
     let conversationId = null;
     
     // Try to find existing conversation by phone (most reliable identifier)
-    // Using maybeSingle() to avoid errors if no record is found
-    const { data: existingConv } = await supabase
+    // We need to handle potential format differences (e.g. 549 vs local)
+    // So we search for exact match OR if the stored phone ends with the recipient phone (for local numbers)
+    
+    let query = supabase
       .from('conversations')
-      .select('id, client_id')
-      .eq('bot_id', bot.id)
-      .eq('client_phone', message.recipient_phone)
-      .maybeSingle();
+      .select('id, client_id, client_phone')
+      .eq('bot_id', bot.id);
+      
+    // Construct a flexible phone search
+    // If phone is short (e.g. 10 digits), it might be a suffix of the full international number
+    const cleanPhone = message.recipient_phone.replace(/\D/g, ''); // Remove non-digits
+    
+    if (cleanPhone.length >= 7) {
+       // Search for exact match OR if the DB phone ends with our phone (handling 549 prefix vs local)
+       // We use ilike with % suffix to match the end of the string
+       query = query.or(`client_phone.eq.${message.recipient_phone},client_phone.ilike.%${cleanPhone}`);
+    } else {
+       query = query.eq('client_phone', message.recipient_phone);
+    }
+    
+    const { data: existingConvs } = await query;
+    
+    // Sort by length descending to prioritize longer numbers (international format)
+    // This ensures that if we have '261...' and '549261...', we pick '549261...'
+    const existingConv = existingConvs?.sort((a, b) => b.client_phone.length - a.client_phone.length)[0];
       
     if (existingConv) {
       conversationId = existingConv.id;
@@ -259,6 +277,16 @@ async function logMessageToConversation(supabase: any, message: any, bot: any, e
           
         if (client && client.name) clientName = client.name;
       }
+
+      // Determine the phone number to save
+      // We prefer the international format (with prefix) to avoid duplicates
+      let phoneToSave = message.recipient_phone;
+      
+      // Heuristic for Argentina (based on user request):
+      // If the number is 10 digits (local mobile), prepend 549
+      if (cleanPhone.length === 10) {
+         phoneToSave = '549' + cleanPhone;
+      }
         
       const { data: newConv, error: createError } = await supabase
         .from('conversations')
@@ -267,7 +295,7 @@ async function logMessageToConversation(supabase: any, message: any, bot: any, e
           bot_id: bot.id,
           client_id: message.client_id,
           client_name: clientName,
-          client_phone: message.recipient_phone,
+          client_phone: phoneToSave,
           platform: bot.platform,
           status: 'active',
           last_message_at: new Date().toISOString()
@@ -279,14 +307,21 @@ async function logMessageToConversation(supabase: any, message: any, bot: any, e
       if (createError) {
         // If creation failed (e.g. race condition), try to fetch again
         console.error('Error creating conversation, retrying fetch:', createError);
-        const { data: retryConv } = await supabase
+        
+        // Retry with the same flexible logic
+        let retryQuery = supabase
           .from('conversations')
           .select('id')
-          .eq('bot_id', bot.id)
-          .eq('client_phone', message.recipient_phone)
-          .maybeSingle();
+          .eq('bot_id', bot.id);
           
-        if (retryConv) conversationId = retryConv.id;
+        if (cleanPhone.length >= 7) {
+           retryQuery = retryQuery.or(`client_phone.eq.${message.recipient_phone},client_phone.ilike.%${cleanPhone}`);
+        } else {
+           retryQuery = retryQuery.eq('client_phone', message.recipient_phone);
+        }
+          
+        const { data: retryConvs } = await retryQuery.limit(1);
+        if (retryConvs?.[0]) conversationId = retryConvs[0].id;
       }
     }
     
