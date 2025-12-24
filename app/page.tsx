@@ -1,4 +1,4 @@
-import { LandingPage } from "@/components/landing-page"
+import { LandingPage } from "@/components/landing/landing-page"
 import { PageTransition } from "@/components/ui/page-transition"
 
 export default function Home() {
