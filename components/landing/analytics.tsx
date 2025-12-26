@@ -75,78 +75,12 @@ export function Analytics() {
         </div>
 
         {/* Right Column: Visual/Chart */}
-        <div ref={visualRef} className="relative">
-          {/* Main Card */}
-          <div className="bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-8 relative z-10">
-            
-            {/* Top Stats Row */}
-            <div className="flex gap-4 mb-8">
-              <div className="flex-1 bg-gray-50 rounded-2xl p-4 flex items-center gap-4">
-                <div className="bg-black text-white p-3 rounded-xl">
-                  <ShoppingBag size={20} />
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-black">25,000 USD</div>
-                  <div className="text-xs text-gray-500">Ventas Totales</div>
-                </div>
-              </div>
-              <div className="flex-1 bg-gray-50 rounded-2xl p-4 flex items-center gap-4">
-                <div className="bg-black text-white p-3 rounded-xl">
-                  <PieChart size={20} />
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-black">22,000 USD</div>
-                  <div className="text-xs text-gray-500">Gastos Totales</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Chart Header */}
-            <div className="flex justify-between items-end mb-8">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-xl font-bold text-black">Ingresos</h3>
-                  <span className="bg-green-100 text-green-600 text-xs font-bold px-2 py-1 rounded-full">+13%</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                Este Año
-              </div>
-            </div>
-
-            {/* Bar Chart Visualization */}
-            <div className="h-64 flex items-end justify-between gap-2 md:gap-4 px-2">
-              {/* Bars */}
-              {[40, 65, 45, 80, 55, 90, 60].map((height, i) => (
-                <div key={i} className="w-full flex flex-col items-center gap-2 group relative">
-                  {/* Tooltip for the highlighted bar */}
-                  {i === 5 && (
-                    <div className="absolute -top-12 bg-white shadow-lg border border-gray-100 px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap animate-bounce">
-                      Promedio 2025
-                    </div>
-                  )}
-                  
-                  <div 
-                    className={`chart-bar w-full rounded-t-xl transition-all duration-300 ${
-                      i === 5 
-                        ? "bg-gradient-to-b from-purple-500 to-purple-700 shadow-lg shadow-purple-200" 
-                        : "bg-purple-100 hover:bg-purple-200"
-                    }`}
-                    style={{ height: `${height}%` }}
-                  ></div>
-                </div>
-              ))}
-            </div>
-            
-            {/* X Axis Line */}
-            <div className="h-px w-full bg-gray-100 mt-0"></div>
-
-          </div>
-
-          {/* Decorative Elements behind */}
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-100 rounded-full blur-3xl -z-10"></div>
-          <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-blue-50 rounded-full blur-3xl -z-10"></div>
+        <div ref={visualRef} className="relative flex justify-center items-center">
+          <img 
+            src="/images/d.png" 
+            alt="Dashboard Analytics" 
+            className="w-full h-auto object-contain mix-blend-multiply scale-125 hover:scale-135 transition-transform duration-500"
+          />
         </div>
 
       </div>

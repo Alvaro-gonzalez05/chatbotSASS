@@ -13,12 +13,13 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
+     * - videos - .mp4, .webm
      * - api/whatsapp/* (WhatsApp endpoints)
      * - api/instagram/* (Instagram endpoints) 
      * - api/debug/* (debug endpoints)
      * - api/chat/webhook (webhook chat API)
      * - api/automations/* (automation endpoints for cron jobs)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/whatsapp|api/instagram|api/debug|api/chat/webhook|api/automations).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm)$|api/whatsapp|api/instagram|api/debug|api/chat/webhook|api/automations).*)",
   ],
 }
