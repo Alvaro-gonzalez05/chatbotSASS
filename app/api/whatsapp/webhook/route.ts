@@ -143,6 +143,13 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         .eq('is_active', true)
         .single()
 
+      // Check user subscription status
+      const userProfilePromise = supabase
+        .from('user_profiles')
+        .select('subscription_status')
+        .eq('id', integration.user_id)
+        .single()
+
       // Check for duplicate messages (check metadata for whatsapp_message_id)
       const duplicateCheckPromise = supabase
         .from('messages')
@@ -150,11 +157,17 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         .eq('metadata->>whatsapp_message_id', whatsappMessageId)
         .maybeSingle()
 
-      const [botResult, duplicateResult] = await Promise.all([botPromise, duplicateCheckPromise])
+      const [botResult, userProfileResult, duplicateResult] = await Promise.all([botPromise, userProfilePromise, duplicateCheckPromise])
       
       const bot = botResult.data
       const botError = botResult.error
+      const userProfile = userProfileResult.data
       const existingMessage = duplicateResult.data
+
+      if (userProfile?.subscription_status === 'suspended') {
+        console.log('⛔ User is suspended. Ignoring WhatsApp message for user:', integration.user_id)
+        continue
+      }
 
       if (botError || !bot) {
         console.error('No active WhatsApp bot found for user:', integration.user_id, botError)
@@ -505,7 +518,18 @@ async function generateAndSendAIResponse(
       }
       
       // Send response via WhatsApp
-      await sendWhatsAppMessage(accessToken, phoneNumberId, senderPhone, aiResponse.response)
+      const sent = await sendWhatsAppMessage(accessToken, phoneNumberId, senderPhone, aiResponse.response)
+
+      if (sent) {
+        // Log usage for AI response
+        const supabase = createAdminClient()
+        await supabase.from('usage_logs').insert({
+          user_id: integration.user_id,
+          type: 'ai_response',
+          amount: 1,
+          description: `Respuesta IA a ${senderPhone} (WhatsApp)`
+        })
+      }
     }
 
   } catch (error) {
@@ -554,8 +578,10 @@ async function sendWhatsAppMessage(accessToken: string, phoneNumberId: string, r
     }
 
     await response.json()
+    return true
 
   } catch (error) {
     console.error('Error sending WhatsApp message:', error)
+    return false
   }
 }

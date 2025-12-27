@@ -110,24 +110,14 @@ export async function POST(request: NextRequest) {
             if (success) {
               console.log(`✅ Message sent successfully via ${platform}:`, externalMessageId)
 
-              // Log message to conversation history so it appears in chat view
-              await logMessageToConversation(supabase, message, bot, externalMessageId);
+              // Registrar consumo en usage_logs (Mensaje Masivo)
+              await supabase.from('usage_logs').insert({
+                user_id: message.user_id,
+                type: 'mass_message',
+                amount: 1, // Cantidad de mensajes
+                description: `Mensaje masivo a ${message.recipient_phone} (${bot.platform})`
+              });
 
-              // Notificar éxito (evitar spam para promociones masivas)
-              if (message.automation_type !== 'new_promotion') {
-                await createNotification({
-                  userId: message.user_id,
-                  title: "Automatización ejecutada",
-                  message: `Mensaje enviado a ${message.recipient_name || message.recipient_phone}`,
-                  type: "success",
-                  link: `/dashboard/automations`
-                });
-              }
-
-              // BORRAR mensaje de la cola si se envió correctamente
-              await supabase
-                .from('scheduled_messages')
-                .delete()
                 .eq('id', message.id)
 
               return { success: true, id: message.id }

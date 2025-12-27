@@ -296,6 +296,18 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         continue
       }
 
+      // Check user subscription status
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('subscription_status')
+        .eq('id', integration.user_id)
+        .single()
+
+      if (userProfile?.subscription_status === 'suspended') {
+        console.log('⛔ User is suspended. Ignoring Instagram message for user:', integration.user_id)
+        continue
+      }
+
       if (existingMessage) {
         console.log('📸 Skipping duplicate message (DB check):', messageId)
         continue
@@ -516,6 +528,15 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
               aiResponseData.response
             )
             console.log('✅ Instagram message sent successfully!')
+
+            // Log usage for AI response
+            await supabase.from('usage_logs').insert({
+              user_id: integration.user_id,
+              type: 'ai_response',
+              amount: 1,
+              description: `Respuesta IA a ${senderInstagramId} (Instagram)`
+            })
+
           } catch (error) {
             console.log('⚠️ Instagram message failed to send, but conversation was saved:', (error as Error).message)
           }

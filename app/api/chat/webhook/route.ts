@@ -44,10 +44,18 @@ export async function POST(request: NextRequest) {
         social_links,
         location,
         menu_link,
-        business_info
+        business_info,
+        subscription_status
       `)
       .eq("id", bot.user_id)
       .single()
+
+    if (userProfile?.subscription_status === 'suspended') {
+      return NextResponse.json({ error: "User account suspended" }, { status: 403 })
+    }
+
+    // Determine which Gemini API Key to use
+    const geminiApiKey = bot.gemini_api_key
 
 
 
@@ -217,7 +225,8 @@ export async function POST(request: NextRequest) {
       conversation.id, 
       supabase, 
       platform || conversation.platform, // Use platform from request or conversation
-      senderInstagramId
+      senderInstagramId,
+      geminiApiKey
     )
     
     // If we found an existing client in DB but extraction didn't find a name (or found a username),
@@ -372,7 +381,8 @@ export async function POST(request: NextRequest) {
       extractedClientData,
       platform || conversation.platform, // Add platform parameter
       senderInstagramId,
-      mediaPart // Pass media part to generator
+      mediaPart, // Pass media part to generator
+      geminiApiKey
     )
 
     // Save bot response to messages table (works for both real and test conversations)
@@ -440,7 +450,8 @@ async function generateBotResponse(
   extractedClientData?: any,
   platform?: string,
   senderInstagramId?: string,
-  mediaPart?: any
+  mediaPart?: any,
+  geminiApiKey?: string
 ): Promise<{ content: string, shouldPause: boolean }> {
   try {
     // Get conversation history for context (recent messages first)
@@ -827,8 +838,8 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
     // ]
 
     // Generate response using Gemini
-    if (!bot.gemini_api_key) {
-      return { content: "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente.", shouldPause: false }
+    if (!geminiApiKey) {
+      return { content: "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente (Falta API Key).", shouldPause: false }
     }
 
     // Generate response using Gemini 1.5 Flash model with retry logic
@@ -840,7 +851,7 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
       attempt++
       
       try {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -947,7 +958,8 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
             takeReservations,
             senderName,
             senderPhone,
-            extractedClientData
+            extractedClientData,
+            geminiApiKey
           )
         }
 
@@ -975,10 +987,11 @@ async function processOrdersAndReservations(
   canTakeReservations: boolean,
   senderName?: string,
   senderPhone?: string,
-  extractedClientData?: any
+  extractedClientData?: any,
+  geminiApiKey?: string
 ) {
   try {
-    if (!bot.gemini_api_key) return;
+    if (!geminiApiKey) return;
 
     // Combined detection and extraction prompt
     const analysisPrompt = `
@@ -1023,7 +1036,7 @@ Responde SOLO con el JSON.
 `;
 
     // Call Gemini
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1287,7 +1300,8 @@ async function processOrderFromConversation(
   userMessage: string,
   aiResponse: string,
   senderName?: string,
-  senderPhone?: string
+  senderPhone?: string,
+  geminiApiKey?: string
 ) {
   try {
     // Get recent conversation messages for context
@@ -1329,7 +1343,7 @@ Si hay un pedido completo, responde con este formato JSON:
 Si no hay pedido completo, responde: NO_ORDER
 `
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1402,7 +1416,8 @@ async function processReservationFromConversation(
   aiResponse: string,
   senderName?: string,
   senderPhone?: string,
-  extractedClientData?: any
+  extractedClientData?: any,
+  geminiApiKey?: string
 ) {
   try {
     console.log('🏨 PROCESSING RESERVATION FROM CONVERSATION')
@@ -1410,7 +1425,7 @@ async function processReservationFromConversation(
       userMessage,
       aiResponse: aiResponse.substring(0, 100) + '...',
       extractedClientData,
-      botGeminiKey: bot.gemini_api_key ? 'Present' : 'Missing'
+      botGeminiKey: geminiApiKey ? 'Present' : 'Missing'
     })
     // Get recent conversation messages for context
     const { data: messages } = await supabase
@@ -1461,7 +1476,7 @@ Si NO hay reserva completa, responde: NO_RESERVATION
 `
 
     console.log('🤖 Calling Gemini AI for reservation extraction...')
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${bot.gemini_api_key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1779,7 +1794,8 @@ async function extractClientDataFromMessage(
   conversationId?: string, 
   supabase?: any,
   platform?: string,
-  senderInstagramId?: string
+  senderInstagramId?: string,
+  geminiApiKey?: string
 ): Promise<any> {
   try {
     // Check if bot has auto client detection enabled (assume true for now)
@@ -1878,7 +1894,7 @@ ${platform === 'instagram'
 }
 `
 
-    const genAI = new GoogleGenerativeAI(bot.gemini_api_key)
+    const genAI = new GoogleGenerativeAI(geminiApiKey || bot.gemini_api_key)
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
 
     const result = await model.generateContent(extractionPrompt)

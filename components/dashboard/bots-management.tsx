@@ -307,13 +307,15 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       }
 
       const planLimits = {
-        trial: { max_bots: 1, max_automations: 0 },
-        basic: { max_bots: 1, max_automations: 1 },
-        premium: { max_bots: 5, max_automations: 10 },
-        enterprise: { max_bots: -1, max_automations: -1 }, // unlimited
+        trial: { max_bots: 999, max_automations: 999 }, // Unlimited for trial
+        basic: { max_bots: 999, max_automations: 999 }, // Unlimited for basic
+        premium: { max_bots: 999, max_automations: 999 }, // Unlimited for premium
+        enterprise: { max_bots: 999, max_automations: 999 }, // Unlimited
       }
 
-      const limits = planLimits[data.plan_type as keyof typeof planLimits] || planLimits.trial
+      // In the new SaaS model, everyone gets unlimited bots/automations
+      // The limit is on AI Tokens (BYOK vs System) and Time (7 days vs Monthly)
+      const limits = { max_bots: 999, max_automations: 999 }
 
       setUserSubscription({
         ...data,
@@ -324,17 +326,15 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       setUserSubscription({
         subscription_status: "trial",
         plan_type: "trial",
-        max_bots: 1,
-        max_automations: 0,
+        max_bots: 999,
+        max_automations: 999,
       })
     }
   }
 
   const checkBotLimits = () => {
-    if (!userSubscription) return
-
-    const maxBots = userSubscription.max_bots || 1
-    setCanCreateBot(bots.length < maxBots)
+    // Always allow creation in the new model
+    setCanCreateBot(true)
   }
 
   return (

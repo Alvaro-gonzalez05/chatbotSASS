@@ -23,6 +23,7 @@ import {
   ShoppingCart,
   MessageSquare,
   Bot,
+  Shield,
 } from "lucide-react"
 
 interface NavigationItem {
@@ -30,6 +31,7 @@ interface NavigationItem {
   href: string
   icon: any
   requiresFeature?: string
+  requiresAdmin?: boolean
   visible?: boolean
 }
 
@@ -86,6 +88,17 @@ const baseNavigation: NavigationItem[] = [
     href: "/dashboard/pruebas",
     icon: TestTube,
   },
+  {
+    name: "Configuración",
+    href: "/dashboard/settings",
+    icon: Settings,
+  },
+  {
+    name: "Admin",
+    href: "/dashboard/admin",
+    icon: Shield,
+    requiresAdmin: true,
+  },
 ]
 
 export function DashboardSidebar() {
@@ -95,7 +108,7 @@ export function DashboardSidebar() {
     // Initialize with feature items hidden to avoid flash
     baseNavigation.map(item => ({ 
       ...item, 
-      visible: !item.requiresFeature 
+      visible: !item.requiresFeature && !item.requiresAdmin
     }))
   )
   const [hasNewMessages, setHasNewMessages] = useState(false)
@@ -144,11 +157,20 @@ export function DashboardSidebar() {
         return
       }
 
+      // Get user profile to check for admin role
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+      
+      const isAdmin = profile?.role === 'admin'
+
       if (!bots || bots.length === 0) {
         console.log('⚠️ No bots found, hiding all feature-dependent items')
         const updatedNavigation = baseNavigation.map(item => ({
           ...item,
-          visible: !item.requiresFeature // Only show items that don't require features
+          visible: (!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin)
         }))
         setNavigation(updatedNavigation)
         return
@@ -165,10 +187,19 @@ export function DashboardSidebar() {
 
       console.log('✨ All enabled features:', Array.from(allFeatures))
 
-      // Update navigation based on available features
+      // Update navigation based on available features and admin role
       const updatedNavigation = baseNavigation.map(item => {
-        const isVisible = item.requiresFeature ? allFeatures.has(item.requiresFeature) : true
-        console.log(`📋 ${item.name}: requiresFeature="${item.requiresFeature}" → visible=${isVisible}`)
+        let isVisible = true
+        
+        if (item.requiresFeature) {
+          isVisible = allFeatures.has(item.requiresFeature)
+        }
+        
+        if (item.requiresAdmin) {
+          isVisible = isAdmin
+        }
+        
+        console.log(`📋 ${item.name}: requiresFeature="${item.requiresFeature}" requiresAdmin="${item.requiresAdmin}" → visible=${isVisible}`)
         return {
           ...item,
           visible: isVisible

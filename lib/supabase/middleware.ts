@@ -55,6 +55,21 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Check for suspended account
+  if (user && !request.nextUrl.pathname.startsWith('/suspended') && !request.nextUrl.pathname.startsWith('/api')) {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('subscription_status')
+      .eq('id', user.id)
+      .single()
+    
+    if (profile?.subscription_status === 'suspended') {
+      const url = request.nextUrl.clone()
+      url.pathname = "/suspended"
+      return NextResponse.redirect(url)
+    }
+  }
+
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:
   // 1. Pass the request in it, like so:
