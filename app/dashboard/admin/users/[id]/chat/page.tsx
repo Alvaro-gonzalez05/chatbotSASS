@@ -5,12 +5,23 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
-export default async function AdminUserChatPage({ params }: { params: { id: string } }) {
+export default async function AdminUserChatPage({ 
+  params,
+  searchParams 
+}: { 
+  params: { id: string }
+  searchParams: { from?: string }
+}) {
   const supabase = await createClient()
 
   // Check if admin
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
+
+  // Determine back link
+  const backLink = searchParams.from === 'list' 
+    ? '/dashboard/admin/users' 
+    : `/dashboard/admin/users/${params.id}`
 
   // Fetch target user profile to display name
   const { data: profile } = await supabase
@@ -25,7 +36,7 @@ export default async function AdminUserChatPage({ params }: { params: { id: stri
     <div className="h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex items-center gap-4 p-4 border-b bg-background">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={`/dashboard/admin/users/${params.id}`}>
+          <Link href={backLink}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>

@@ -20,9 +20,10 @@ import { toast } from "sonner"
 interface UserSuspendButtonProps {
   userId: string
   currentStatus: string
+  userName?: string
 }
 
-export function UserSuspendButton({ userId, currentStatus }: UserSuspendButtonProps) {
+export function UserSuspendButton({ userId, currentStatus, userName }: UserSuspendButtonProps) {
   const [isSuspendOpen, setIsSuspendOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
@@ -89,8 +90,8 @@ export function UserSuspendButton({ userId, currentStatus }: UserSuspendButtonPr
             </AlertDialogTitle>
             <AlertDialogDescription>
               {currentStatus === 'suspended' 
-                ? "El usuario recuperará el acceso al panel y sus bots volverán a responder."
-                : "El usuario perderá acceso inmediato al panel y sus bots dejarán de responder. Esta acción es reversible."
+                ? `¿Estás seguro de que deseas reactivar la cuenta de ${userName || 'este usuario'}? Recuperará el acceso al panel y sus bots volverán a responder.`
+                : `¿Estás seguro de que deseas suspender la cuenta de ${userName || 'este usuario'}? Perderá acceso inmediato al panel y sus bots dejarán de responder.`
               }
             </AlertDialogDescription>
           </AlertDialogHeader>

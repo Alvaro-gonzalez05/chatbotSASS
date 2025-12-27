@@ -64,11 +64,19 @@ export default async function AdminUserDetailsPage({ params }: { params: { id: s
           </div>
           <p className="text-muted-foreground mt-1">ID: {profile.id}</p>
         </div>
-        <UserSuspendButton 
-          userId={profile.id}
-          currentStatus={profile.subscription_status || 'trialing'}
-          userName={profile.business_name || 'Usuario'}
-        />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/dashboard/admin/users/${params.id}/chat`}>
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Ver Chat
+            </Link>
+          </Button>
+          <UserSuspendButton 
+            userId={profile.id}
+            currentStatus={profile.subscription_status || 'trialing'}
+            userName={profile.business_name || 'Usuario'}
+          />
+        </div>
       </div>
 
       {/* Overview Cards */}
@@ -147,12 +155,6 @@ export default async function AdminUserDetailsPage({ params }: { params: { id: s
                         Modelo: {bot.model || "Gemini Flash"}
                       </div>
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/admin/users/${params.id}/chat?botId=${bot.id}`}>
-                            <MessageSquare className="h-4 w-4 mr-1" />
-                            Chat
-                          </Link>
-                        </Button>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/dashboard/admin/users/${params.id}/bots`}>
                             <Settings className="h-4 w-4 mr-1" />

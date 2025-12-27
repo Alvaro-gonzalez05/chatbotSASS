@@ -3,7 +3,7 @@
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Eye, MoreHorizontal, Building2, Calendar, Shield } from "lucide-react"
+import { Eye, MoreHorizontal, Building2, Calendar, Shield, MessageSquare } from "lucide-react"
 import Link from "next/link"
 import { UserActionsMenu } from "./user-actions-menu"
 
@@ -72,6 +72,13 @@ export function UserListCard({ user }: UserListCardProps) {
           </div>
           
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-blue-100 hover:text-blue-700" asChild>
+              <Link href={`/dashboard/admin/users/${user.id}/chat?from=list`}>
+                <MessageSquare className="h-4 w-4" />
+                <span className="sr-only">Ver Chat</span>
+              </Link>
+            </Button>
+
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-green-100 hover:text-green-700" asChild>
               <Link href={`/dashboard/admin/users/${user.id}`}>
                 <Eye className="h-4 w-4" />

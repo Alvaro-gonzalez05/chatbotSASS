@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { MapPin, Phone, Mail, Globe, Store, Clock, Share2, Utensils, CalendarDays, Pencil } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { UserEditDialog } from "./user-edit-dialog"
+import { UserEditDialog } from "@/components/dashboard/admin/user-edit-dialog"
 
 export function BusinessDetailsCard({ profile }: { profile: any }) {
   const {
