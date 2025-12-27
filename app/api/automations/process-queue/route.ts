@@ -118,6 +118,10 @@ export async function POST(request: NextRequest) {
                 description: `Mensaje masivo a ${message.recipient_phone} (${bot.platform})`
               });
 
+              // Marcar como enviado
+              await supabase
+                .from('scheduled_messages')
+                .update({ status: 'sent', sent_at: new Date().toISOString() })
                 .eq('id', message.id)
 
               return { success: true, id: message.id }
