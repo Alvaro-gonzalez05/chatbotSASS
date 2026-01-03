@@ -101,7 +101,12 @@ const baseNavigation: NavigationItem[] = [
   },
 ]
 
-export function DashboardSidebar() {
+interface DashboardSidebarProps {
+  onLinkClick?: () => void
+  mode?: 'desktop' | 'mobile'
+}
+
+export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [navigation, setNavigation] = useState<NavigationItem[]>(() => 
@@ -289,29 +294,34 @@ export function DashboardSidebar() {
     }
   }, [userId, supabase])
 
+  const isMobile = mode === 'mobile'
+  const isCollapsed = isMobile ? false : collapsed
+
   return (
     <div
       className={cn(
-        "flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 h-screen",
-        collapsed ? "w-16" : "w-64",
+        "flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 h-full",
+        isCollapsed ? "w-16" : "w-full lg:w-64",
       )}
     >
       {/* Logo */}
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
-        {!collapsed && (
+        {!isCollapsed && (
           <div className="flex items-center space-x-2">
             <Image src="/ucobot-logo.png" alt="UcoBot" width={24} height={24} className="text-primary" />
             <span className="text-lg font-bold text-sidebar-foreground">UcoBot</span>
           </div>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setCollapsed(!collapsed)}
-          className="text-sidebar-foreground hover:bg-sidebar-accent"
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </Button>
+        {!isMobile && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-sidebar-foreground hover:bg-sidebar-accent"
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </Button>
+        )}
       </div>
 
       {/* Navigation */}
@@ -325,21 +335,22 @@ export function DashboardSidebar() {
                 <Link
                   key={item.name}
                   href={item.href}
+                  onClick={onLinkClick}
                   className={cn(
                     "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    collapsed && "justify-center",
+                    isCollapsed && "justify-center",
                   )}
                 >
                   <div className="relative">
-                    <item.icon className={cn("h-4 w-4", !collapsed && "mr-3")} />
-                    {item.name === "Mensajes" && hasNewMessages && collapsed && (
+                    <item.icon className={cn("h-4 w-4", !isCollapsed && "mr-3")} />
+                    {item.name === "Mensajes" && hasNewMessages && isCollapsed && (
                       <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
                     )}
                   </div>
-                  {!collapsed && (
+                  {!isCollapsed && (
                     <div className="flex items-center justify-between flex-1">
                       <span>{item.name}</span>
                       {item.name === "Mensajes" && hasNewMessages && (
@@ -354,7 +365,7 @@ export function DashboardSidebar() {
       </ScrollArea>
 
       {/* Footer */}
-      {!collapsed && (
+      {!isCollapsed && (
         <div className="p-4 border-t border-sidebar-border">
           <div className="text-xs text-sidebar-foreground/60 text-center">UcoBot v1.0</div>
         </div>

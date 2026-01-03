@@ -29,6 +29,8 @@ import {
   TestTube,
   Check,
   Loader2,
+  Plus,
+  X,
 } from "lucide-react"
 import { FaWhatsapp } from "react-icons/fa"
 
@@ -37,6 +39,7 @@ interface BotFormData {
   platform: "whatsapp" | "instagram" | "email" | ""
   personality_prompt: string
   features: string[]
+  allowed_tags: string[]
   gemini_api_key: string
   facebook_page_access_token?: string
   facebook_page_id?: string
@@ -109,6 +112,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null)
   const [currentBotCount, setCurrentBotCount] = useState(0)
   const [canCreateBot, setCanCreateBot] = useState(true)
+  const [tagInput, setTagInput] = useState("")
   const supabase = createClient()
 
   const [formData, setFormData] = useState<BotFormData>({
@@ -116,6 +120,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     platform: "",
     personality_prompt: "",
     features: [],
+    allowed_tags: [],
     gemini_api_key: "",
     facebook_page_access_token: "",
     facebook_page_id: "",
@@ -647,6 +652,73 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                           <p className="text-xs text-muted-foreground">
                             Define cómo debe comportarse tu bot, su tono de voz y estilo de comunicación
                           </p>
+                        </motion.div>
+
+                        <motion.div variants={fadeInUp} className="space-y-2">
+                          <Label htmlFor="allowed_tags" className="text-sm sm:text-base font-medium">Etiquetas Permitidas (Opcional)</Label>
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <Input
+                                id="allowed_tags"
+                                placeholder="Ej: TURNO CENA"
+                                value={tagInput}
+                                onChange={(e) => setTagInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    if (tagInput.trim() && !formData.allowed_tags.includes(tagInput.trim())) {
+                                      setFormData({
+                                        ...formData,
+                                        allowed_tags: [...formData.allowed_tags, tagInput.trim()]
+                                      });
+                                      setTagInput("");
+                                    }
+                                  }
+                                }}
+                                className="text-sm sm:text-base transition-all duration-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              />
+                              <Button 
+                                type="button"
+                                onClick={() => {
+                                  if (tagInput.trim() && !formData.allowed_tags.includes(tagInput.trim())) {
+                                    setFormData({
+                                      ...formData,
+                                      allowed_tags: [...formData.allowed_tags, tagInput.trim()]
+                                    });
+                                    setTagInput("");
+                                  }
+                                }}
+                                size="icon"
+                                variant="outline"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Define qué etiquetas puede asignar este bot. Si no agregas ninguna, la IA NO asignará etiquetas.
+                            </p>
+                            {formData.allowed_tags.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {formData.allowed_tags.map((tag, i) => (
+                                  <Badge key={i} variant="secondary" className="text-xs flex items-center gap-1 pr-1">
+                                    {tag}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFormData({
+                                          ...formData,
+                                          allowed_tags: formData.allowed_tags.filter(t => t !== tag)
+                                        });
+                                      }}
+                                      className="hover:bg-muted rounded-full p-0.5 transition-colors"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </motion.div>
 
                         <motion.div variants={fadeInUp} className="space-y-2">

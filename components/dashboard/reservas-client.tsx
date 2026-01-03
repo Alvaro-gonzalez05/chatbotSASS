@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calendar, Clock, Users, Phone, Eye, MoreHorizontal, Edit, Trash } from "lucide-react"
+import { Calendar, Clock, Users, Phone, Eye, MoreHorizontal, Edit, Trash, Tag, Filter, X } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { DashboardPagination } from "./dashboard-pagination"
@@ -18,6 +18,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -35,6 +36,7 @@ interface Reservation {
   status: string
   table_number?: string
   special_requests?: string
+  tags?: string[]
   conversation?: {
     platform?: string
   }
@@ -56,6 +58,28 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+
+  // Extract unique tags from all reservations
+  const allTags = Array.from(new Set(reservations.flatMap(r => r.tags || []))).sort()
+
+  // Filter reservations based on selected tags
+  const filteredReservations = reservations.filter(reservation => {
+    if (selectedTags.length === 0) return true
+    if (!reservation.tags) return false
+    // Check if reservation has ALL selected tags (Intersection)
+    // Or ANY? User said "ir agregando... y ir viendolas". Usually filters are additive (AND) for refinement.
+    // Let's assume AND for now. If I select "Dinner" and "VIP", I want Dinner AND VIP.
+    return selectedTags.every(tag => reservation.tags?.includes(tag))
+  })
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    )
+  }
 
   const handleDelete = (id: string) => {
     toast("¿Estás seguro de eliminar esta reserva?", {
@@ -204,19 +228,98 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
       {/* All Reservations Table */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Todas las Reservas
-          </CardTitle>
-          <CardDescription>
-            Historial completo de reservas
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Todas las Reservas
+              </CardTitle>
+              <CardDescription>
+                Historial completo de reservas
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedTags.length > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setSelectedTags([])}
+                  className="h-8 px-2 text-muted-foreground"
+                >
+                  Limpiar filtros
+                  <X className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 border-dashed">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Etiquetas
+                    {selectedTags.length > 0 && (
+                      <Badge variant="secondary" className="ml-2 rounded-sm px-1 font-normal lg:hidden">
+                        {selectedTags.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[200px]">
+                  <DropdownMenuLabel>Filtrar por etiquetas</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {allTags.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      No hay etiquetas disponibles
+                    </div>
+                  ) : (
+                    allTags.map((tag) => (
+                      <DropdownMenuCheckboxItem
+                        key={tag}
+                        checked={selectedTags.includes(tag)}
+                        onCheckedChange={() => toggleTag(tag)}
+                      >
+                        {tag}
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  )}
+                  {selectedTags.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => setSelectedTags([])}
+                        className="justify-center text-center"
+                      >
+                        Limpiar filtros
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          {selectedTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {selectedTags.map(tag => (
+                <Badge key={tag} variant="secondary" className="rounded-sm px-1 font-normal">
+                  {tag}
+                  <button
+                    className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          {reservations.length === 0 ? (
+          {filteredReservations.length === 0 ? (
             <div className="text-center py-8">
               <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No hay reservas registradas</p>
+              <p className="text-muted-foreground">
+                {reservations.length === 0 
+                  ? "No hay reservas registradas" 
+                  : "No se encontraron reservas con los filtros seleccionados"}
+              </p>
             </div>
           ) : (
             <>
@@ -232,7 +335,7 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {reservations.map((reservation) => (
+                  {filteredReservations.map((reservation) => (
                     <TableRow key={reservation.id}>
                       <TableCell>
                         <div>
@@ -241,6 +344,15 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
                             <Phone className="h-3 w-3" />
                             {reservation.customer_phone}
                           </p>
+                          {reservation.tags && reservation.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {reservation.tags.map((tag, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -330,6 +442,18 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
                                     {reservation.conversation?.platform || 'N/A'}
                                   </Badge>
                                 </div>
+                                {reservation.tags && reservation.tags.length > 0 && (
+                                  <div>
+                                    <Label>Etiquetas</Label>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {reservation.tags.map((tag, i) => (
+                                        <Badge key={i} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                          {tag}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </DialogContent>
                           </Dialog>

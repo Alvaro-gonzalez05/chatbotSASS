@@ -38,6 +38,7 @@ import {
   Eye,
   EyeOff,
   Zap,
+  X,
 } from "lucide-react"
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
@@ -49,6 +50,7 @@ interface BotData {
   platform: "whatsapp" | "instagram" | "email"
   personality_prompt?: string
   features: string[]
+  allowed_tags?: string[]
   automations: string[]
   gemini_api_key?: string
   is_active: boolean
@@ -92,6 +94,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
 
   const [userSubscription, setUserSubscription] = useState<any>(null)
   const [canCreateBot, setCanCreateBot] = useState(true)
+  const [tagInput, setTagInput] = useState("")
 
   // Form state
   const [formData, setFormData] = useState({
@@ -99,6 +102,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
     platform: "" as "whatsapp" | "instagram" | "email" | "",
     personality_prompt: "",
     features: [] as string[],
+    allowed_tags: [] as string[],
     automations: [] as string[],
     gemini_api_key: "",
     is_active: false,
@@ -110,6 +114,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       platform: "",
       personality_prompt: "",
       features: [],
+      allowed_tags: [],
       automations: [],
       gemini_api_key: "",
       is_active: false,
@@ -242,6 +247,7 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
       platform: bot.platform,
       personality_prompt: bot.personality_prompt || "",
       features: bot.features || [],
+      allowed_tags: bot.allowed_tags || [],
       automations: bot.automations || [],
       gemini_api_key: bot.gemini_api_key || "",
       is_active: bot.is_active,
@@ -660,6 +666,70 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                     rows={3}
                     className="text-sm sm:text-base min-h-[80px] sm:min-h-[100px]"
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-allowed_tags" className="text-sm font-medium">Etiquetas Permitidas</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="edit-allowed_tags"
+                      placeholder="Ej: TURNO CENA"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (tagInput.trim() && !formData.allowed_tags.includes(tagInput.trim())) {
+                            setFormData({
+                              ...formData,
+                              allowed_tags: [...formData.allowed_tags, tagInput.trim()]
+                            });
+                            setTagInput("");
+                          }
+                        }
+                      }}
+                      className="text-sm sm:text-base"
+                    />
+                    <Button 
+                      type="button"
+                      onClick={() => {
+                        if (tagInput.trim() && !formData.allowed_tags.includes(tagInput.trim())) {
+                          setFormData({
+                            ...formData,
+                            allowed_tags: [...formData.allowed_tags, tagInput.trim()]
+                          });
+                          setTagInput("");
+                        }
+                      }}
+                      size="icon"
+                      variant="outline"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Define qué etiquetas puede asignar este bot. Si no agregas ninguna, la IA NO asignará etiquetas.
+                  </p>
+                  {formData.allowed_tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {formData.allowed_tags.map((tag, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs flex items-center gap-1 pr-1">
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData({
+                                ...formData,
+                                allowed_tags: formData.allowed_tags.filter(t => t !== tag)
+                              });
+                            }}
+                            className="hover:bg-muted rounded-full p-0.5 transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

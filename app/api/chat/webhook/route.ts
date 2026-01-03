@@ -631,14 +631,10 @@ ${socialText ? '📱 ' + socialText : ''}
           }
           
           if (availableModes.length > 0) {
-            const modePrompt = modeOptions.length === 1 
-              ? `Solo ofrecemos ${modeOptions[0]}` 
-              : `Pregunta: "¿Lo querés para ${modeOptions.join(' o ')}?"`
-            
+            // Simplified mode info to let personality prompt take precedence if needed
             deliveryModesInfo = `
-MODALIDADES: ${availableModes.join(', ')}
-${modePrompt}
-${finalDeliverySettings.delivery_enabled ? 'Para envío: pedir dirección completa' : ''}
+MODALIDADES ACTIVAS EN SISTEMA: ${availableModes.join(', ')}
+${finalDeliverySettings.delivery_enabled ? 'Para envío propio: pedir dirección completa' : ''}
             `.trim()
           }
         }
@@ -825,9 +821,10 @@ MENÚ/CARTA:
 - Tono entusiasta sobre productos
 
 REGLAS DE PRIORIDAD Y CONFLICTOS:
-1. INFORMACIÓN DEL NEGOCIO: Los datos en la sección "INFORMACIÓN DEL NEGOCIO" (nombre, dirección, horarios, menú) son la VERDAD ABSOLUTA. Si la sección "PERSONALIDAD" menciona datos diferentes, IGNÓRALOS y usa solo los de "INFORMACIÓN DEL NEGOCIO".
-2. INSTRUCCIONES DEL SISTEMA: Las instrucciones sobre comportamiento (pedir nombre, tomar pedidos, derivar a humano) son OBLIGATORIAS. Si la "PERSONALIDAD" dice que no hagas algo que el sistema requiere, IGNORA esa parte de la personalidad.
-3. PERSONALIDAD: Usa la sección "PERSONALIDAD" únicamente para definir tu tono, estilo de voz y vocabulario, siempre y cuando no contradiga los puntos 1 y 2.`
+1. INFORMACIÓN DEL NEGOCIO: Los datos en la sección "INFORMACIÓN DEL NEGOCIO" (nombre, dirección, horarios, menú) son la base de tu conocimiento.
+2. PERSONALIDAD Y REGLAS OPERATIVAS: Si la sección "PERSONALIDAD" define reglas específicas sobre cómo operar (ej: "solo delivery por Pedidos Ya", "no tomar reservas los lunes"), ESTAS REGLAS TIENEN PRIORIDAD sobre la configuración general.
+3. INSTRUCCIONES DEL SISTEMA: Las instrucciones de seguridad (como [HANDOVER]) son inquebrantables.
+4. Si hay conflicto entre la configuración automática y la PERSONALIDAD definida por el dueño, prioriza la PERSONALIDAD para los detalles operativos (envíos, reservas, precios).`
 
 
 
@@ -959,7 +956,9 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
             senderName,
             senderPhone,
             extractedClientData,
-            geminiApiKey
+            geminiApiKey,
+            conversationHistory, // Pass history
+            productsInfo // Pass catalog info
           )
         }
 
@@ -988,37 +987,71 @@ async function processOrdersAndReservations(
   senderName?: string,
   senderPhone?: string,
   extractedClientData?: any,
-  geminiApiKey?: string
+  geminiApiKey?: string,
+  conversationHistory: any[] = [],
+  productsInfo: string = ''
 ) {
   try {
     if (!geminiApiKey) return;
 
+    // Format history for context
+    const historyText = conversationHistory
+      .slice(-10) // Last 10 messages for context
+      .map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Bot'}: ${m.content}`)
+      .join('\n');
+
     // Combined detection and extraction prompt
     const analysisPrompt = `
-Analiza la última interacción entre Usuario y Bot.
-Determina si el Bot ha CONFIRMADO FINALMENTE un pedido o una reserva.
+Analiza la interacción reciente entre Usuario y Bot para detectar PEDIDOS o RESERVAS CONFIRMADAS.
 
+CONTEXTO (Historial reciente):
+${historyText}
+
+ÚLTIMA INTERACCIÓN:
 Usuario: "${userMessage}"
 Bot: "${aiResponse}"
 
+CATÁLOGO DE PRODUCTOS (Para precios y nombres exactos):
+${productsInfo || "No hay catálogo disponible."}
+
+INSTRUCCIONES DEL BOT (Contexto para etiquetas):
+"${bot.personality_prompt || ''}"
+
+ETIQUETAS PERMITIDAS (Definidas por el usuario):
+${bot.allowed_tags && bot.allowed_tags.length > 0 ? JSON.stringify(bot.allowed_tags) : "No hay etiquetas predefinidas, infiere las más apropiadas del contexto."}
+
+TAREA:
+1. Determina si el Bot ha CONFIRMADO FINALMENTE un pedido o una reserva en su última respuesta.
+2. Si es un PEDIDO:
+   - IDENTIFICA SOLO los items que se están solicitando o confirmando EN LA INTERACCIÓN ACTUAL.
+   - IGNORA pedidos anteriores que ya fueron completados o discutidos en el pasado.
+   - Si el usuario está pidiendo algo nuevo (ej: "ahora quiero X"), ignora lo anterior.
+   - Si el precio no se menciona explícitamente, BÚSCALO en el CATÁLOGO DE PRODUCTOS.
+   - Si el precio no está en el catálogo ni en el chat, usa 0.
+   - Calcula el total sumando (precio * cantidad).
+3. Si es una RESERVA:
+   - Extrae fecha, hora y personas del historial.
+4. ETIQUETAS:
+   - Si hay "ETIQUETAS PERMITIDAS", ÚSALAS como prioridad.
+   - NO inventes etiquetas si hay una lista permitida.
+
 FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
 
+FORMATO DE RESPUESTA (JSON):
+
 Si es un PEDIDO CONFIRMADO (${canTakeOrders ? 'SI' : 'NO'} habilitado):
-Extrae los items, total, y tipo de entrega.
-Formato JSON:
 {
   "type": "order",
-  "items": [{"name": "x", "quantity": 1, "price": 0}],
-  "total": 0,
+  "items": [{"name": "Nombre exacto del producto", "quantity": 1, "price": 1000}],
+  "total": 1000,
   "orderType": "delivery" | "pickup",
   "deliveryAddress": "...",
   "customerName": "...",
-  "customerPhone": "..."
+  "customerPhone": "...",
+  "tags": ["tag1"]
 }
 
 Si es una RESERVA CONFIRMADA (${canTakeReservations ? 'SI' : 'NO'} habilitado):
-Extrae fecha, hora, personas.
-Formato JSON:
 {
   "type": "reservation",
   "customerName": "...",
@@ -1026,10 +1059,11 @@ Formato JSON:
   "reservationDate": "YYYY-MM-DD",
   "reservationTime": "HH:MM",
   "partySize": 0,
-  "specialRequests": "..."
+  "specialRequests": "...",
+  "tags": ["tag1"]
 }
 
-Si NO hay confirmación explícita (solo están charlando o preguntando):
+Si NO hay confirmación explícita (solo charla/preguntas):
 { "type": "none" }
 
 Responde SOLO con el JSON.
@@ -1061,10 +1095,10 @@ Responde SOLO con el JSON.
 
     if (result.type === 'order' && canTakeOrders) {
         console.log('🤖 AI Detected & Extracted Order:', result);
-        await saveOrderFromAI(supabase, bot, conversation, result, senderName, senderPhone);
+        await saveOrderFromAI(supabase, bot, conversation, result, senderName, senderPhone, result.tags);
     } else if (result.type === 'reservation' && canTakeReservations) {
         console.log('🤖 AI Detected & Extracted Reservation:', result);
-        await saveReservationFromAI(supabase, bot, conversation, result, senderName, senderPhone, extractedClientData);
+        await saveReservationFromAI(supabase, bot, conversation, result, senderName, senderPhone, extractedClientData, result.tags);
     }
 
   } catch (error) {
@@ -1078,10 +1112,25 @@ async function saveOrderFromAI(
   conversation: any,
   orderData: any,
   senderName?: string,
-  senderPhone?: string
+  senderPhone?: string,
+  tags: string[] = []
 ) {
   try {
     if (!orderData.items || orderData.items.length === 0) return;
+
+    // Check for duplicate orders in the last 2 minutes to prevent double submission on follow-up questions
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: existingOrders } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .gte("created_at", twoMinutesAgo)
+      .limit(1);
+
+    if (existingOrders && existingOrders.length > 0) {
+      console.log('⚠️ Duplicate order detected (created < 2 mins ago), skipping creation');
+      return;
+    }
 
     let clientId = conversation.client_id;
     
@@ -1136,7 +1185,8 @@ async function saveOrderFromAI(
         delivery_address: orderData.deliveryAddress,
         delivery_phone: senderPhone || conversation.client_phone,
         status: 'pending',
-        order_type: orderData.orderType || 'pickup'
+        order_type: orderData.orderType || 'pickup',
+        tags: tags
       });
 
     if (!error) {
@@ -1163,7 +1213,8 @@ async function saveReservationFromAI(
   reservationData: any,
   senderName?: string,
   senderPhone?: string,
-  extractedClientData?: any
+  extractedClientData?: any,
+  tags: string[] = []
 ) {
   try {
     // Check for duplicate reservations in the last 5 minutes
@@ -1215,7 +1266,8 @@ async function saveReservationFromAI(
         reservation_time: reservationData.reservationTime,
         party_size: reservationData.partySize,
         special_requests: reservationData.specialRequests,
-        status: 'pending'
+        status: 'pending',
+        tags: tags
       })
       .select();
 

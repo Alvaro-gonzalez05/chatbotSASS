@@ -1,11 +1,16 @@
 "use client"
 
+import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import ProfileDropdown from "./ProfileDropdown"
 import NotificationsDropdown from "./NotificationsDropdown"
 import Image from "next/image"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Menu } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 
 interface DashboardHeaderProps {
   user: User
@@ -15,11 +20,25 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
   const router = useRouter()
   const supabase = createClient()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   return (
     <header className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 bg-background border-b border-border">
       {/* Left side - Logo and Company Info */}
       <div className="flex items-center space-x-3 flex-shrink-0">
+        <div className="lg:hidden">
+          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="mr-2 -ml-2">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-[85vw] sm:w-72">
+              <DashboardSidebar mode="mobile" onLinkClick={() => setIsMobileMenuOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        </div>
+
         <div className="flex items-center space-x-2">
           <Image
             src="/ucobot-logo.png"

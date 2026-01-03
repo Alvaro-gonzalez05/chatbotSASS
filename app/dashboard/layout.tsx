@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
-import { FloatingNavbar } from "@/components/dashboard/floating-navbar"
 
 export default async function DashboardLayout({
   children,
@@ -29,13 +28,10 @@ export default async function DashboardLayout({
       
       <div className="flex-1 flex flex-col overflow-hidden">
         <DashboardHeader user={data.user} profile={profile} />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {children}
         </main>
       </div>
-      
-      {/* Floating navbar - only visible on mobile */}
-      <FloatingNavbar user={data.user} profile={profile} />
     </div>
   )
 }

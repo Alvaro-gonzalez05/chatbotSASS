@@ -114,7 +114,8 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         document,
         audio,
         video,
-        location
+        location,
+        context // Extract context for replies
       } = message
 
       const recipientPhone = messageData.metadata?.phone_number_id || messageData.metadata?.display_phone_number
@@ -376,6 +377,7 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
           metadata: {
             whatsapp_message_id: whatsappMessageId,
             original_type: messageType,
+            context, // Store context in metadata
             ...messageContent
           }
         })

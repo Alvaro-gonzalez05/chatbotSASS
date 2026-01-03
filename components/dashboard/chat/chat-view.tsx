@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -9,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -64,8 +66,133 @@ interface Message {
   is_read?: boolean
 }
 
+function ReplyMessage({ 
+  replyId, 
+  initialMessage, 
+  isClient, 
+  clientName,
+  onScrollToMessage 
+}: { 
+  replyId: string
+  initialMessage?: Message
+  isClient: boolean
+  clientName: string
+  onScrollToMessage: (id: string) => void
+}) {
+  const [message, setMessage] = useState<Message | undefined>(initialMessage)
+  const [loading, setLoading] = useState(!initialMessage)
+  const supabase = createClient()
+
+  useEffect(() => {
+    if (initialMessage) {
+        setMessage(initialMessage)
+        setLoading(false)
+        return
+    }
+
+    const fetchMessage = async () => {
+      setLoading(true)
+      // Try to find by whatsapp_message_id, platform_message_id or internal id
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`metadata->>whatsapp_message_id.eq.${replyId},metadata->>platform_message_id.eq.${replyId},id.eq.${replyId}`)
+        .maybeSingle()
+      
+      if (data) {
+        setMessage(data)
+      }
+      setLoading(false)
+    }
+
+    fetchMessage()
+  }, [replyId, initialMessage]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return <div className="text-xs opacity-50 mb-2">Cargando mensaje original...</div>
+  
+  const senderName = message 
+    ? (message.sender_type === 'client' ? clientName : 'Nosotros')
+    : 'Mensaje no disponible'
+
+  return (
+    <div className={cn(
+      "text-xs border-l-4 pl-2 mb-2 rounded p-2 cursor-pointer transition-colors",
+      isClient 
+        ? "bg-muted/50 border-primary/50 hover:bg-muted/70" 
+        : "bg-black/10 border-white/50 hover:bg-black/20"
+    )}
+    onClick={(e) => {
+      e.stopPropagation()
+      if (message?.id) {
+        onScrollToMessage(message.id)
+      }
+    }}
+    >
+      <p className={cn(
+        "font-bold text-[10px] mb-0.5",
+        isClient ? "text-primary" : "text-white/90"
+      )}>
+        {senderName}
+      </p>
+      <p className={cn(
+        "line-clamp-2 max-w-[300px]",
+        isClient ? "text-muted-foreground" : "text-white/80"
+      )}>
+        {message?.content || "No se pudo cargar el mensaje original"}
+      </p>
+    </div>
+  )
+}
+
 interface ChatViewProps {
   userId: string
+}
+
+const SwipeableMessage = ({ 
+  children, 
+  onReply, 
+  isClient 
+}: { 
+  children: React.ReactNode
+  onReply: () => void
+  isClient: boolean 
+}) => {
+  const x = useMotionValue(0)
+  const opacity = useTransform(x, [0, 30, 60], [0, 0.5, 1])
+  const scale = useTransform(x, [0, 60], [0.5, 1])
+  
+  // Enable drag on all devices
+  const dragProps = {
+    drag: "x" as const,
+    dragConstraints: { left: 0, right: 0 },
+    dragElastic: { right: 0.3, left: 0 },
+    onDragEnd: (e: any, info: PanInfo) => {
+      if (info.offset.x > 60) {
+        onReply()
+      }
+    }
+  }
+
+  return (
+    <div className={cn("relative flex items-center w-full", isClient ? "justify-start" : "justify-end")}>
+       <motion.div 
+         style={{ opacity, scale }} 
+         className="absolute left-2 z-0 flex items-center justify-center text-muted-foreground"
+       >
+         <div className="bg-background/80 rounded-full p-2 shadow-sm border">
+           <Reply className="h-4 w-4" />
+         </div>
+       </motion.div>
+
+       <motion.div
+         {...dragProps}
+         style={{ x }}
+         className={cn("relative z-10 max-w-[85%] md:max-w-[70%]", isClient ? "mr-auto" : "ml-auto")}
+       >
+         {children}
+       </motion.div>
+    </div>
+  )
 }
 
 export function ChatView({ userId }: ChatViewProps) {
@@ -83,6 +210,7 @@ export function ChatView({ userId }: ChatViewProps) {
 
   const [searchTerm, setSearchTerm] = useState("")
   const [newMessage, setNewMessage] = useState("")
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false)
   const [pauseDuration, setPauseDuration] = useState("indefinite")
   const [isSending, setIsSending] = useState(false)
@@ -283,6 +411,88 @@ export function ChatView({ userId }: ChatViewProps) {
     }
   }
 
+  const handleJumpToMessage = async (messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'transition-all', 'duration-500')
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'transition-all', 'duration-500')
+      }, 2000)
+      return
+    }
+
+    // Message not loaded, fetch history
+    if (!selectedConversation || isLoadingMoreMessages) return
+
+    const toastId = toast.loading("Cargando historial de mensajes...")
+    setIsLoadingMoreMessages(true)
+    shouldScrollToBottomRef.current = false
+    
+    if (scrollRef.current) {
+      previousScrollHeightRef.current = scrollRef.current.scrollHeight
+    }
+
+    try {
+      // 1. Get the target message to know its timestamp
+      const { data: targetMsg, error: targetError } = await supabase
+        .from('messages')
+        .select('created_at, id')
+        .eq('id', messageId)
+        .single()
+
+      if (targetError || !targetMsg) {
+        toast.error("Mensaje no encontrado", { id: toastId })
+        return
+      }
+
+      const oldestCurrentMsg = messages[0]
+      if (!oldestCurrentMsg) return 
+
+      // 2. Fetch all messages between target and oldest current
+      // We want messages OLDER than oldestCurrentMsg AND NEWER OR EQUAL to targetMsg
+      const { data: gapMessages, error: gapError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', selectedConversation.id)
+        .lt('created_at', oldestCurrentMsg.created_at)
+        .gte('created_at', targetMsg.created_at)
+        .order('created_at', { ascending: true }) // Get them in chronological order
+
+      if (gapError) throw gapError
+
+      if (gapMessages && gapMessages.length > 0) {
+        setMessages(prev => [...gapMessages, ...prev])
+        
+        // Update pagination count
+        const pagesLoaded = Math.ceil(gapMessages.length / MESSAGES_PAGE_SIZE)
+        setMessagesPage(prev => prev + pagesLoaded)
+        
+        toast.success("Historial cargado", { id: toastId })
+        
+        // Scroll after render
+        setTimeout(() => {
+          const el = document.getElementById(`msg-${messageId}`)
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            el.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'transition-all', 'duration-500')
+            setTimeout(() => {
+              el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'transition-all', 'duration-500')
+            }, 2000)
+          }
+        }, 300)
+      } else {
+         toast.info("El mensaje debería estar visible", { id: toastId })
+      }
+
+    } catch (error) {
+      console.error("Error jumping to message:", error)
+      toast.error("Error cargando historial", { id: toastId })
+    } finally {
+      setIsLoadingMoreMessages(false)
+    }
+  }
+
   // Fetch messages when conversation is selected
   useEffect(() => {
     if (!selectedConversation) return
@@ -363,6 +573,21 @@ export function ChatView({ userId }: ChatViewProps) {
             
             return [...filtered, newMessage]
           })
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${selectedConversation.id}`
+        },
+        (payload) => {
+          const updatedMessage = payload.new as Message
+          setMessages(prev => prev.map(m => 
+            m.id === updatedMessage.id ? updatedMessage : m
+          ))
         }
       )
       .subscribe()
@@ -494,6 +719,10 @@ export function ChatView({ userId }: ChatViewProps) {
 
     setIsSending(true)
     
+    const messageToSend = newMessage
+    // Use whatsapp_message_id if available (for WhatsApp replies), otherwise fallback to internal ID if needed
+    const replyToId = replyingTo?.metadata?.whatsapp_message_id || replyingTo?.id
+
     // Optimistic update
     const tempId = `temp-${Date.now()}`
     const optimisticMessage: Message = {
@@ -502,13 +731,18 @@ export function ChatView({ userId }: ChatViewProps) {
       sender_type: 'bot',
       created_at: new Date().toISOString(),
       message_type: 'text',
-      metadata: { sent_by: 'agent', status: 'sending' }
+      metadata: { 
+        sent_by: 'agent', 
+        status: 'sending',
+        context: replyToId ? { id: replyToId } : undefined
+      }
     }
     
     shouldScrollToBottomRef.current = true
     setMessages(prev => [...prev, optimisticMessage])
-    const messageToSend = newMessage
+    
     setNewMessage("")
+    setReplyingTo(null)
 
     // Determine recipient ID based on platform
     const recipientId = selectedConversation.platform === 'instagram' 
@@ -529,7 +763,8 @@ export function ChatView({ userId }: ChatViewProps) {
         body: JSON.stringify({
           to: recipientId,
           message: messageToSend,
-          conversationId: selectedConversation.id
+          conversationId: selectedConversation.id,
+          replyToId: replyToId
         })
       })
 
@@ -686,9 +921,9 @@ export function ChatView({ userId }: ChatViewProps) {
   }
 
   return (
-    <div className="flex h-full gap-4 bg-background">
+    <div className="flex h-full md:gap-4 bg-background relative overflow-hidden md:overflow-visible">
       {/* Sidebar - Conversation List */}
-      <Card className="w-1/3 flex flex-col border-r overflow-hidden">
+      <Card className="w-full md:w-1/3 flex flex-col overflow-hidden absolute inset-0 md:static z-10 bg-background rounded-none md:rounded-lg border-0 md:border">
         <div className="p-4 border-b bg-muted/30">
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -788,12 +1023,23 @@ export function ChatView({ userId }: ChatViewProps) {
       </Card>
 
       {/* Main - Chat Window */}
-      <Card className="flex-1 flex flex-col overflow-hidden">
+      <Card className={cn(
+        "flex-1 flex flex-col overflow-hidden transition-transform duration-300 ease-in-out absolute inset-0 md:static z-20 bg-background w-full md:w-auto rounded-none md:rounded-lg border-0 md:border",
+        selectedConversation ? "translate-x-0" : "translate-x-full md:translate-x-0"
+      )}>
         {selectedConversation ? (
           <>
             {/* Chat Header */}
             <div className="p-4 border-b flex items-center justify-between bg-muted/30">
               <div className="flex items-center gap-3">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="md:hidden -ml-2 mr-1" 
+                  onClick={() => setSelectedConversation(null)}
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
                 <Avatar>
                   <AvatarFallback className={cn(
                     "text-white",
@@ -811,18 +1057,18 @@ export function ChatView({ userId }: ChatViewProps) {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 md:gap-2">
                 {selectedConversation.status === 'paused' && (
-                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 flex gap-1">
+                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5">
                     <PauseCircle className="h-3 w-3" />
-                    <span>IA Pausada</span>
-                    {timeRemaining && <span className="font-mono ml-1">({timeRemaining})</span>}
+                    <span className="hidden md:inline">IA Pausada</span>
+                    {timeRemaining && <span className="font-mono ml-0.5 md:ml-1 text-[10px] md:text-xs">({timeRemaining})</span>}
                   </Badge>
                 )}
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="hidden md:flex">
                   <Phone className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => setRefreshKey(prev => prev + 1)} title="Actualizar mensajes">
+                <Button variant="ghost" size="icon" onClick={() => setRefreshKey(prev => prev + 1)} title="Actualizar mensajes" className="hidden md:flex">
                   <RefreshCw className={cn("h-4 w-4", isLoadingMessages && "animate-spin")} />
                 </Button>
                 <DropdownMenu>
@@ -832,6 +1078,10 @@ export function ChatView({ userId }: ChatViewProps) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setRefreshKey(prev => prev + 1)} className="md:hidden">
+                       <RefreshCw className="mr-2 h-4 w-4" />
+                       Actualizar
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={handlePauseRequest}>
                       {selectedConversation.status === 'paused' ? (
                         <>
@@ -852,7 +1102,7 @@ export function ChatView({ userId }: ChatViewProps) {
 
             {/* Messages Area */}
             <div 
-              className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950/50"
+              className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-slate-50 dark:bg-slate-950/50"
               ref={scrollRef}
               onScroll={handleScroll}
             >
@@ -873,22 +1123,43 @@ export function ChatView({ userId }: ChatViewProps) {
                 messages.map((msg) => {
                   const isClient = msg.sender_type === 'client'
                   return (
-                    <div 
+                    <SwipeableMessage 
                       key={msg.id} 
-                      className={cn(
-                        "flex w-full",
-                        isClient ? "justify-start" : "justify-end"
-                      )}
+                      onReply={() => setReplyingTo(msg)}
+                      isClient={isClient}
                     >
-                      <div 
-                        className={cn(
-                          "max-w-[70%] rounded-lg p-3 shadow-sm relative group",
-                          isClient 
-                            ? "bg-white dark:bg-slate-800 rounded-tl-none border" 
-                            : "bg-primary text-primary-foreground rounded-tr-none"
+                      <div id={`msg-${msg.id}`} className="relative group flex items-end gap-2">
+                        {!isClient && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex"
+                            onClick={() => setReplyingTo(msg)}
+                          >
+                            <Reply className="h-3 w-3" />
+                          </Button>
                         )}
-                      >
-                        {msg.message_type === 'image' && msg.metadata?.image ? (
+                        
+                        <div 
+                          className={cn(
+                            "rounded-lg p-3 shadow-sm relative",
+                            isClient 
+                              ? "bg-white dark:bg-slate-800 rounded-tl-none border" 
+                              : "bg-primary text-primary-foreground rounded-tr-none"
+                          )}
+                        >
+                          {/* Reply Context Display */}
+                          {msg.metadata?.context?.id && (
+                            <ReplyMessage 
+                              replyId={msg.metadata.context.id}
+                              initialMessage={messages.find(m => m.metadata?.whatsapp_message_id === msg.metadata.context.id || m.id === msg.metadata.context.id)}
+                              isClient={isClient}
+                              clientName={selectedConversation?.client_name || 'Cliente'}
+                              onScrollToMessage={handleJumpToMessage}
+                            />
+                          )}
+
+                          {msg.message_type === 'image' && msg.metadata?.image ? (
                           <div className="space-y-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img 
@@ -949,14 +1220,46 @@ export function ChatView({ userId }: ChatViewProps) {
                           {!isClient && <CheckCheck className="h-3 w-3" />}
                         </div>
                       </div>
+                      
+                      {isClient && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex"
+                          onClick={() => setReplyingTo(msg)}
+                        >
+                          <Reply className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
+                    </SwipeableMessage>
                   )
                 })
               )}
             </div>
 
             {/* Input Area (Read Only for now or Mock) */}
-            <div className="p-4 border-t bg-background">
+            <div className="p-2 border-t bg-background">
+              {replyingTo && (
+                <div className="flex items-center justify-between bg-muted/50 p-2 rounded-md mb-2 border-l-4 border-primary">
+                  <div className="flex flex-col text-sm">
+                    <span className="font-semibold text-primary">
+                      Respondiendo a {replyingTo.sender_type === 'client' ? selectedConversation.client_name : 'Bot'}:
+                    </span>
+                    <span className="text-muted-foreground truncate max-w-[300px]">
+                      {replyingTo.content}
+                    </span>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6" 
+                    onClick={() => setReplyingTo(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="icon" className="text-muted-foreground">
                   <Smile className="h-5 w-5" />
@@ -978,8 +1281,8 @@ export function ChatView({ userId }: ChatViewProps) {
                   <Paperclip className="h-5 w-5" />
                 </Button>
                 <Textarea 
-                  placeholder="Escribe un mensaje... (Shift+Enter para nueva línea)" 
-                  className="flex-1 min-h-[40px] max-h-[120px] resize-none"
+                  placeholder="Escribe un mensaje..." 
+                  className="flex-1 min-h-[50px] max-h-[120px] resize-none py-[14px]"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyDown={(e) => {
@@ -994,11 +1297,6 @@ export function ChatView({ userId }: ChatViewProps) {
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-[10px] text-center text-muted-foreground mt-2">
-                {selectedConversation.status === 'paused' 
-                  ? "IA Pausada. Puedes responder manualmente." 
-                  : "El bot está gestionando esta conversación automáticamente."}
-              </p>
             </div>
           </>
         ) : (

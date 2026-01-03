@@ -11,14 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Eye, Settings, MoreHorizontal } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Eye, Settings, MoreHorizontal, Filter, X } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
 import { ProductEditForm } from "./product-edit-form"
 import { toast } from "sonner"
 import { DashboardPagination } from "./dashboard-pagination"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -41,6 +41,7 @@ interface Order {
   conversation?: {
     platform?: string
   }
+  tags?: string[]
 }
 
 interface Product {
@@ -95,8 +96,27 @@ export function PedidosClient({
   // Order management state
   const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
   const supabase = createClient()
   const router = useRouter()
+
+  // Extract unique tags from all orders
+  const allTags = Array.from(new Set(orders.flatMap(o => o.tags || []))).sort()
+
+  // Filter orders based on selected tags
+  const filteredOrders = orders.filter(order => {
+    if (selectedTags.length === 0) return true
+    if (!order.tags) return false
+    return selectedTags.every(tag => order.tags?.includes(tag))
+  })
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    )
+  }
 
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(
     initialDeliverySettings || {
@@ -318,7 +338,78 @@ export function PedidosClient({
                 Gestiona todos los pedidos realizados por tus clientes
               </p>
             </div>
+            <div className="flex items-center gap-2">
+              {selectedTags.length > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setSelectedTags([])}
+                  className="h-8 px-2 text-muted-foreground"
+                >
+                  Limpiar filtros
+                  <X className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 border-dashed">
+                    <Filter className="mr-2 h-4 w-4" />
+                    Etiquetas
+                    {selectedTags.length > 0 && (
+                      <Badge variant="secondary" className="ml-2 rounded-sm px-1 font-normal lg:hidden">
+                        {selectedTags.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[200px]">
+                  <DropdownMenuLabel>Filtrar por etiquetas</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {allTags.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      No hay etiquetas disponibles
+                    </div>
+                  ) : (
+                    allTags.map((tag) => (
+                      <DropdownMenuCheckboxItem
+                        key={tag}
+                        checked={selectedTags.includes(tag)}
+                        onCheckedChange={() => toggleTag(tag)}
+                      >
+                        {tag}
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  )}
+                  {selectedTags.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => setSelectedTags([])}
+                        className="justify-center text-center"
+                      >
+                        Limpiar filtros
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
+          {selectedTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {selectedTags.map(tag => (
+                <Badge key={tag} variant="secondary" className="rounded-sm px-1 font-normal">
+                  {tag}
+                  <button
+                    className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
 
           {!orders || orders.length === 0 ? (
             <Card>
@@ -345,7 +436,7 @@ export function PedidosClient({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orders.map((order) => (
+                  {filteredOrders.map((order) => (
                     <TableRow key={order.id}>
                       <TableCell>
                         <Badge className={`${getStatusColor(order.status)} text-white`}>
@@ -358,6 +449,15 @@ export function PedidosClient({
                             {order.client?.name || order.delivery_phone || 'Cliente Anónimo'}
                           </p>
                           <p className="text-sm text-muted-foreground">{order.delivery_phone}</p>
+                          {order.tags && order.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {order.tags.map((tag, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -438,12 +538,24 @@ export function PedidosClient({
                                   <div className="mt-2 space-y-2">
                                     {Array.isArray(order.items) && order.items.map((item: any, index: number) => (
                                       <div key={index} className="flex justify-between items-center p-2 bg-muted rounded">
-                                        <span>{item.product_name || `Producto ${index + 1}`}</span>
+                                        <span>{item.name || item.product_name || `Producto ${index + 1}`}</span>
                                         <span>x{item.quantity} - ${item.price}</span>
                                       </div>
                                     ))}
                                   </div>
                                 </div>
+                                {order.tags && order.tags.length > 0 && (
+                                  <div>
+                                    <Label>Etiquetas</Label>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {order.tags.map((tag, i) => (
+                                        <Badge key={i} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                          {tag}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </DialogContent>
                           </Dialog>
@@ -484,6 +596,14 @@ export function PedidosClient({
                 </div>
               )}
             </Card>
+          )}
+          {filteredOrders.length === 0 && orders.length > 0 && (
+            <div className="text-center py-8">
+              <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
+                No se encontraron pedidos con los filtros seleccionados
+              </p>
+            </div>
           )}
         </TabsContent>
 

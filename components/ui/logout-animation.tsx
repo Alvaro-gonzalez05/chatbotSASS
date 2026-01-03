@@ -59,6 +59,8 @@ export default function LogoutAnimation({
     switch (plan?.toLowerCase()) {
       case 'premium':
         return { label: 'Premium', color: 'bg-gradient-to-r from-purple-500 to-pink-500', icon: Crown }
+      case 'pro':
+        return { label: 'Pro', color: 'bg-gradient-to-r from-indigo-500 to-purple-500', icon: Crown }
       case 'basic':
         return { label: 'Básico', color: 'bg-gradient-to-r from-blue-500 to-cyan-500', icon: User }
       case 'enterprise':

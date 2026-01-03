@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     console.log('Send Message Request:', JSON.stringify(body, null, 2))
-    const { to, message, conversationId } = body
+    const { to, message, conversationId, replyToId } = body
 
     if (!to || !message || !conversationId) {
       console.error('Missing required fields:', { to, message, conversationId })
@@ -89,6 +89,15 @@ export async function POST(request: NextRequest) {
     // This ensures the message leaves our server towards the client at the earliest possible millisecond.
     
     // 1. Prepare DB Insert Promise
+    const metadata: any = {
+      sent_by: 'agent',
+      status: 'sending'
+    }
+    
+    if (replyToId) {
+      metadata.context = { id: replyToId }
+    }
+
     const dbInsertPromise = supabase
       .from('messages')
       .insert({
@@ -96,10 +105,7 @@ export async function POST(request: NextRequest) {
         content: message,
         sender_type: 'bot', 
         message_type: 'text',
-        metadata: {
-          sent_by: 'agent',
-          status: 'sending'
-        }
+        metadata: metadata
       })
       .select()
       .single()
@@ -111,7 +117,7 @@ export async function POST(request: NextRequest) {
         if (!phoneNumberId) {
              return NextResponse.json({ error: 'Invalid WhatsApp configuration' }, { status: 500 })
         }
-        sendPromise = sendWhatsAppMessage(accessToken, phoneNumberId, to, message)
+        sendPromise = sendWhatsAppMessage(accessToken, phoneNumberId, to, message, replyToId)
     } else if (platform === 'instagram') {
         sendPromise = sendInstagramMessage(accessToken, to, message)
     } else {
@@ -140,14 +146,21 @@ export async function POST(request: NextRequest) {
         }
         
         // Success: Update DB
+        const updateMetadata: any = {
+          ...metadata, // Keep existing metadata (like context)
+          status: 'sent',
+          platform_message_id: result.messageId
+        }
+
+        // For WhatsApp, explicitly set whatsapp_message_id to match webhook format
+        if (platform === 'whatsapp') {
+          updateMetadata.whatsapp_message_id = result.messageId
+        }
+
         await supabase
           .from('messages')
           .update({
-            metadata: {
-              sent_by: 'agent',
-              status: 'sent',
-              platform_message_id: result.messageId
-            }
+            metadata: updateMetadata
           })
           .eq('id', insertedMessage.id)
       })
@@ -186,7 +199,8 @@ async function sendWhatsAppMessage(
   accessToken: string,
   phoneNumberId: string,
   recipientPhone: string,
-  message: string
+  message: string,
+  replyToId?: string
 ) {
   try {
     // Normalize phone number for Argentina (remove extra 9)
@@ -195,18 +209,24 @@ async function sendWhatsAppMessage(
       normalizedPhone = '54' + recipientPhone.substring(3)
     }
 
+    const requestBody: any = {
+      messaging_product: 'whatsapp',
+      to: normalizedPhone,
+      type: 'text',
+      text: { body: message }
+    }
+
+    if (replyToId) {
+      requestBody.context = { message_id: replyToId }
+    }
+
     const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizedPhone,
-        type: 'text',
-        text: { body: message }
-      })
+      body: JSON.stringify(requestBody)
     })
 
     const data = await response.json()
