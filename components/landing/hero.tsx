@@ -1,7 +1,7 @@
 "use client"
 
 import { Fade } from "react-awesome-reveal"
-import { ArrowLeft, ArrowUpRight } from "lucide-react"
+import { ArrowLeft, ArrowUpRight, ArrowRight } from "lucide-react"
 import Link from "next/link"
 
 export function Hero() {
@@ -12,14 +12,27 @@ export function Hero() {
       <div className="relative w-full h-full flex flex-col md:flex-row bg-black">
         
         {/* LEFT PANEL - Gradient Gray Area */}
-        <div className="relative w-full md:w-[55%] h-full bg-gradient-to-br from-[#404040] to-[#1a1a1a] p-8 md:p-24 flex flex-col justify-center rounded-br-[5rem] md:rounded-br-[10rem] z-10">
+        <div className="relative w-full md:w-[55%] h-full bg-gradient-to-br from-[#404040] to-[#1a1a1a] p-8 md:p-24 flex flex-col justify-center rounded-br-[5rem] md:rounded-br-[10rem] z-10 transition-all duration-500">
           
+          {/* NAVIGATION LINKS (Left / Gray Side) */}
+          <nav className="absolute top-8 left-8 md:top-12 md:left-24 z-30 hidden md:flex items-center gap-8 text-sm font-medium text-white/90">
+             <Link href="/nosotros" className="group relative transition-colors hover:text-white">
+                Nosotros
+                <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-white transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+              {["Soluciones", "Agencias", "Precios", "Recursos"].map((item) => (
+                <Link key={item} href="#" className="group relative transition-colors hover:text-white">
+                  {item}
+                  <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-white transition-all duration-300 group-hover:w-full"></span>
+                </Link>
+              ))}
+          </nav>
+
           {/* Main Content */}
           <Fade direction="up" cascade damping={0.2} triggerOnce className="z-10 relative max-w-3xl">
              
-             <h1 className="mt-8 text-5xl md:text-7xl lg:text-[8rem] font-black text-white leading-[0.9] tracking-tighter">
-               Moderniza <br/>
-               tu negocio <br/>
+             <h1 className="mt-8 text-5xl md:text-7xl lg:text-[7rem] font-black text-white leading-[0.9] tracking-tighter">
+               Moderniza tu negocio <br/>
                <span className="text-white/90">con IA</span>
              </h1>
 
@@ -53,6 +66,17 @@ export function Hero() {
         {/* RIGHT PANEL - Black Area */}
         <div className="relative w-full md:w-[45%] h-full bg-black flex items-center justify-center overflow-hidden">
             
+            {/* LOGIN BUTTON (Right / Black Side) */}
+            <div className="absolute top-8 right-8 md:top-12 md:right-12 z-30">
+                <Link
+                  href="/login"
+                  className="flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-transform hover:scale-105 active:scale-95 hover:bg-white/90"
+                >
+                  Iniciar Sesión
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+            </div>
+
             {/* Brand Text above Robot */}
             <div className="absolute top-[15%] left-1/2 -translate-x-1/2 md:left-auto md:right-20 md:translate-x-0 flex flex-col items-center md:items-end z-20">
                <h2 className="text-6xl md:text-8xl font-black text-white tracking-widest">UCOBOT</h2>

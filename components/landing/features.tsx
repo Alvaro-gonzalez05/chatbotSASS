@@ -17,10 +17,10 @@ export function Features() {
   useGSAP(() => {
     const tl = gsap.timeline({
       scrollTrigger: {
-        trigger: ".hero-trigger",
-        start: "top top",
-        end: "20% top",
-        scrub: 0.5,
+        trigger: containerRef.current,
+        start: "top 80%",
+        end: "top 40%",
+        scrub: 1,
       }
     })
 
@@ -48,8 +48,8 @@ export function Features() {
           
           {/* Main White Card */}
           <div className="flex flex-col gap-6 bg-white p-12 rounded-[3rem] border border-gray-100">
-             <h2 className="text-4xl md:text-6xl font-bold leading-tight text-black tracking-tight">
-               Obtén el Máximo de <br/> Cada Conversación
+             <h2 className="text-4xl md:text-6xl font-bold leading-tight text-black tracking-tight text-balance">
+               Obtén el Máximo de Cada Conversación
              </h2>
              <p className="text-lg md:text-xl text-gray-600 leading-relaxed max-w-lg">
                Vende más, interactúa mejor y haz crecer tu audiencia con potentes automatizaciones para Instagram, WhatsApp, TikTok y Messenger.
