@@ -39,23 +39,23 @@ export function Navbar() {
   return (
     <div ref={navRef} className="fixed top-10 z-50 w-full flex justify-center pointer-events-none">
       <div className="pointer-events-auto">
-          <nav className="flex items-center gap-8 rounded-full bg-white/90 px-2 py-2 pl-8 shadow-xl backdrop-blur-sm transition-all hover:bg-white">
-            <div className="flex items-center gap-8 text-sm font-medium text-gray-800">
-              <Link href="/nosotros" className="group relative transition-colors hover:text-black">
+          <nav className="flex items-center gap-8 rounded-full bg-white/10 px-6 py-4 shadow-2xl backdrop-blur-md border border-white/10 transition-all hover:bg-white/20 hover:scale-[1.02]">
+            <div className="flex items-center gap-8 text-sm font-medium text-white/90">
+              <Link href="/nosotros" className="group relative transition-colors hover:text-white">
                 Nosotros
-                <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-black transition-all duration-300 group-hover:w-full"></span>
+                <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-white transition-all duration-300 group-hover:w-full"></span>
               </Link>
               {["Soluciones", "Agencias", "Precios", "Recursos"].map((item) => (
-                <Link key={item} href="#" className="group relative transition-colors hover:text-black">
+                <Link key={item} href="#" className="group relative transition-colors hover:text-white">
                   {item}
-                  <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-black transition-all duration-300 group-hover:w-full"></span>
+                  <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-white transition-all duration-300 group-hover:w-full"></span>
                 </Link>
               ))}
             </div>
             
             <Link
               href="/login"
-              className="flex items-center gap-2 rounded-full bg-black px-6 py-3 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95"
+              className="flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-transform hover:scale-105 active:scale-95 hover:bg-white/90"
             >
               Iniciar Sesión
               <ArrowRight className="h-4 w-4" />

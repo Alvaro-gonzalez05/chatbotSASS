@@ -39,30 +39,36 @@ export function Features() {
   }, { scope: containerRef })
 
   return (
-    <section ref={containerRef} className="w-full bg-white py-24 px-6 md:px-12 lg:px-24 flex items-center justify-center min-h-screen">
+    <section ref={containerRef} className="w-full bg-black py-24 px-6 md:px-12 lg:px-24 flex items-center justify-center min-h-screen">
       <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
         {/* Left Column: Text */}
-        <div ref={leftRef} className="flex flex-col gap-6">
-          <h2 className="text-4xl md:text-6xl font-bold leading-tight text-black tracking-tight">
-            Obtén el Máximo de <br/> Cada Conversación
-          </h2>
-          <p className="text-lg md:text-xl text-gray-600 leading-relaxed max-w-lg">
-            Vende más, interactúa mejor y haz crecer tu audiencia con potentes automatizaciones para Instagram, WhatsApp, TikTok y Messenger.
-          </p>
-          <div className="flex items-center gap-6 mt-4">
-            <Link
-              href="#"
-              className="flex items-center gap-2 rounded-full bg-black px-8 py-4 text-base font-medium text-white transition-transform hover:scale-105 active:scale-95 shadow-lg"
-            >
-              Comenzar
-              <ArrowRight className="h-5 w-5" />
-            </Link>
-            <Link
-              href="#"
-              className="text-base font-medium text-gray-800 hover:text-black transition-colors"
-            >
-              Prueba Gratuita
-            </Link>
+        <div ref={leftRef} className="relative isolate">
+          {/* Back Card (Decorative Background) */}
+          <div className="absolute top-4 -right-4 w-full h-full bg-gradient-to-br from-[#404040] to-[#1a1a1a] rounded-[3rem] border-4 border-white -z-10" />
+          
+          {/* Main White Card */}
+          <div className="flex flex-col gap-6 bg-white p-12 rounded-[3rem] border border-gray-100">
+             <h2 className="text-4xl md:text-6xl font-bold leading-tight text-black tracking-tight">
+               Obtén el Máximo de <br/> Cada Conversación
+             </h2>
+             <p className="text-lg md:text-xl text-gray-600 leading-relaxed max-w-lg">
+               Vende más, interactúa mejor y haz crecer tu audiencia con potentes automatizaciones para Instagram, WhatsApp, TikTok y Messenger.
+             </p>
+             <div className="flex items-center gap-6 mt-4">
+               <Link
+                 href="#"
+                 className="flex items-center gap-2 rounded-full bg-black/80 backdrop-blur-md border border-black/5 px-8 py-4 text-base font-medium text-white transition-transform hover:scale-105 active:scale-95 shadow-lg hover:bg-black/70"
+               >
+                 Comenzar
+                 <ArrowRight className="h-5 w-5" />
+               </Link>
+               <Link
+                 href="#"
+                 className="px-8 py-4 rounded-full bg-gray-100/50 backdrop-blur-sm border border-gray-200 text-base font-medium text-gray-800 transition-transform hover:scale-105 hover:bg-gray-200/50"
+               >
+                 Prueba Gratuita
+               </Link>
+             </div>
           </div>
         </div>
 
@@ -71,7 +77,7 @@ export function Features() {
           <img 
             src="/images/b.png" 
             alt="Chat Simulation" 
-            className="w-full h-auto object-contain mix-blend-multiply scale-125 hover:scale-135 transition-transform duration-500 [mask-image:radial-gradient(circle,black_70%,transparent_100%)]"
+            className="w-full h-auto object-contain scale-125 hover:scale-135 transition-transform duration-500 [mask-image:radial-gradient(circle,black_70%,transparent_100%)]"
           />
         </div>
       </div>

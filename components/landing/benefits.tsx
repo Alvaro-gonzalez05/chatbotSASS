@@ -1,107 +1,126 @@
 "use client"
 
-import { useRef } from "react"
-import gsap from "gsap"
-import { useGSAP } from "@gsap/react"
-import { ScrollTrigger } from "gsap/ScrollTrigger"
-
-gsap.registerPlugin(ScrollTrigger)
+import { 
+  Target, 
+  Users, 
+  Search, 
+  Bell, 
+  PieChart, 
+  BrainCircuit
+} from "lucide-react"
 
 export function Benefits() {
-  const containerRef = useRef(null)
-  const headerRef = useRef(null)
-  const cardsRef = useRef<HTMLDivElement>(null)
-
-  useGSAP(() => {
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: containerRef.current,
-        start: "top 80%", // Start animation when top of section hits 80% of viewport height
-        toggleActions: "play none none reverse", // Play on enter, reverse on leave back up
-      }
-    })
-
-    // Header animation
-    tl.from(headerRef.current, {
-      y: 50,
-      opacity: 0,
-      duration: 0.8,
-      ease: "power3.out"
-    })
-
-    // Cards animation (staggered)
-    if (cardsRef.current) {
-      tl.from(cardsRef.current.children, {
-        y: 100,
-        opacity: 0,
-        duration: 0.8,
-        stagger: 0.2,
-        ease: "power3.out"
-      }, "-=0.4") // Overlap slightly with header animation
-    }
-
-  }, { scope: containerRef })
-
   return (
-    <section ref={containerRef} className="w-full bg-white py-24 px-6 md:px-12 lg:px-24 flex flex-col items-center justify-center min-h-screen">
-      <div className="max-w-7xl w-full flex flex-col items-center gap-16">
+    <section className="w-full bg-black py-24 px-6 md:px-12 lg:px-24 min-h-screen">
+      <div className="max-w-7xl mx-auto flex flex-col gap-16">
         
         {/* Header */}
-        <div ref={headerRef} className="text-center max-w-3xl space-y-6">
-            <h2 className="text-4xl md:text-5xl font-bold text-black tracking-tight leading-tight">
-              Transforma Buenos Chats en Grandes Conversaciones
+        <div className="text-center space-y-6">
+            <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight leading-tight">
+              Lo Que Hacemos Mejor
             </h2>
-            <p className="text-lg text-gray-500 leading-relaxed">
-              Convierte chats ordinarios en conversaciones verdaderamente grandiosas añadiendo claridad, contexto y guía inteligente que te ayuda a expresar mejor tus ideas.
+            <p className="text-lg text-gray-400 leading-relaxed max-w-2xl mx-auto">
+              Desde la estrategia hasta la ejecución, nuestras herramientas están diseñadas para elevar tu marca, atraer a tu audiencia e impulsar un crecimiento medible.
             </p>
         </div>
 
-        {/* Cards Grid */}
-        <div ref={cardsRef} className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+        {/* Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px]">
           
-          {/* Card 01 */}
-            <div className="bg-gray-50 rounded-3xl p-8 h-full flex flex-col justify-between hover:shadow-lg transition-shadow duration-300">
-              <div className="space-y-4">
-                <span className="text-lg font-medium text-gray-400">01/</span>
-                <h3 className="text-2xl font-bold text-gray-900">
-                  Convierte Comentarios Rápido
-                </h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Transforma simples comentarios en conversaciones significativas que generan resultados.
-                </p>
-              </div>
+          {/* Card 1: Tall Left - Estrategia (Data-Backed Strategy) */}
+          <div className="md:col-span-1 md:row-span-2 bg-zinc-900/80 rounded-[2rem] p-8 flex flex-col justify-between border border-white/5 hover:border-white/10 transition-colors group overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-12 opacity-10 group-hover:opacity-20 transition-opacity">
+                <BrainCircuit className="w-64 h-64 text-white" />
+            </div>
+            
+            <div className="relative z-10 bg-gradient-to-br from-zinc-800 to-zinc-900 w-24 h-24 rounded-2xl flex items-center justify-center shadow-xl border border-white/5 mb-8">
+                <BrainCircuit className="w-12 h-12 text-white" />
             </div>
 
-          {/* Card 02 - Highlighted */}
-            <div className="bg-[#8b939c] rounded-3xl p-8 h-full flex flex-col justify-between shadow-xl transform md:-translate-y-4 relative overflow-hidden group">
-              {/* Decorative gradient/shine */}
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              
-              <div className="space-y-4 relative z-10">
-                <span className="text-lg font-medium text-gray-200">02/</span>
-                <h3 className="text-2xl font-bold text-white">
-                  Conexión Instantánea
-                </h3>
-                <p className="text-gray-100 leading-relaxed">
-                  Conecta instantáneamente con tu audiencia a través de respuestas inteligentes y automatizadas.
-                </p>
-              </div>
-              {/* Bottom shadow effect simulation */}
-              <div className="absolute bottom-0 left-4 right-4 h-4 bg-black/10 blur-lg rounded-[100%]" />
+            <div className="relative z-10 space-y-4">
+               <h3 className="text-2xl font-bold text-white">Estrategia Automatizada</h3>
+               <p className="text-sm text-gray-400 leading-relaxed">
+                 Creamos flujos de conversación basados en datos reales, no en suposiciones, para que cada interacción tenga un propósito claro.
+               </p>
             </div>
+          </div>
 
-          {/* Card 03 */}
-            <div className="bg-gray-50 rounded-3xl p-8 h-full flex flex-col justify-between hover:shadow-lg transition-shadow duration-300">
-              <div className="space-y-4">
-                <span className="text-lg font-medium text-gray-400">03/</span>
-                <h3 className="text-2xl font-bold text-gray-900">
-                  Haz Crecer Tu Imperio
-                </h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Lleva tu imperio al siguiente nivel escalando tu impacto e incrementando visibilidad.
-                </p>
-              </div>
-            </div>
+          {/* Card 2: Wide Top Right - Campañas (Targeted Campaigns) */}
+          <div className="md:col-span-2 bg-zinc-900/80 rounded-[2rem] p-8 flex flex-col md:flex-row items-center md:items-start justify-between border border-white/5 hover:border-white/10 transition-colors group overflow-hidden relative">
+             <div className="flex flex-col justify-center h-full space-y-4 max-w-md relative z-10">
+               <h3 className="text-2xl font-bold text-white">Campañas Dirigidas</h3>
+               <p className="text-sm text-gray-400 leading-relaxed">
+                 Llega a la audiencia correcta en el momento justo con mensajes masivos que convierten en todas las plataformas.
+               </p>
+             </div>
+             
+             <div className="relative mt-8 md:mt-0">
+                <div className="relative z-10 bg-gradient-to-br from-zinc-800 to-zinc-900 w-32 h-32 rounded-full flex items-center justify-center shadow-2xl border border-white/5">
+                   <Target className="w-16 h-16 text-white" />
+                </div>
+                {/* Decor elements */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 border border-white/5 rounded-full" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-white/5 rounded-full" />
+             </div>
+          </div>
+
+          {/* Card 3: Small Middle - Social Media */}
+          <div className="bg-zinc-900/80 rounded-[2rem] p-8 flex flex-col justify-between border border-white/5 hover:border-white/10 transition-colors relative overflow-hidden">
+             <div className="space-y-4 relative z-10">
+               <h3 className="text-xl font-bold text-white">Gestión 24/7</h3>
+               <p className="text-xs text-gray-400 leading-relaxed">
+                 Atención instantánea a múltiples usuarios simultáneamente sin demoras.
+               </p>
+             </div>
+             <div className="self-end mt-4 bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 rounded-xl border border-white/5 shadow-lg">
+                <Users className="w-8 h-8 text-white" />
+             </div>
+          </div>
+
+          {/* Card 4: Small Right - SEO & Content */}
+          <div className="bg-zinc-900/80 rounded-[2rem] p-8 flex flex-col justify-between border border-white/5 hover:border-white/10 transition-colors relative overflow-hidden">
+             <div className="space-y-4 relative z-10">
+               <h3 className="text-xl font-bold text-white">Captación de Leads</h3>
+               <p className="text-xs text-gray-400 leading-relaxed">
+                 Aumenta tu base de datos automáticamente capturando información clave.
+               </p>
+             </div>
+             <div className="self-end mt-4 bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 rounded-xl border border-white/5 shadow-lg">
+                <Search className="w-8 h-8 text-white" />
+             </div>
+          </div>
+
+          {/* Card 5: Wide Bottom Left - Creative Branding */}
+          <div className="md:col-span-2 bg-zinc-900/80 rounded-[2rem] p-8 flex flex-row items-center justify-between border border-white/5 hover:border-white/10 transition-colors relative overflow-hidden">
+             <div className="space-y-4 max-w-sm relative z-10">
+               <h3 className="text-2xl font-bold text-white">Seguimiento Automático</h3>
+               <p className="text-sm text-gray-400 leading-relaxed">
+                 Destaca con mensajes personalizados y recordatorios que aseguran que ningún cliente se olvide de ti.
+               </p>
+             </div>
+             
+             <div className="relative pr-8 hidden md:block">
+                <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 w-32 h-32 rounded-full flex items-center justify-center shadow-xl border border-white/5 transform rotate-12">
+                   <Bell className="w-16 h-16 text-white" />
+                </div>
+             </div>
+          </div>
+
+          {/* Card 6: Small Bottom Right - Analytics */}
+          <div className="bg-zinc-900/80 rounded-[2rem] p-8 flex flex-col justify-end border border-white/5 hover:border-white/10 transition-colors relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-8">
+                <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 rounded-full border border-white/5 shadow-lg">
+                   <PieChart className="w-8 h-8 text-white" />
+                </div>
+             </div>
+             
+             <div className="space-y-4 relative z-10 mt-16">
+               <h3 className="text-xl font-bold text-white">Analíticas Claras</h3>
+               <p className="text-xs text-gray-400 leading-relaxed">
+                 Mide resultados en tiempo real y adapta tu estrategia rápido.
+               </p>
+             </div>
+          </div>
 
         </div>
       </div>
