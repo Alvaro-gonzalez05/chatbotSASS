@@ -33,26 +33,54 @@ const faqs = [
 
 export function FAQ() {
   const containerRef = useRef(null)
+  const videoRef = useRef(null)
+  const contentRef = useRef(null)
   const [openIndex, setOpenIndex] = useState<number | null>(0)
 
   useGSAP(() => {
-    gsap.from(containerRef.current, {
-      y: 50,
-      opacity: 0,
-      duration: 0.8,
+    const tl = gsap.timeline({
       scrollTrigger: {
         trigger: containerRef.current,
-        start: "top 80%",
+        start: "top 70%",
+        end: "bottom 20%",
+        toggleActions: "play reverse play reverse"
       }
     })
+
+    tl.from(videoRef.current, {
+      x: -150,
+      opacity: 0,
+      duration: 1,
+      ease: "power2.out"
+    })
+    .from(contentRef.current, {
+      x: 150,
+      opacity: 0,
+      duration: 1,
+      ease: "power2.out"
+    }, "<") // Run simultaneously
+
   }, { scope: containerRef })
 
   return (
     <section ref={containerRef} className="w-full bg-black py-24 px-6 md:px-12 lg:px-24 min-h-screen flex items-center justify-center">
       <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
         
-        {/* Left Column: FAQs */}
-        <div className="space-y-8">
+        {/* Left Column: Video */}
+        <div ref={videoRef} className="w-[65%] mx-auto rounded-[3rem] overflow-hidden shadow-2xl transform relative">
+             <video 
+               src="/videos/baile.mp4" 
+               autoPlay 
+               loop 
+               muted 
+               playsInline
+               className="w-full h-auto object-cover scale-110"
+             />
+             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
+        </div>
+
+        {/* Right Column: FAQs */}
+        <div ref={contentRef} className="space-y-8">
           <div className="mb-8">
             <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-4">
               Preguntas Frecuentes
@@ -95,17 +123,6 @@ export function FAQ() {
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Right Column: Image Placeholder */}
-        <div className="relative h-[600px] w-full bg-gray-50 rounded-[3rem] overflow-hidden flex items-center justify-center border border-gray-100">
-           {/* Placeholder for Robot Image */}
-           <div className="text-center p-8">
-             <p className="text-gray-400 font-medium mb-4">Espacio para imagen del robot</p>
-             <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto animate-pulse flex items-center justify-center">
-                <span className="text-4xl">🤖</span>
-             </div>
-           </div>
         </div>
 
       </div>

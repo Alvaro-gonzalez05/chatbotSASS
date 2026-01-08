@@ -32,10 +32,9 @@ export function Ecosystem() {
   }, { scope: containerRef })
 
   return (
-    <section ref={containerRef} className="relative w-full min-h-screen py-20 md:py-0 md:h-screen overflow-hidden bg-[#2e2e2e] flex flex-col items-center justify-center">
-      {/* Background Gradient/Lighting effect (Identical to Hero) */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_#5e5e5e_0%,_#2e2e2e_100%)] opacity-80" />
-
+    <section ref={containerRef} className="relative w-full min-h-screen py-20 md:py-0 md:h-screen overflow-hidden bg-black flex flex-col items-center justify-center">
+      {/* Background Gradient/Lighting effect removed as requested */}
+      
       <div className="relative z-10 flex flex-col items-center justify-center w-full h-full">
         {/* Title */}
         <div className="mb-12 md:mb-12 text-center px-4">
@@ -49,8 +48,15 @@ export function Ecosystem() {
         
         {/* Central Placeholder (Space for Bot & Social Icons) */}
         {/* Hidden on mobile, visible on desktop as absolute center */}
-        <div className="hidden md:flex absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[380px] border-2 border-dashed border-white/5 rounded-3xl items-center justify-center text-white/10 z-0">
-          {/* Placeholder area */}
+        <div className="hidden md:flex absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[620px] rounded-3xl overflow-hidden shadow-2xl z-0">
+          <video 
+            src="/videos/social.mp4" 
+            autoPlay 
+            loop 
+            muted 
+            playsInline
+            className="w-full h-full object-cover"
+          />
         </div>
 
         {/* Floating Cards - Mobile: Stack/Grid, Desktop: Absolute positions */}
