@@ -32,53 +32,56 @@ export function FeaturesBenefits() {
     // Ensure we have cards to animate
     if (benefitCardsRef.current.length === 0) return
 
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: containerRef.current,
-        start: "top top",
-        end: "+=150%", // Determines how long the pin lasts (scroll distance)
-        pin: true,
-        scrub: 1,
-        // markers: true, // Remove for production
-      }
-    })
+    const mm = gsap.matchMedia();
 
-    // 1. Features Exit Animation
-    // Left side goes left, Right side goes right
-    tl.to(featuresLeftRef.current, {
-      xPercent: -150,
-      opacity: 0,
-      duration: 1,
-      ease: "power2.in"
-    })
-    .to(featuresRightRef.current, {
-      xPercent: 150,
-      opacity: 0,
-      duration: 1,
-      ease: "power2.in"
-    }, "<") // Run simultaneously with previous animation
+    mm.add("(min-width: 768px)", () => {
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: containerRef.current,
+          start: "top top",
+          end: "+=150%", // Determines how long the pin lasts (scroll distance)
+          pin: true,
+          scrub: 1,
+          // markers: true, // Remove for production
+        }
+      })
 
-    // 2. Benefits Entrance Animation (Pop effect)
-    // Ensure benefits section is visible (it might be hidden initially via CSS or opacity)
-    .to(benefitsRef.current, {
-        autoAlpha: 1, 
-        duration: 0.1
-    }, "-=0.2")
-    
-    // Animate cards popping in
-    .from(benefitCardsRef.current, {
-      y: 50, // Slight movement from bottom
-      scale: 0.8, // Start slightly smaller
-      opacity: 0,
-      duration: 0.6,
-      stagger: 0.05, // Faster stagger
-      ease: "back.out(1.7)",
-      clearProps: "all" // Clear styles after animation to avoid conflict with hover effects
-    })
-    
-    // 3. Hold phase (Pause before unpinning)
-    .to({}, { duration: 1 }) // Empty tween adds a pause of 1 "unit" of scroll
+      // 1. Features Exit Animation
+      // Left side goes left, Right side goes right
+      tl.to(featuresLeftRef.current, {
+        xPercent: -150,
+        opacity: 0,
+        duration: 1,
+        ease: "power2.in"
+      })
+      .to(featuresRightRef.current, {
+        xPercent: 150,
+        opacity: 0,
+        duration: 1,
+        ease: "power2.in"
+      }, "<") // Run simultaneously with previous animation
 
+      // 2. Benefits Entrance Animation (Pop effect)
+      // Ensure benefits section is visible (it might be hidden initially via CSS or opacity)
+      .to(benefitsRef.current, {
+          autoAlpha: 1, 
+          duration: 0.1
+      }, "-=0.2")
+      
+      // Animate cards popping in
+      .from(benefitCardsRef.current, {
+        y: 50, // Slight movement from bottom
+        scale: 0.8, // Start slightly smaller
+        opacity: 0,
+        duration: 0.6,
+        stagger: 0.05, // Faster stagger
+        ease: "back.out(1.7)",
+        clearProps: "all" // Clear styles after animation to avoid conflict with hover effects
+      })
+      
+      // 3. Hold phase (Pause before unpinning)
+      .to({}, { duration: 1 }) // Empty tween adds a pause of 1 "unit" of scroll
+    });
 
   }, { scope: containerRef })
 
@@ -89,7 +92,7 @@ export function FeaturesBenefits() {
   }
 
   return (
-    <section ref={containerRef} className="relative w-full min-h-screen bg-black overflow-hidden z-10">
+    <section ref={containerRef} className="relative w-full min-h-screen bg-black overflow-hidden z-10 md:h-screen">
       
       {/* 
         LAYER 1: FEATURES 
@@ -98,7 +101,7 @@ export function FeaturesBenefits() {
       */}
       <div 
         ref={featuresRef} 
-        className="absolute inset-0 w-full h-full flex items-center justify-center px-6 md:px-12 lg:px-24 pointer-events-none" // pointer-events-none to let scroll pass through if needed, but we have interactive elements?
+        className="relative md:absolute inset-auto md:inset-0 w-full h-auto md:h-full flex items-center justify-center px-6 md:px-12 lg:px-24 pt-20 pb-20 md:py-0 pointer-events-none" // pointer-events-none to let scroll pass through if needed, but we have interactive elements?
       >
         <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center pointer-events-auto"> 
           {/* pointer-events-auto restores interaction */}
@@ -109,24 +112,24 @@ export function FeaturesBenefits() {
             <div className="absolute top-4 -right-4 w-full h-full bg-gradient-to-br from-[#404040] to-[#1a1a1a] rounded-[3rem] border-4 border-white -z-10" />
             
             {/* Main White Card */}
-            <div className="flex flex-col gap-6 bg-white p-12 rounded-[3rem] border border-gray-100">
-               <h2 className="text-4xl md:text-6xl font-bold leading-tight text-black tracking-tight text-balance">
+            <div className="flex flex-col gap-6 bg-white p-8 md:p-12 rounded-[3rem] border border-gray-100">
+               <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold leading-tight text-black tracking-tight text-balance">
                  Obtén el Máximo de Cada Conversación
                </h2>
-               <p className="text-lg md:text-xl text-gray-600 leading-relaxed max-w-lg">
+               <p className="text-base sm:text-lg md:text-xl text-gray-600 leading-relaxed max-w-lg">
                  Vende más, interactúa mejor y haz crecer tu audiencia con potentes automatizaciones para Instagram, WhatsApp, TikTok y Messenger.
                </p>
-               <div className="flex items-center gap-6 mt-4">
+               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-6 mt-4">
                  <Link
                    href="#"
-                   className="flex items-center gap-2 rounded-full bg-black/80 backdrop-blur-md border border-black/5 px-8 py-4 text-base font-medium text-white transition-transform hover:scale-105 active:scale-95 shadow-lg hover:bg-black/70"
+                   className="flex items-center justify-center gap-2 rounded-full bg-black/80 backdrop-blur-md border border-black/5 px-8 py-4 text-base font-medium text-white transition-transform hover:scale-105 active:scale-95 shadow-lg hover:bg-black/70"
                  >
                    Comenzar
                    <ArrowRight className="h-5 w-5" />
                  </Link>
                  <Link
                    href="#"
-                   className="px-8 py-4 rounded-full bg-gray-100/50 backdrop-blur-sm border border-gray-200 text-base font-medium text-gray-800 transition-transform hover:scale-105 hover:bg-gray-200/50"
+                   className="flex items-center justify-center px-8 py-4 rounded-full bg-gray-100/50 backdrop-blur-sm border border-gray-200 text-base font-medium text-gray-800 transition-transform hover:scale-105 hover:bg-gray-200/50"
                  >
                    Prueba Gratuita
                  </Link>
@@ -139,7 +142,7 @@ export function FeaturesBenefits() {
             <img 
               src="/images/b.png" 
               alt="Chat Simulation" 
-              className="w-full h-auto object-contain scale-125 [mask-image:radial-gradient(circle,black_70%,transparent_100%)]"
+              className="w-full h-auto object-contain scale-110 md:scale-125 [mask-image:radial-gradient(circle,black_70%,transparent_100%)]"
             />
           </div>
         </div>
@@ -152,7 +155,7 @@ export function FeaturesBenefits() {
       */}
       <div 
         ref={benefitsRef} 
-        className="absolute inset-0 w-full h-full flex flex-col justify-start md:justify-center items-center px-4 md:px-8 lg:px-12 pt-20 md:pt-0 invisible opacity-0"
+        className="relative md:absolute inset-auto md:inset-0 w-full h-auto md:h-full flex flex-col justify-start md:justify-center items-center px-4 md:px-8 lg:px-12 pb-20 md:pb-0 visible opacity-100 md:invisible md:opacity-0"
       >
         <div className="max-w-6xl mx-auto flex flex-col gap-4 w-full h-full md:h-auto justify-center"> 
           

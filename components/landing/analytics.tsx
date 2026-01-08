@@ -52,21 +52,21 @@ export function Analytics() {
   }, { scope: containerRef })
 
   return (
-    <section ref={containerRef} className="w-full bg-white py-24 px-6 md:px-12 lg:px-24 min-h-screen flex items-center">
+    <section ref={containerRef} className="w-full bg-black py-24 px-6 md:px-12 lg:px-24 min-h-screen flex items-center">
       <div className="max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
         
         {/* Left Column: Text */}
         <div ref={textRef} className="flex flex-col gap-8">
-          <h2 className="text-4xl md:text-6xl font-bold leading-tight text-black tracking-tight">
+          <h2 className="text-4xl md:text-6xl font-bold leading-tight text-white tracking-tight">
             Toma decisiones de negocio que impulsen tu crecimiento
           </h2>
-          <p className="text-lg text-gray-600 leading-relaxed max-w-xl">
+          <p className="text-lg text-gray-400 leading-relaxed max-w-xl">
             Gestiona todos tus canales sociales, garantiza una atención al cliente superior, monitorea tu rendimiento y más—todo desde una única plataforma.
           </p>
           <div className="mt-2">
             <Link
               href="#"
-              className="inline-flex items-center gap-2 rounded-full bg-black px-8 py-4 text-base font-medium text-white transition-transform hover:scale-105 active:scale-95 shadow-lg"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-8 py-4 text-base font-medium text-black transition-transform hover:scale-105 active:scale-95 shadow-lg"
             >
               Comenzar Ahora
               <ArrowRight className="h-5 w-5" />
@@ -79,7 +79,7 @@ export function Analytics() {
           <img 
             src="/images/d.png" 
             alt="Dashboard Analytics" 
-            className="w-full h-auto object-contain mix-blend-multiply scale-125 hover:scale-135 transition-transform duration-500"
+            className="w-full h-auto object-contain scale-125 hover:scale-135 transition-transform duration-500"
           />
         </div>
 

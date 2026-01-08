@@ -48,16 +48,16 @@ export function FAQ() {
   }, { scope: containerRef })
 
   return (
-    <section ref={containerRef} className="w-full bg-white py-24 px-6 md:px-12 lg:px-24 min-h-screen flex items-center justify-center">
+    <section ref={containerRef} className="w-full bg-black py-24 px-6 md:px-12 lg:px-24 min-h-screen flex items-center justify-center">
       <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
         
         {/* Left Column: FAQs */}
         <div className="space-y-8">
           <div className="mb-8">
-            <h2 className="text-4xl md:text-5xl font-bold text-black tracking-tight mb-4">
+            <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-4">
               Preguntas Frecuentes
             </h2>
-            <p className="text-lg text-gray-600">
+            <p className="text-lg text-gray-400">
               Todo lo que necesitas saber sobre UcoBot.
             </p>
           </div>
@@ -66,20 +66,20 @@ export function FAQ() {
             {faqs.map((faq, index) => (
               <div 
                 key={index} 
-                className="border-b border-gray-200 pb-4"
+                className="border-b border-gray-800 pb-4"
               >
                 <button 
                   onClick={() => setOpenIndex(openIndex === index ? null : index)}
                   className="w-full flex justify-between items-center py-4 text-left group"
                 >
-                  <span className="text-xl font-medium text-black group-hover:text-gray-600 transition-colors">
+                  <span className="text-xl font-medium text-white group-hover:text-gray-300 transition-colors">
                     {faq.question}
                   </span>
                   <span className="ml-4 flex-shrink-0">
                     {openIndex === index ? (
-                      <Minus className="w-6 h-6 text-black" />
+                      <Minus className="w-6 h-6 text-white" />
                     ) : (
-                      <Plus className="w-6 h-6 text-black" />
+                      <Plus className="w-6 h-6 text-white" />
                     )}
                   </span>
                 </button>
@@ -88,7 +88,7 @@ export function FAQ() {
                     openIndex === index ? "max-h-40 opacity-100" : "max-h-0 opacity-0"
                   }`}
                 >
-                  <p className="text-gray-600 pb-4 leading-relaxed">
+                  <p className="text-gray-400 pb-4 leading-relaxed">
                     {faq.answer}
                   </p>
                 </div>
