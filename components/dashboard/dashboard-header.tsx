@@ -45,7 +45,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
             alt="UcoBot Logo"
             width={32}
             height={32}
-            className="w-8 h-8 sm:w-10 sm:h-10"
+            className="w-8 h-8 sm:w-10 sm:h-10 grayscale"
           />
           <div className="flex flex-col">
             <span className="text-lg sm:text-xl font-bold text-foreground">UcoBot</span>

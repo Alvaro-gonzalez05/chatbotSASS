@@ -172,7 +172,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-background">
+    <div className="w-full min-h-screen bg-[#2e2e2e]">
       <div className="relative min-h-screen z-10 flex items-center justify-center p-4">
         <motion.div
           variants={containerVariants}
@@ -181,24 +181,30 @@ export default function LoginPage() {
           className="w-full max-w-md"
         >
           <motion.div variants={itemVariants} className="text-center mb-8">
-            <div className="flex items-center justify-center space-x-2 mb-4">
-              <Image src="/ucobot-logo.png" alt="UcoBot" width={32} height={32} />
-              <span className="text-2xl font-bold">UcoBot</span>
+            <div className="flex flex-col items-center justify-center gap-4">
+              <Image 
+                src="/ucobot-logo.png" 
+                alt="UcoBot" 
+                width={64} 
+                height={64} 
+                className="grayscale invert contrast-125"
+              />
+              <span className="text-5xl font-bold text-white tracking-tighter">UcoBot</span>
             </div>
           </motion.div>
 
           <motion.div
             variants={itemVariants}
-            className="bg-white dark:bg-[#3F3F3F] backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden"
+            className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden"
           >
-            {/* Green accent gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-green-50/30 via-transparent to-green-50/20 dark:from-green-900/10 dark:via-transparent dark:to-green-900/5 pointer-events-none" />
+            {/* Green accent gradient removed for neutral/white theme */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5 pointer-events-none" />
             <div className="relative z-10">
             <motion.div variants={itemVariants} className="text-center mb-8">
-              <h1 className="text-3xl font-light text-gray-900 dark:text-white mb-2">
+              <h1 className="text-3xl font-light text-white mb-2">
                 Bienvenido de vuelta
               </h1>
-              <p className="text-gray-600 dark:text-gray-300 text-sm">Inicia sesión en tu cuenta</p>
+              <p className="text-gray-400 text-sm">Inicia sesión en tu cuenta</p>
             </motion.div>
 
             <form onSubmit={handleLogin}>
@@ -209,7 +215,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Ingresa tu email"
                   required
-                  className="w-full bg-gray-100 dark:bg-[#1B1B1B] border border-gray-300 dark:border-white/20 rounded-full px-6 py-4 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:border-green-500 dark:focus:border-green-400 focus:ring-2 focus:ring-green-500/20 transition-all duration-200"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-full px-6 py-4 text-white placeholder-gray-500 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/20 transition-all duration-200"
                 />
               </motion.div>
 
@@ -220,14 +226,14 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Ingresa tu contraseña"
                   required
-                  className="w-full bg-gray-100 dark:bg-[#1B1B1B] border border-gray-300 dark:border-white/20 rounded-full px-6 py-4 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:border-green-500 dark:focus:border-green-400 focus:ring-2 focus:ring-green-500/20 transition-all duration-200"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-full px-6 py-4 text-white placeholder-gray-500 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/20 transition-all duration-200"
                 />
               </motion.div>
 
               {error && (
                 <motion.div 
                   variants={itemVariants}
-                  className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-2xl text-center"
+                  className="mb-4 text-sm text-red-400 bg-red-900/20 p-3 rounded-2xl text-center"
                 >
                   {error}
                 </motion.div>
@@ -239,7 +245,7 @@ export default function LoginPage() {
                 whileTap="tap"
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 dark:from-green-500 dark:to-green-600 dark:hover:from-green-600 dark:hover:to-green-700 text-white rounded-full px-6 py-4 font-medium transition-all duration-300 flex items-center justify-center group disabled:opacity-50 shadow-lg hover:shadow-green-500/30"
+                className="w-full bg-white text-black rounded-full px-6 py-4 font-medium transition-all duration-300 flex items-center justify-center group disabled:opacity-50 shadow-lg hover:shadow-white/20"
               >
                 {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
                 {!isLoading && <MoveRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />}
@@ -247,9 +253,9 @@ export default function LoginPage() {
             </form>
 
             <motion.div variants={itemVariants} className="flex items-center my-6">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-green-300/30 to-gray-300 dark:from-transparent dark:via-green-400/20 dark:to-white/20" />
-              <span className="px-4 text-gray-500 dark:text-gray-400 text-sm">O</span>
-              <div className="flex-1 h-px bg-gradient-to-l from-transparent via-green-300/30 to-gray-300 dark:from-transparent dark:via-green-400/20 dark:to-white/20" />
+              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-zinc-800" />
+              <span className="px-4 text-gray-400 text-sm">O</span>
+              <div className="flex-1 h-px bg-gradient-to-l from-transparent via-white/20 to-zinc-800" />
             </motion.div>
 
             <motion.div variants={itemVariants} className="mb-6">
@@ -259,7 +265,7 @@ export default function LoginPage() {
                 whileTap="tap"
                 onClick={handleGoogleLogin}
                 disabled={isLoading}
-                className="w-full bg-gray-100 dark:bg-[#1B1B1B] border border-gray-300 dark:border-white/20 rounded-full px-6 py-4 text-gray-900 dark:text-white flex items-center justify-between hover:bg-gray-200 dark:hover:bg-black/60 transition-colors group disabled:opacity-50"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-full px-6 py-4 text-white flex items-center justify-between hover:bg-zinc-800 transition-colors group disabled:opacity-50"
               >
                 <div className="flex items-center">
                   <svg viewBox="0 0 24 24" className="w-5 h-5 mr-3">
@@ -275,11 +281,11 @@ export default function LoginPage() {
             </motion.div>
 
             <motion.div variants={itemVariants} className="text-center">
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
+              <p className="text-gray-400 text-sm">
                 ¿No tienes una cuenta?{" "}
                 <Link
                   href="/register"
-                  className="text-gray-900 dark:text-white hover:text-gray-700 dark:hover:text-gray-300 transition-colors underline"
+                  className="text-white hover:text-gray-300 transition-colors underline"
                 >
                   Regístrate
                 </Link>
@@ -289,7 +295,7 @@ export default function LoginPage() {
           </motion.div>
 
           <motion.div variants={itemVariants} className="mt-6 text-center">
-            <Link href="/" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+            <Link href="/" className="text-sm text-gray-400 hover:text-gray-300 transition-colors">
               ← Volver al inicio
             </Link>
           </motion.div>

@@ -467,7 +467,7 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
                               href={`https://wa.me/${client.phone.replace(/\D/g, '')}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center text-sm hover:text-green-600 transition-colors cursor-pointer"
+                              className="flex items-center text-sm hover:text-foreground transition-colors cursor-pointer"
                               title="Abrir en WhatsApp"
                             >
                               <Phone className="h-3 w-3 mr-1" />
@@ -477,7 +477,7 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
                           {client.email && (
                             <a
                               href={`mailto:${client.email}`}
-                              className="flex items-center text-sm hover:text-blue-600 transition-colors cursor-pointer"
+                              className="flex items-center text-sm hover:text-foreground transition-colors cursor-pointer"
                               title="Enviar email"
                             >
                               <Mail className="h-3 w-3 mr-1" />

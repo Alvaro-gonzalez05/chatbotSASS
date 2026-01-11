@@ -20,12 +20,12 @@ export function UserListCard({ user }: UserListCardProps) {
   return (
     <div className="relative mt-6 mb-6 group">
       <div className="absolute -top-5 left-6 z-10">
-        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-700 flex items-center justify-center text-white font-bold shadow-lg ring-4 ring-background">
+        <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold shadow-lg ring-4 ring-background">
           {initials}
         </div>
       </div>
       
-      <Card className="pt-8 overflow-visible border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-shadow">
+      <Card className="pt-8 overflow-visible border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow">
         <CardContent className="pb-2">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="space-y-1 ml-2">

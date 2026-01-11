@@ -120,17 +120,17 @@ export default function CompleteRegistrationPage() {
         >
           <motion.div variants={itemVariants} className="text-center mb-8">
             <div className="flex items-center justify-center space-x-2 mb-4">
-              <Image src="/ucobot-logo.png" alt="UcoBot" width={32} height={32} />
+              <Image src="/ucobot-logo.png" alt="UcoBot" width={32} height={32} className="grayscale" />
               <span className="text-2xl font-bold">UcoBot</span>
             </div>
           </motion.div>
 
           <motion.div
             variants={itemVariants}
-            className="bg-white dark:bg-[#3F3F3F] backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden"
+            className="bg-card backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl relative overflow-hidden"
           >
-            {/* Green accent gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-green-50/30 via-transparent to-green-50/20 dark:from-green-900/10 dark:via-transparent dark:to-green-900/5 pointer-events-none" />
+            {/* Gradient accent removed */}
+            <div className="absolute inset-0 bg-gradient-to-br from-gray-50/30 via-transparent to-gray-50/20 dark:from-gray-900/10 dark:via-transparent dark:to-gray-900/5 pointer-events-none" />
             <div className="relative z-10">
               <motion.div variants={itemVariants} className="text-center mb-8">
                 <h1 className="text-3xl font-light text-gray-900 dark:text-white mb-2">

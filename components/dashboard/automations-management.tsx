@@ -572,7 +572,7 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
       {/* Stats Cards */}
       <ScrollStaggeredChildren className="grid gap-4 md:grid-cols-4">
         <ScrollStaggerChild>
-          <Card>
+          <Card className="overflow-hidden border-border/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total</CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
@@ -585,10 +585,10 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
         </ScrollStaggerChild>
         
         <ScrollStaggerChild>
-          <Card>
+          <Card className="overflow-hidden border-border/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Activas</CardTitle>
-              <Play className="h-4 w-4 text-green-500" />
+              <Play className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.active_automations}</div>
@@ -598,10 +598,10 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
         </ScrollStaggerChild>
         
         <ScrollStaggerChild>
-          <Card>
+          <Card className="overflow-hidden border-border/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
-              <Clock className="h-4 w-4 text-orange-500" />
+              <Clock className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.pending_messages}</div>
@@ -611,10 +611,10 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
         </ScrollStaggerChild>
         
         <ScrollStaggerChild>
-          <Card>
+          <Card className="overflow-hidden border-border/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Enviados Hoy</CardTitle>
-              <TrendingUp className="h-4 w-4 text-blue-500" />
+              <TrendingUp className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.sent_today}</div>

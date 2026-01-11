@@ -373,19 +373,19 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         <DialogContent className="sm:max-w-md">
           <div className="flex flex-col items-center justify-center py-8 space-y-4">
             <div className="relative">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center animate-pulse">
-                <CheckCircle className="w-10 h-10 text-green-600" />
+              <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center animate-pulse">
+                <CheckCircle className="w-10 h-10 text-primary" />
               </div>
               <div className="absolute -top-2 -right-2">
-                <Sparkles className="w-6 h-6 text-yellow-500 animate-bounce" />
+                <Sparkles className="w-6 h-6 text-primary animate-bounce" />
               </div>
             </div>
             <div className="text-center space-y-2">
-              <h3 className="text-xl font-bold text-green-600">¡Bot Creado Exitosamente!</h3>
+              <h3 className="text-xl font-bold text-primary">¡Bot Creado Exitosamente!</h3>
               <p className="text-muted-foreground">Tu bot está listo para comenzar a trabajar</p>
             </div>
-            <div className="w-full bg-green-100 rounded-full h-2">
-              <div className="bg-green-600 h-2 rounded-full animate-pulse" style={{ width: "100%" }}></div>
+            <div className="w-full bg-secondary rounded-full h-2">
+              <div className="bg-primary h-2 rounded-full animate-pulse" style={{ width: "100%" }}></div>
             </div>
           </div>
         </DialogContent>
@@ -816,12 +816,12 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
 
                         {!hasPaidSubscription() && (
                           <motion.div variants={fadeInUp}>
-                            <Card className="border-green-200 bg-green-50">
+                            <Card className="border-border bg-secondary/50">
                               <CardContent className="p-4">
                                 <div className="text-center">
-                                  <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                                  <h4 className="font-medium text-green-800">¡Casi listo!</h4>
-                                  <p className="text-sm text-green-700">
+                                  <CheckCircle className="h-8 w-8 text-primary mx-auto mb-2" />
+                                  <h4 className="font-medium text-foreground">¡Casi listo!</h4>
+                                  <p className="text-sm text-muted-foreground">
                                     Tu bot se creará para pruebas internas. Podrás probarlo desde la sección de prueba.
                                   </p>
                                 </div>
@@ -913,7 +913,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                               </div>
 
                               <div className="flex gap-3">
-                                <div className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">5</div>
+                                <div className="bg-secondary text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">5</div>
                                 <div>
                                   <p className="font-medium">Agregar Productos</p>
                                   <p className="text-gray-600">
@@ -941,7 +941,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                         </motion.div>
 
                         <motion.div variants={fadeInUp}>
-                          <Card className="border-green-200 bg-green-50">
+                          <Card className="border-border bg-secondary/50">
                             <CardContent className="p-4">
                               <div className="flex items-center gap-3">
                                 <Checkbox 
@@ -949,7 +949,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                                   checked={metaBusinessSetupCompleted}
                                   onCheckedChange={(checked) => setMetaBusinessSetupCompleted(!!checked)}
                                 />
-                                <Label htmlFor="meta-setup-completed" className="text-sm text-green-800">
+                                <Label htmlFor="meta-setup-completed" className="text-sm text-foreground">
                                   He completado la configuración en Meta Business Suite y tengo mis tokens listos
                                 </Label>
                               </div>
@@ -1203,7 +1203,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                               </div>
 
                               <div className="flex gap-3">
-                                <div className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">4</div>
+                                <div className="bg-secondary text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">4</div>
                                 <div>
                                   <p className="font-medium">Suscribirse a eventos</p>
                                   <p className="text-gray-600">
@@ -1215,7 +1215,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                               </div>
 
                               <div className="flex gap-3">
-                                <div className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">✓</div>
+                                <div className="bg-secondary text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">✓</div>
                                 <div>
                                   <p className="font-medium">Verificar y Guardar</p>
                                   <p className="text-gray-600">Meta verificará la conexión automáticamente</p>

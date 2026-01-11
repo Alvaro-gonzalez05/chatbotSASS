@@ -27,41 +27,43 @@ const platforms = [
     name: "Instagram",
     description: "Haz crecer tu presencia en Instagram con herramientas poderosas que te ayudan a interactuar.",
     icon: Instagram,
-    color: "bg-[#ffeef9]",
+    color: "bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border border-zinc-800 shadow-[0_0_50px_-5px_rgba(255,255,255,0.3)]",
     iconColor: "text-[#d62976]",
-    video: "/videos/instagram2.mp4"
+    image: "/images/inst.png"
   },
   {
     name: "TikTok",
     description: "Convierte momentos virales rápidos en conversaciones reflexivas y de alto valor.",
     icon: TiktokIcon,
-    color: "bg-[#e0fbfc]",
-    iconColor: "text-black",
-    video: "/videos/tiktok.mp4"
+    color: "bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border border-zinc-800 shadow-[0_0_50px_-5px_rgba(255,255,255,0.3)]",
+    iconColor: "text-white",
+    image: "/images/tk.png"
   },
   {
     name: "WhatsApp",
     description: "Automatiza respuestas y gestiona pedidos directamente desde la app de mensajería más usada.",
     icon: Phone,
-    color: "bg-[#e0fce4]",
+    color: "bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border border-zinc-800 shadow-[0_0_50px_-5px_rgba(255,255,255,0.3)]",
     iconColor: "text-[#25D366]",
-    video: "/videos/wsp.mp4"
+    image: "/images/wsp.png"
   },
   {
     name: "Messenger",
     description: "Conecta con clientes potenciales en Facebook al instante y escala tus ventas.",
     icon: MessageCircle,
-    color: "bg-[#e0e7fc]",
+    color: "bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border border-zinc-800 shadow-[0_0_50px_-5px_rgba(255,255,255,0.3)]",
     iconColor: "text-[#0084FF]",
-    video: "/videos/messengernew.mp4"
+    image: "/images/msseng.png",
+    imagePadding: "p-0"
   },
   {
     name: "Gmail",
     description: "Integra tu correo electrónico para un seguimiento de leads sin interrupciones.",
     icon: Mail,
-    color: "bg-[#fce0e0]",
+    color: "bg-gradient-to-br from-zinc-900 via-black to-zinc-900 border border-zinc-800 shadow-[0_0_50px_-5px_rgba(255,255,255,0.3)]",
     iconColor: "text-[#EA4335]",
-    video: "/videos/gmail.mp4"
+    image: "/images/gm.png",
+    imagePadding: "p-2"
   }
 ]
 
@@ -154,6 +156,12 @@ export function Platforms() {
                       muted
                       playsInline
                     />
+                  ) : platform.image ? (
+                    <img 
+                      src={platform.image}
+                      alt={platform.name}
+                      className={`w-full h-full object-contain ${platform.imagePadding || 'p-6'} drop-shadow-[0_15px_15px_rgba(0,0,0,0.5)] transition-transform duration-500 hover:scale-110 absolute inset-0`}
+                    />
                   ) : (
                     <platform.icon className={`w-32 h-32 ${platform.iconColor}`} strokeWidth={1.5} />
                   )}
@@ -202,6 +210,12 @@ export function Platforms() {
                       loop
                       muted
                       playsInline
+                    />
+                  ) : platform.image ? (
+                    <img 
+                      src={platform.image}
+                      alt={platform.name}
+                      className={`w-full h-full object-contain ${platform.imagePadding || 'p-6'} drop-shadow-[0_15px_15px_rgba(0,0,0,0.5)] transition-transform duration-500 hover:scale-110 absolute inset-0`}
                     />
                   ) : (
                     <platform.icon className={`w-32 h-32 ${platform.iconColor}`} strokeWidth={1.5} />

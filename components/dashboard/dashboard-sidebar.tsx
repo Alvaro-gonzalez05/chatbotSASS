@@ -308,7 +308,13 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSid
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
         {!isCollapsed && (
           <div className="flex items-center space-x-2">
-            <Image src="/ucobot-logo.png" alt="UcoBot" width={24} height={24} className="text-primary" />
+            <Image 
+              src="/ucobot-logo.png" 
+              alt="UcoBot" 
+              width={24} 
+              height={24} 
+              className="grayscale dark:invert contrast-125" 
+            />
             <span className="text-lg font-bold text-sidebar-foreground">UcoBot</span>
           </div>
         )}
@@ -347,14 +353,14 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSid
                   <div className="relative">
                     <item.icon className={cn("h-4 w-4", !isCollapsed && "mr-3")} />
                     {item.name === "Mensajes" && hasNewMessages && isCollapsed && (
-                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-white animate-pulse" />
                     )}
                   </div>
                   {!isCollapsed && (
                     <div className="flex items-center justify-between flex-1">
                       <span>{item.name}</span>
                       {item.name === "Mensajes" && hasNewMessages && (
-                        <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                        <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
                       )}
                     </div>
                   )}

@@ -201,9 +201,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
           <h2 className="font-semibold text-lg">Acciones Rápidas</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div onClick={() => setIsBotDialogOpen(true)} className="block cursor-pointer">
-              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white h-full">
+              <Card className="bg-primary hover:bg-primary/90 transition-colors border-none text-primary-foreground h-full">
                 <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
-                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                  <div className="p-2 bg-primary-foreground/10 rounded-full mb-1">
                     <Bot className="h-6 w-6" />
                   </div>
                   <span className="font-medium text-sm">Nuevo Bot</span>
@@ -213,9 +213,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
             </div>
             
             <div onClick={() => setIsClientDialogOpen(true)} className="block cursor-pointer">
-              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white h-full">
+              <Card className="bg-primary hover:bg-primary/90 transition-colors border-none text-primary-foreground h-full">
                 <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
-                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                  <div className="p-2 bg-primary-foreground/10 rounded-full mb-1">
                     <UserPlus className="h-6 w-6" />
                   </div>
                   <span className="font-medium text-sm">Nuevo Cliente</span>
@@ -225,9 +225,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
             </div>
 
             <div onClick={() => setIsAutomationDialogOpen(true)} className="block cursor-pointer">
-              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white h-full">
+              <Card className="bg-primary hover:bg-primary/90 transition-colors border-none text-primary-foreground h-full">
                 <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
-                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                  <div className="p-2 bg-primary-foreground/10 rounded-full mb-1">
                     <Zap className="h-6 w-6" />
                   </div>
                   <span className="font-medium text-sm">Nueva Automatización</span>
@@ -237,9 +237,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
             </div>
 
             <Link href="/dashboard/chat" className="block">
-              <Card className="bg-emerald-500 hover:bg-emerald-600 transition-colors border-none text-white cursor-pointer h-full">
+              <Card className="bg-primary hover:bg-primary/90 transition-colors border-none text-primary-foreground cursor-pointer h-full">
                 <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1">
-                  <div className="p-2 bg-white/20 rounded-full mb-1">
+                  <div className="p-2 bg-primary-foreground/10 rounded-full mb-1">
                     <MessageCircle className="h-6 w-6" />
                   </div>
                   <span className="font-medium text-sm">Ir al Chat</span>
